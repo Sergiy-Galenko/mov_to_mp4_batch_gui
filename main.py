@@ -9,7 +9,6 @@ from typing import Optional, List, Tuple
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-
 APP_TITLE = "Media Converter (Фото + Відео) — FFmpeg"
 VIDEO_EXTS = {".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv", ".wmv", ".mts", ".m2ts"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"}
@@ -17,7 +16,6 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic"
 OUT_VIDEO_FORMATS = ["mp4", "mkv", "webm", "mov", "avi", "gif"]
 OUT_IMAGE_FORMATS = ["jpg", "png", "webp", "bmp", "tiff"]
 
-# Portrait presets
 PORTRAIT_PRESETS = {
     "Вимкнено": None,
     "9:16 (1080x1920) — crop": ("crop", 1080, 1920),
@@ -25,7 +23,6 @@ PORTRAIT_PRESETS = {
     "9:16 (720x1280) — crop": ("crop", 720, 1280),
     "9:16 (720x1280) — blur": ("blur", 720, 1280),
 }
-
 
 def find_ffmpeg() -> Optional[str]:
     local = Path(__file__).resolve().parent
@@ -38,14 +35,11 @@ def find_ffmpeg() -> Optional[str]:
             return str(c)
     return shutil.which("ffmpeg")
 
-
 def is_video(p: Path) -> bool:
     return p.suffix.lower() in VIDEO_EXTS
 
-
 def is_image(p: Path) -> bool:
     return p.suffix.lower() in IMAGE_EXTS
-
 
 def media_type(p: Path) -> Optional[str]:
     if is_video(p):
@@ -53,7 +47,6 @@ def media_type(p: Path) -> Optional[str]:
     if is_image(p):
         return "image"
     return None
-
 
 def safe_output_name(out_dir: Path, in_path: Path, out_ext: str) -> Path:
     out_ext = out_ext.lstrip(".")
@@ -67,7 +60,6 @@ def safe_output_name(out_dir: Path, in_path: Path, out_ext: str) -> Path:
         if not cand.exists():
             return cand
         i += 1
-
 
 class ConverterUI(tk.Tk):
     def __init__(self):
@@ -92,7 +84,6 @@ class ConverterUI(tk.Tk):
         else:
             self._log("ERROR", "FFmpeg не знайдено. Натисни 'Вказати ffmpeg.exe' або додай ffmpeg у PATH.")
 
-    # ---------------- UI ----------------
     def _build_ui(self):
         top = ttk.Frame(self, padding=12)
         top.pack(fill="x")
@@ -140,7 +131,6 @@ class ConverterUI(tk.Tk):
             width=10,
         ).grid(row=0, column=5, sticky="w", padx=(8, 0))
 
-        # NEW: Portrait mode
         ttk.Label(opts, text="Зробити вертикальним:").grid(row=1, column=0, sticky="w", pady=(10, 0))
         self.portrait_var = tk.StringVar(value="Вимкнено")
         ttk.Combobox(
@@ -214,7 +204,6 @@ class ConverterUI(tk.Tk):
         self.log_text.tag_configure("WARN", foreground="#bf8700")
         self.log_text.tag_configure("ERROR", foreground="#cf222e")
 
-    # ---------------- Logging ----------------
     def _log(self, level: str, msg: str):
         self.log_text.insert("end", f"[{level}] {msg}\n", level)
         self.log_text.see("end")
@@ -231,14 +220,12 @@ class ConverterUI(tk.Tk):
             pass
         self.after(120, self._poll_queue)
 
-    # ---------------- Listbox numbering ----------------
     def refresh_listbox(self):
         self.listbox.delete(0, "end")
         for i, (p, t) in enumerate(self.tasks, start=1):
             tag = "🎬" if t == "video" else "🖼️"
             self.listbox.insert("end", f"{i}. {tag} {p.name}")
 
-    # ---------------- FFmpeg ----------------
     def pick_ffmpeg(self):
         path = filedialog.askopenfilename(
             title="Вибери ffmpeg.exe",
@@ -267,7 +254,6 @@ class ConverterUI(tk.Tk):
         except Exception as e:
             self._log("ERROR", f"Помилка перевірки FFmpeg: {e}")
 
-    # ---------------- Picking ----------------
     def pick_folder(self):
         folder = filedialog.askdirectory(title="Вибери папку з медіа (фото/відео)")
         if not folder:
@@ -297,7 +283,7 @@ class ConverterUI(tk.Tk):
         out = Path(self.out_var.get()).expanduser()
         out.mkdir(parents=True, exist_ok=True)
         if os.name == "nt":
-            os.startfile(str(out))  # type: ignore[attr-defined]
+            os.startfile(str(out))
         elif sys.platform == "darwin":
             subprocess.run(["open", str(out)], check=False)
         else:
@@ -336,7 +322,6 @@ class ConverterUI(tk.Tk):
             self._queue_log("WARN", f"Пропущено (непідтримувані розширення): {skipped}")
         self._update_progress(0, len(self.tasks))
 
-    # ---------------- Queue ops ----------------
     def clear_list(self):
         self.tasks.clear()
         self.refresh_listbox()
@@ -356,7 +341,6 @@ class ConverterUI(tk.Tk):
         self.progress["value"] = done
         self.progress_var.set(f"{done} / {total}")
 
-    # ---------------- Video portrait filters ----------------
     def _portrait_filter(self) -> Optional[str]:
         preset = PORTRAIT_PRESETS.get(self.portrait_var.get(), None)
         if not preset:
@@ -364,27 +348,18 @@ class ConverterUI(tk.Tk):
 
         mode, w, h = preset
 
-        # If input already portrait, scale will keep it OK.
         if mode == "crop":
-            # Center-crop to 9:16 and scale to target
-            # 1) scale so that one side fits, then crop center, then scale final
             return f"scale='if(gt(a,9/16),-2,{w})':'if(gt(a,9/16),{h},-2)',crop={w}:{h},setsar=1"
         else:
-            # blur background fill: create blurred bg, overlay original scaled to fit
-            # 1) bg: scale to fill, blur
-            # 2) fg: scale to fit
-            # 3) overlay center
             return (
                 f"[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,boxblur=20:1,crop={w}:{h}[bg];"
                 f"[0:v]scale={w}:{h}:force_original_aspect_ratio=decrease[fg];"
                 f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1"
             )
 
-    # ---------------- Commands ----------------
     def _build_cmd_video(self, inp: Path, outp: Path) -> List[str]:
         overwrite = "-y" if self.overwrite_var.get() else "-n"
 
-        # Portrait filter disables stream copy (because we need re-encode)
         portrait_vf = self._portrait_filter()
         can_stream_copy = self.fast_copy_var.get() and portrait_vf is None and outp.suffix.lower() != ".gif"
 
@@ -401,16 +376,14 @@ class ConverterUI(tk.Tk):
         crf = int(self.crf_var.get())
         preset = (self.preset_var.get() or "medium").strip()
 
-        # GIF output
         if outp.suffix.lower() == ".gif":
             vf = "fps=12,scale=640:-1:flags=lanczos"
             if portrait_vf:
-                vf = f"{portrait_vf},{vf}" if "[" not in portrait_vf else portrait_vf  # complex filter handles itself
+                vf = f"{portrait_vf},{vf}" if "[" not in portrait_vf else portrait_vf
             if portrait_vf and "[" in portrait_vf:
                 return [self.ffmpeg_path, overwrite, "-i", str(inp), "-filter_complex", portrait_vf, "-vf", "fps=12,scale=640:-1:flags=lanczos", str(outp)]
             return [self.ffmpeg_path, overwrite, "-i", str(inp), "-vf", vf, str(outp)]
 
-        # WEBM (VP9) path
         if outp.suffix.lower() == ".webm":
             cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
             if portrait_vf:
@@ -421,7 +394,6 @@ class ConverterUI(tk.Tk):
             cmd += ["-c:v", "libvpx-vp9", "-crf", str(crf), "-b:v", "0", "-c:a", "libopus", str(outp)]
             return cmd
 
-        # Default H.264 + AAC
         cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
         if portrait_vf:
             if "[" in portrait_vf:
@@ -456,7 +428,6 @@ class ConverterUI(tk.Tk):
 
         return [self.ffmpeg_path, overwrite, "-i", str(inp), str(outp)]
 
-    # ---------------- Worker ----------------
     def start(self):
         if self.worker_thread and self.worker_thread.is_alive():
             return
@@ -575,11 +546,10 @@ class ConverterUI(tk.Tk):
     def run(self):
         self.mainloop()
 
-
 if __name__ == "__main__":
     try:
         if os.name == "nt":
-            from ctypes import windll  # type: ignore
+            from ctypes import windll
             windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         pass
