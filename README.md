@@ -20,6 +20,7 @@
 
 - **Python 3.10+**
 - **FFmpeg** (і бажано ffprobe)
+- **Tkinter** (у Windows/macOS зазвичай уже є; у Linux може знадобитися `python3-tk`)
 
 Перевірка:
 ```bash
@@ -27,19 +28,75 @@ ffmpeg -version
 ffprobe -version
 ```
 
-## Встановлення FFmpeg (Windows)
+## Встановлення FFmpeg (різні платформи)
+
+### Windows
 
 Через winget:
 ```powershell
 winget install -e --id Gyan.FFmpeg
 ```
 
+Через Chocolatey:
+```powershell
+choco install ffmpeg
+```
+
 Або вручну: завантажити build, розпакувати та вказати `ffmpeg.exe` в UI (або додати в PATH).
 
-## Запуск
+### macOS
 
+Через Homebrew:
+```bash
+brew install ffmpeg
+```
+
+### Linux
+
+Ubuntu/Debian:
+```bash
+sudo apt update
+sudo apt install ffmpeg python3-tk
+```
+
+Fedora:
+```bash
+sudo dnf install ffmpeg python3-tkinter
+```
+
+Arch/Manjaro:
+```bash
+sudo pacman -S ffmpeg tk
+```
+
+## Встановлення та запуск
+
+### 1) Створити віртуальне середовище (рекомендовано)
+```bash
+python -m venv .venv
+```
+
+Активація:
+- **Windows (PowerShell):**
+  ```powershell
+  .\.venv\Scripts\Activate.ps1
+  ```
+- **Windows (CMD):**
+  ```bat
+  .\.venv\Scripts\activate.bat
+  ```
+- **macOS / Linux:**
+  ```bash
+  source .venv/bin/activate
+  ```
+
+### 2) Встановити залежності
 ```bash
 pip install -r requirements.txt
+```
+
+### 3) Запуск
+```bash
 python main.py
 ```
 
@@ -88,7 +145,7 @@ mov_to_mp4_batch_gui/
 
 ## Примітки
 
-- Якщо FFmpeg не знайдено — натисни **Вказати** і вибери `ffmpeg.exe`.
+- Якщо FFmpeg не знайдено — натисни **Вказати** і вибери `ffmpeg` (або `ffmpeg.exe` у Windows).
 - Для коректного ETA потрібен `ffprobe`.
 - Fast copy працює лише коли немає фільтрів/trim та контейнер сумісний з кодеком.
 
