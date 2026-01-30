@@ -1,6 +1,6 @@
 ﻿# Media Converter — Фото + Відео (FFmpeg)
 
-Зручний GUI‑інструмент на Python (Tkinter) для пакетної конвертації відео та зображень через FFmpeg. Орієнтований на щоденну роботу: черга файлів, пресети, прогрес/ETA, GPU‑кодування, розширені фільтри й метадані.
+Зручний GUI‑інструмент на Python (PySide6) для пакетної конвертації відео та зображень через FFmpeg. Орієнтований на щоденну роботу: черга файлів, пресети, прогрес/ETA, GPU‑кодування, розширені фільтри й метадані.
 
 ## ✅ Можливості
 
@@ -14,13 +14,13 @@
 - ffprobe‑інфо (тривалість, кодеки, розмір)
 - Fast copy (копіювання без перекодування, коли можливо)
 - Метадані: копіювання / очищення / власні поля
-- Light/Dark тема
+- Світла **тема**
 
 ## Вимоги
 
 - **Python 3.10+**
 - **FFmpeg** (і бажано ffprobe)
-- **Tkinter** (у Windows/macOS зазвичай уже є; у Linux може знадобитися `python3-tk`)
+- **PySide6** (встановлюється через `pip`)
 
 Перевірка:
 ```bash
@@ -56,17 +56,17 @@ brew install ffmpeg
 Ubuntu/Debian:
 ```bash
 sudo apt update
-sudo apt install ffmpeg python3-tk
+sudo apt install ffmpeg
 ```
 
 Fedora:
 ```bash
-sudo dnf install ffmpeg python3-tkinter
+sudo dnf install ffmpeg
 ```
 
 Arch/Manjaro:
 ```bash
-sudo pacman -S ffmpeg tk
+sudo pacman -S ffmpeg
 ```
 
 ## Встановлення та запуск
@@ -119,6 +119,31 @@ python main.py
 - Відео: `mp4, mkv, webm, mov, avi, gif`
 - Фото: `jpg, png, webp, bmp, tiff`
 
+---
+
+## Tauri + Web UI (нова версія інтерфейсу)
+
+Проєкт має окрему гілку інтерфейсу на **Tauri + React** з сучасним дизайном у стилі Netflix та можливістю змінювати тему/акцентні кольори.
+
+### Запуск Tauri‑версії
+
+```bash
+cd tauri_app
+npm install
+npm run tauri dev
+```
+
+### Що вже є
+
+- сучасний UI (Netflix‑style)
+- кастомізація щільності інтерфейсу, розміру кнопок і теми
+- можливість задавати accent‑колір
+
+### Що ще треба доробити
+
+- інтеграція з FFmpeg (через Python sidecar або перепис на Rust)
+- реальні діалоги вибору файлів/папок і лог‑стрімінг
+
 ## Структура проєкту
 
 ```
@@ -135,6 +160,7 @@ mov_to_mp4_batch_gui/
     converter_service.py
     ffmpeg_service.py
   ui/
+    qt_app.py
     app.py
     styles.py
   utils/

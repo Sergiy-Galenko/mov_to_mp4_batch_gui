@@ -30,13 +30,21 @@ from ui.styles import THEMES, apply_theme, load_custom_theme, save_custom_theme
 from utils.files import media_type
 from utils.formatting import format_bytes, format_time, parse_float, parse_int, parse_time_to_seconds
 
+SPACE_1 = 8
+SPACE_2 = 16
+SPACE_3 = 24
+SPACE_4 = 32
+CONTENT_MAX_WIDTH = 1160
+CONTENT_MIN_PAD = 16
+COMPACT_BREAKPOINT = 980
+
 
 class MediaConverterApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("1200x780")
-        self.minsize(1050, 720)
+        self.geometry("1200x820")
+        self.minsize(860, 720)
 
         self.event_queue: "queue.Queue[tuple]" = queue.Queue()
         self.ffmpeg_service = FfmpegService(find_ffmpeg(), None)
@@ -49,6 +57,10 @@ class MediaConverterApp(tk.Tk):
         self.custom_theme: Optional[Dict[str, str]] = load_custom_theme(THEME_STORE)
         self.theme_colors: Dict[str, str] = {}
         self._scroll_canvases: List[tk.Canvas] = []
+        self.max_content_width = CONTENT_MAX_WIDTH
+        self.min_side_padding = CONTENT_MIN_PAD
+        self._current_side_pad: Optional[int] = None
+        self._layout_mode: Optional[str] = None
 
         self._build_vars()
         self._build_ui()
@@ -130,64 +142,127 @@ class MediaConverterApp(tk.Tk):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
-        header = ttk.Frame(self, padding=(16, 12))
-        header.grid(row=0, column=0, sticky="ew")
-        header.columnconfigure(1, weight=1)
+        self.header = ttk.Frame(self, style="Card.TFrame", padding=(SPACE_3, SPACE_2))
+        self.header.grid(row=0, column=0, sticky="ew")
+        self.header.columnconfigure(0, weight=1)
 
-        title = ttk.Label(header, text=APP_TITLE, style="Title.TLabel")
+        title_block = ttk.Frame(self.header, style="Panel.TFrame")
+        title_block.grid(row=0, column=0, sticky="w")
+        title = ttk.Label(title_block, text=APP_TITLE, style="Title.TLabel")
         title.grid(row=0, column=0, sticky="w")
+        subtitle = ttk.Label(
+            title_block,
+            text="Пакетна конвертація відео та фото через FFmpeg.",
+            style="Subtitle.TLabel",
+        )
+        subtitle.grid(row=1, column=0, sticky="w", pady=(SPACE_1, 0))
+
+        actions = ttk.Frame(self.header, style="Panel.TFrame")
+        actions.grid(row=0, column=1, sticky="e")
 
         theme_box = ttk.Combobox(
-            header,
+            actions,
             textvariable=self.theme_var,
             values=["light", "dark", "custom"],
             state="readonly",
-            width=8,
+            width=10,
         )
-        theme_box.grid(row=0, column=2, padx=(8, 0))
+        theme_box.grid(row=0, column=0, padx=(0, SPACE_1))
         theme_box.bind("<<ComboboxSelected>>", lambda _e: self._on_theme_change())
 
-        ttk.Button(header, text="Налаштувати тему", command=self._open_theme_editor, style="Secondary.TButton").grid(
-            row=0, column=3, padx=(8, 0)
+        ttk.Button(actions, text="Налаштувати тему", command=self._open_theme_editor, style="Ghost.TButton").grid(
+            row=0, column=1
         )
 
-        ffmpeg_frame = ttk.Frame(header)
-        ffmpeg_frame.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        ffmpeg_frame = ttk.Frame(self.header, style="Panel.TFrame")
+        ffmpeg_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(SPACE_2, 0))
         ffmpeg_frame.columnconfigure(1, weight=1)
         ttk.Label(ffmpeg_frame, text="FFmpeg:").grid(row=0, column=0, sticky="w")
-        ttk.Entry(ffmpeg_frame, textvariable=self.ffmpeg_path_var).grid(row=0, column=1, sticky="ew", padx=8)
-        ttk.Button(ffmpeg_frame, text="Вказати", command=self.pick_ffmpeg).grid(row=0, column=2, padx=4)
-        ttk.Button(ffmpeg_frame, text="Перевірити", command=self._refresh_encoders).grid(row=0, column=3, padx=4)
+        ttk.Entry(ffmpeg_frame, textvariable=self.ffmpeg_path_var).grid(row=0, column=1, sticky="ew", padx=SPACE_1)
+        ttk.Button(ffmpeg_frame, text="Вказати", command=self.pick_ffmpeg, style="Secondary.TButton").grid(row=0, column=2, padx=SPACE_1)
+        ttk.Button(ffmpeg_frame, text="Перевірити", command=self._refresh_encoders, style="Ghost.TButton").grid(
+            row=0, column=3, padx=(0, SPACE_1)
+        )
 
-        main = ttk.Frame(self, padding=(12, 0, 12, 12))
-        main.grid(row=1, column=0, sticky="nsew")
-        main.columnconfigure(1, weight=1)
-        main.rowconfigure(0, weight=1)
+        self.main = ttk.Frame(self, padding=(SPACE_3, 0, SPACE_3, SPACE_3))
+        self.main.grid(row=1, column=0, sticky="nsew")
+        self.main.rowconfigure(0, weight=1)
 
-        sidebar = ttk.Frame(main, style="Panel.TFrame", padding=12)
-        sidebar.grid(row=0, column=0, sticky="ns")
+        self.sidebar = ttk.Frame(self.main, style="Card.TFrame", padding=SPACE_2)
+        self.content = ttk.Frame(self.main, style="Card.TFrame", padding=SPACE_2)
+        self.content.columnconfigure(0, weight=1)
+        self.content.rowconfigure(0, weight=1)
 
-        content = ttk.Frame(main, style="Panel.TFrame", padding=12)
-        content.grid(row=0, column=1, sticky="nsew")
-        content.columnconfigure(0, weight=1)
-        content.rowconfigure(0, weight=1)
+        self._build_sidebar(self.sidebar)
+        self._build_content(self.content)
+        self._set_layout("wide")
 
-        self._build_sidebar(sidebar)
-        self._build_content(content)
+        self.status = ttk.Frame(self, style="Card.TFrame", padding=(SPACE_3, SPACE_2))
+        self.status.grid(row=2, column=0, sticky="ew")
+        self.status.columnconfigure(1, weight=1)
+        self.status.columnconfigure(3, weight=1)
 
-        status = ttk.Frame(self, padding=(16, 8))
-        status.grid(row=2, column=0, sticky="ew")
-        status.columnconfigure(1, weight=1)
-        status.columnconfigure(3, weight=1)
+        ttk.Label(self.status, textvariable=self.status_var).grid(row=0, column=0, sticky="w")
+        ttk.Progressbar(self.status, variable=self.file_progress_var, maximum=100.0).grid(
+            row=0, column=1, sticky="ew", padx=SPACE_2
+        )
+        ttk.Label(self.status, textvariable=self.file_progress_text_var).grid(row=0, column=2, sticky="w")
+        ttk.Progressbar(self.status, variable=self.total_progress_var, maximum=100.0).grid(
+            row=0, column=3, sticky="ew", padx=SPACE_2
+        )
+        ttk.Label(self.status, textvariable=self.total_progress_text_var).grid(row=0, column=4, sticky="w")
 
-        ttk.Label(status, textvariable=self.status_var).grid(row=0, column=0, sticky="w")
-        ttk.Progressbar(status, variable=self.file_progress_var, maximum=100.0).grid(row=0, column=1, sticky="ew", padx=10)
-        ttk.Label(status, textvariable=self.file_progress_text_var).grid(row=0, column=2, sticky="w")
-        ttk.Progressbar(status, variable=self.total_progress_var, maximum=100.0).grid(row=0, column=3, sticky="ew", padx=10)
-        ttk.Label(status, textvariable=self.total_progress_text_var).grid(row=0, column=4, sticky="w")
+        self.bind("<Configure>", self._on_resize)
+        self.after(0, self._sync_layout)
+
+    def _sync_layout(self) -> None:
+        self.update_idletasks()
+        width = self.winfo_width()
+        if width <= 1:
+            width = self.winfo_screenwidth()
+        self._apply_content_padding(width)
+        mode = "compact" if width < COMPACT_BREAKPOINT else "wide"
+        self._set_layout(mode)
+
+    def _on_resize(self, event: tk.Event) -> None:
+        if event.widget is not self:
+            return
+        width = max(event.width, 1)
+        self._apply_content_padding(width)
+        mode = "compact" if width < COMPACT_BREAKPOINT else "wide"
+        self._set_layout(mode)
+
+    def _apply_content_padding(self, width: int) -> None:
+        side_pad = max((width - self.max_content_width) // 2, self.min_side_padding)
+        if side_pad == self._current_side_pad:
+            return
+        for frame in (self.header, self.main, self.status):
+            frame.grid_configure(padx=(side_pad, side_pad))
+        self._current_side_pad = side_pad
+
+    def _set_layout(self, mode: str) -> None:
+        if mode == self._layout_mode:
+            return
+        self.sidebar.grid_forget()
+        self.content.grid_forget()
+        if mode == "compact":
+            self.main.columnconfigure(0, weight=1)
+            self.main.columnconfigure(1, weight=0)
+            self.main.rowconfigure(0, weight=0)
+            self.main.rowconfigure(1, weight=1)
+            self.sidebar.grid(row=0, column=0, sticky="ew")
+            self.content.grid(row=1, column=0, sticky="nsew", pady=(SPACE_2, 0))
+        else:
+            self.main.rowconfigure(0, weight=1)
+            self.main.rowconfigure(1, weight=0)
+            self.main.columnconfigure(0, weight=0)
+            self.main.columnconfigure(1, weight=1)
+            self.sidebar.grid(row=0, column=0, sticky="nsw", padx=(0, SPACE_2))
+            self.content.grid(row=0, column=1, sticky="nsew")
+        self._layout_mode = mode
 
     def _build_sidebar(self, parent: ttk.Frame) -> None:
-        queue_frame = ttk.LabelFrame(parent, text="Черга", padding=8)
+        queue_frame = ttk.LabelFrame(parent, text="Черга", padding=SPACE_2)
         queue_frame.pack(fill="both", expand=False)
 
         self.queue_listbox = tk.Listbox(queue_frame, height=10, selectmode="extended")
@@ -197,22 +272,26 @@ class MediaConverterApp(tk.Tk):
         sb.pack(side="right", fill="y")
         self.queue_listbox.configure(yscrollcommand=sb.set)
 
-        btns = ttk.Frame(parent)
-        btns.pack(fill="x", pady=(8, 0))
-        ttk.Button(btns, text="Додати файли", command=self.add_files).pack(fill="x", pady=2)
-        ttk.Button(btns, text="Додати папку", command=self.add_folder).pack(fill="x", pady=2)
-        ttk.Button(btns, text="Видалити вибрані", command=self.remove_selected).pack(fill="x", pady=2)
-        ttk.Button(btns, text="Очистити", command=self.clear_list).pack(fill="x", pady=2)
+        btns = ttk.Frame(parent, style="Panel.TFrame")
+        btns.pack(fill="x", pady=(SPACE_1, 0))
+        ttk.Button(btns, text="Додати файли", command=self.add_files, style="Secondary.TButton").pack(fill="x", pady=SPACE_1)
+        ttk.Button(btns, text="Додати папку", command=self.add_folder, style="Secondary.TButton").pack(fill="x", pady=SPACE_1)
+        ttk.Button(btns, text="Видалити вибрані", command=self.remove_selected, style="Secondary.TButton").pack(fill="x", pady=SPACE_1)
+        ttk.Button(btns, text="Очистити", command=self.clear_list, style="Secondary.TButton").pack(fill="x", pady=SPACE_1)
 
-        out_frame = ttk.LabelFrame(parent, text="Вивід", padding=8)
-        out_frame.pack(fill="x", pady=(12, 0))
+        out_frame = ttk.LabelFrame(parent, text="Вивід", padding=SPACE_2)
+        out_frame.pack(fill="x", pady=(SPACE_2, 0))
         out_frame.columnconfigure(0, weight=1)
         ttk.Entry(out_frame, textvariable=self.output_dir_var).grid(row=0, column=0, sticky="ew")
-        ttk.Button(out_frame, text="Вибрати", command=self.pick_output).grid(row=1, column=0, sticky="ew", pady=4)
-        ttk.Button(out_frame, text="Відкрити папку", command=self.open_output_folder).grid(row=2, column=0, sticky="ew")
+        ttk.Button(out_frame, text="Вибрати", command=self.pick_output, style="Secondary.TButton").grid(
+            row=1, column=0, sticky="ew", pady=SPACE_1
+        )
+        ttk.Button(out_frame, text="Відкрити папку", command=self.open_output_folder, style="Ghost.TButton").grid(
+            row=2, column=0, sticky="ew"
+        )
 
-        info_frame = ttk.LabelFrame(parent, text="Інформація", padding=8)
-        info_frame.pack(fill="x", pady=(12, 0))
+        info_frame = ttk.LabelFrame(parent, text="Інформація", padding=SPACE_2)
+        info_frame.pack(fill="x", pady=(SPACE_2, 0))
         self._info_row(info_frame, "Файл", self.info_name_var)
         self._info_row(info_frame, "Тривалість", self.info_duration_var)
         self._info_row(info_frame, "Кодеки", self.info_codec_var)
@@ -220,17 +299,17 @@ class MediaConverterApp(tk.Tk):
         self._info_row(info_frame, "Роздільність", self.info_res_var)
         self._info_row(info_frame, "Контейнер", self.info_container_var)
 
-        actions = ttk.LabelFrame(parent, text="Дії", padding=8)
-        actions.pack(fill="x", pady=(12, 0))
+        actions = ttk.LabelFrame(parent, text="Дії", padding=SPACE_2)
+        actions.pack(fill="x", pady=(SPACE_2, 0))
         self.btn_start = ttk.Button(actions, text="Старт", command=self.start, style="TButton")
-        self.btn_start.pack(fill="x", pady=4)
+        self.btn_start.pack(fill="x", pady=SPACE_1)
         self.btn_stop = ttk.Button(actions, text="Стоп", command=self.stop, style="Secondary.TButton")
         self.btn_stop.pack(fill="x")
         self.btn_stop.configure(state="disabled")
 
     def _info_row(self, parent: ttk.Frame, label: str, var: tk.StringVar) -> None:
         row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
+        row.pack(fill="x", pady=SPACE_1)
         ttk.Label(row, text=f"{label}:", width=10).pack(side="left")
         ttk.Label(row, textvariable=var).pack(side="left", fill="x", expand=True)
 
@@ -238,8 +317,8 @@ class MediaConverterApp(tk.Tk):
         paned = ttk.PanedWindow(parent, orient="vertical")
         paned.grid(row=0, column=0, sticky="nsew")
 
-        options = ttk.Frame(paned)
-        log_frame = ttk.LabelFrame(paned, text="Лог", padding=8)
+        options = ttk.Frame(paned, style="Panel.TFrame")
+        log_frame = ttk.LabelFrame(paned, text="Лог", padding=SPACE_2)
         paned.add(options, weight=3)
         paned.add(log_frame, weight=1)
 
@@ -249,12 +328,12 @@ class MediaConverterApp(tk.Tk):
         notebook = ttk.Notebook(options)
         notebook.grid(row=0, column=0, sticky="nsew")
 
-        basic = ttk.Frame(notebook, padding=10)
-        advanced = ttk.Frame(notebook)
-        codec_tab = ttk.Frame(notebook, padding=10)
-        presets_tab = ttk.Frame(notebook, padding=10)
-        enhance_tab = ttk.Frame(notebook, padding=10)
-        metadata_tab = ttk.Frame(notebook, padding=10)
+        basic = ttk.Frame(notebook, padding=SPACE_2, style="Panel.TFrame")
+        advanced = ttk.Frame(notebook, padding=SPACE_2, style="Panel.TFrame")
+        codec_tab = ttk.Frame(notebook, padding=SPACE_2, style="Panel.TFrame")
+        presets_tab = ttk.Frame(notebook, padding=SPACE_2, style="Panel.TFrame")
+        enhance_tab = ttk.Frame(notebook, padding=SPACE_2, style="Panel.TFrame")
+        metadata_tab = ttk.Frame(notebook, padding=SPACE_2, style="Panel.TFrame")
 
         notebook.add(basic, text="Базові")
         notebook.add(advanced, text="Розширені")
@@ -271,7 +350,8 @@ class MediaConverterApp(tk.Tk):
         self._build_enhance_tab(enhance_tab)
         self._build_metadata_tab(metadata_tab)
 
-        self.log_text = tk.Text(log_frame, height=6, wrap="word", state="disabled")
+        self.log_text = tk.Text(log_frame, height=6, wrap="word", state="disabled", padx=SPACE_1, pady=SPACE_1)
+        self.log_text.configure(font=("Segoe UI", 11))
         self.log_text.pack(side="left", fill="both", expand=True)
         log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
         log_scroll.pack(side="right", fill="y")
@@ -287,7 +367,7 @@ class MediaConverterApp(tk.Tk):
         canvas.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
 
-        inner = ttk.Frame(canvas, padding=10)
+        inner = ttk.Frame(canvas, padding=SPACE_2, style="Panel.TFrame")
         window_id = canvas.create_window((0, 0), window=inner, anchor="nw")
 
         def _on_configure(_event):
@@ -324,15 +404,17 @@ class MediaConverterApp(tk.Tk):
         return inner
 
     def _build_basic_tab(self, parent: ttk.Frame) -> None:
-        video_frame = ttk.LabelFrame(parent, text="Відео", padding=8)
-        video_frame.pack(fill="x", pady=4)
+        video_frame = ttk.LabelFrame(parent, text="Відео", padding=SPACE_2)
+        video_frame.pack(fill="x", pady=(0, SPACE_2))
 
         ttk.Label(video_frame, text="Формат:").grid(row=0, column=0, sticky="w")
         ttk.Combobox(video_frame, textvariable=self.out_video_fmt_var, values=OUT_VIDEO_FORMATS, state="readonly", width=8).grid(
-            row=0, column=1, sticky="w", padx=(6, 20)
+            row=0, column=1, sticky="w", padx=(SPACE_1, SPACE_3)
         )
         ttk.Label(video_frame, text="CRF:").grid(row=0, column=2, sticky="w")
-        ttk.Spinbox(video_frame, from_=14, to=35, textvariable=self.crf_var, width=6).grid(row=0, column=3, sticky="w", padx=(6, 20))
+        ttk.Spinbox(video_frame, from_=14, to=35, textvariable=self.crf_var, width=6).grid(
+            row=0, column=3, sticky="w", padx=(SPACE_1, SPACE_3)
+        )
         ttk.Label(video_frame, text="Preset:").grid(row=0, column=4, sticky="w")
         ttk.Combobox(
             video_frame,
@@ -342,133 +424,163 @@ class MediaConverterApp(tk.Tk):
             width=10,
         ).grid(row=0, column=5, sticky="w")
 
-        ttk.Label(video_frame, text="Портрет:").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(video_frame, text="Портрет:").grid(row=1, column=0, sticky="w", pady=(SPACE_1, 0))
         ttk.Combobox(video_frame, textvariable=self.portrait_var, values=list(PORTRAIT_PRESETS.keys()), state="readonly", width=22).grid(
-            row=1, column=1, sticky="w", padx=(6, 20), pady=(8, 0)
+            row=1, column=1, sticky="w", padx=(SPACE_1, SPACE_3), pady=(SPACE_1, 0)
         )
 
-        img_frame = ttk.LabelFrame(parent, text="Фото", padding=8)
-        img_frame.pack(fill="x", pady=4)
+        img_frame = ttk.LabelFrame(parent, text="Фото", padding=SPACE_2)
+        img_frame.pack(fill="x", pady=(0, SPACE_2))
         ttk.Label(img_frame, text="Формат:").grid(row=0, column=0, sticky="w")
         ttk.Combobox(img_frame, textvariable=self.out_image_fmt_var, values=OUT_IMAGE_FORMATS, state="readonly", width=8).grid(
-            row=0, column=1, sticky="w", padx=(6, 20)
+            row=0, column=1, sticky="w", padx=(SPACE_1, SPACE_3)
         )
         ttk.Label(img_frame, text="Якість (1–100):").grid(row=0, column=2, sticky="w")
-        ttk.Spinbox(img_frame, from_=1, to=100, textvariable=self.img_quality_var, width=6).grid(row=0, column=3, sticky="w", padx=(6, 0))
+        ttk.Spinbox(img_frame, from_=1, to=100, textvariable=self.img_quality_var, width=6).grid(
+            row=0, column=3, sticky="w", padx=(SPACE_1, 0)
+        )
 
-        behavior = ttk.LabelFrame(parent, text="Поведінка", padding=8)
-        behavior.pack(fill="x", pady=4)
+        behavior = ttk.LabelFrame(parent, text="Поведінка", padding=SPACE_2)
+        behavior.pack(fill="x", pady=(0, SPACE_2))
         ttk.Checkbutton(behavior, text="Перезаписувати існуючі файли", variable=self.overwrite_var).grid(row=0, column=0, sticky="w")
         ttk.Checkbutton(behavior, text="Fast copy (без перекодування, якщо можливо)", variable=self.fast_copy_var).grid(
-            row=1, column=0, sticky="w", pady=(6, 0)
+            row=1, column=0, sticky="w", pady=(SPACE_1, 0)
         )
 
     def _build_advanced_tab(self, parent: ttk.Frame) -> None:
-        time_frame = ttk.LabelFrame(parent, text="Час / Merge", padding=8)
-        time_frame.pack(fill="x", pady=4)
+        time_frame = ttk.LabelFrame(parent, text="Час / Merge", padding=SPACE_2)
+        time_frame.pack(fill="x", pady=(0, SPACE_2))
         ttk.Label(time_frame, text="Початок (hh:mm:ss або сек):").grid(row=0, column=0, sticky="w")
-        ttk.Entry(time_frame, textvariable=self.trim_start_var, width=12).grid(row=0, column=1, sticky="w", padx=(6, 18))
+        ttk.Entry(time_frame, textvariable=self.trim_start_var, width=12).grid(
+            row=0, column=1, sticky="w", padx=(SPACE_1, SPACE_3)
+        )
         ttk.Label(time_frame, text="Кінець (hh:mm:ss або сек):").grid(row=0, column=2, sticky="w")
-        ttk.Entry(time_frame, textvariable=self.trim_end_var, width=12).grid(row=0, column=3, sticky="w", padx=(6, 0))
+        ttk.Entry(time_frame, textvariable=self.trim_end_var, width=12).grid(row=0, column=3, sticky="w", padx=(SPACE_1, 0))
 
         ttk.Checkbutton(time_frame, text="Об'єднати всі відео в один файл", variable=self.merge_var).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(8, 0)
+            row=1, column=0, columnspan=2, sticky="w", pady=(SPACE_1, 0)
         )
-        ttk.Label(time_frame, text="Назва файлу:").grid(row=1, column=2, sticky="w", pady=(8, 0))
-        ttk.Entry(time_frame, textvariable=self.merge_name_var).grid(row=1, column=3, sticky="w", padx=(6, 0), pady=(8, 0))
+        ttk.Label(time_frame, text="Назва файлу:").grid(row=1, column=2, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(time_frame, textvariable=self.merge_name_var).grid(
+            row=1, column=3, sticky="w", padx=(SPACE_1, 0), pady=(SPACE_1, 0)
+        )
 
-        transform = ttk.LabelFrame(parent, text="Трансформації", padding=8)
-        transform.pack(fill="x", pady=4)
+        transform = ttk.LabelFrame(parent, text="Трансформації", padding=SPACE_2)
+        transform.pack(fill="x", pady=(0, SPACE_2))
 
         ttk.Label(transform, text="Resize W:").grid(row=0, column=0, sticky="w")
-        ttk.Entry(transform, textvariable=self.resize_w_var, width=6).grid(row=0, column=1, sticky="w", padx=(6, 12))
+        ttk.Entry(transform, textvariable=self.resize_w_var, width=6).grid(row=0, column=1, sticky="w", padx=(SPACE_1, SPACE_2))
         ttk.Label(transform, text="H:").grid(row=0, column=2, sticky="w")
-        ttk.Entry(transform, textvariable=self.resize_h_var, width=6).grid(row=0, column=3, sticky="w", padx=(6, 12))
-        ttk.Label(transform, text="Crop W:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        ttk.Entry(transform, textvariable=self.crop_w_var, width=6).grid(row=1, column=1, sticky="w", padx=(6, 12), pady=(6, 0))
-        ttk.Label(transform, text="H:").grid(row=1, column=2, sticky="w", pady=(6, 0))
-        ttk.Entry(transform, textvariable=self.crop_h_var, width=6).grid(row=1, column=3, sticky="w", padx=(6, 12), pady=(6, 0))
-        ttk.Label(transform, text="X:").grid(row=1, column=4, sticky="w", pady=(6, 0))
-        ttk.Entry(transform, textvariable=self.crop_x_var, width=6).grid(row=1, column=5, sticky="w", padx=(6, 12), pady=(6, 0))
-        ttk.Label(transform, text="Y:").grid(row=1, column=6, sticky="w", pady=(6, 0))
-        ttk.Entry(transform, textvariable=self.crop_y_var, width=6).grid(row=1, column=7, sticky="w", padx=(6, 0), pady=(6, 0))
-
-        ttk.Label(transform, text="Поворот:").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        ttk.Combobox(transform, textvariable=self.rotate_var, values=ROTATE_OPTIONS, state="readonly", width=12).grid(
-            row=2, column=1, sticky="w", padx=(6, 12), pady=(6, 0)
+        ttk.Entry(transform, textvariable=self.resize_h_var, width=6).grid(row=0, column=3, sticky="w", padx=(SPACE_1, SPACE_2))
+        ttk.Label(transform, text="Crop W:").grid(row=1, column=0, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(transform, textvariable=self.crop_w_var, width=6).grid(
+            row=1, column=1, sticky="w", padx=(SPACE_1, SPACE_2), pady=(SPACE_1, 0)
         )
-        ttk.Label(transform, text="Speed:").grid(row=2, column=2, sticky="w", pady=(6, 0))
-        ttk.Entry(transform, textvariable=self.speed_var, width=6).grid(row=2, column=3, sticky="w", padx=(6, 0), pady=(6, 0))
+        ttk.Label(transform, text="H:").grid(row=1, column=2, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(transform, textvariable=self.crop_h_var, width=6).grid(
+            row=1, column=3, sticky="w", padx=(SPACE_1, SPACE_2), pady=(SPACE_1, 0)
+        )
+        ttk.Label(transform, text="X:").grid(row=1, column=4, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(transform, textvariable=self.crop_x_var, width=6).grid(
+            row=1, column=5, sticky="w", padx=(SPACE_1, SPACE_2), pady=(SPACE_1, 0)
+        )
+        ttk.Label(transform, text="Y:").grid(row=1, column=6, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(transform, textvariable=self.crop_y_var, width=6).grid(
+            row=1, column=7, sticky="w", padx=(SPACE_1, 0), pady=(SPACE_1, 0)
+        )
 
-        watermark = ttk.LabelFrame(parent, text="Водяний знак", padding=8)
-        watermark.pack(fill="x", pady=4)
+        ttk.Label(transform, text="Поворот:").grid(row=2, column=0, sticky="w", pady=(SPACE_1, 0))
+        ttk.Combobox(transform, textvariable=self.rotate_var, values=ROTATE_OPTIONS, state="readonly", width=12).grid(
+            row=2, column=1, sticky="w", padx=(SPACE_1, SPACE_2), pady=(SPACE_1, 0)
+        )
+        ttk.Label(transform, text="Speed:").grid(row=2, column=2, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(transform, textvariable=self.speed_var, width=6).grid(
+            row=2, column=3, sticky="w", padx=(SPACE_1, 0), pady=(SPACE_1, 0)
+        )
+
+        watermark = ttk.LabelFrame(parent, text="Водяний знак", padding=SPACE_2)
+        watermark.pack(fill="x", pady=(0, SPACE_2))
         watermark.columnconfigure(1, weight=1)
         ttk.Label(watermark, text="Файл:").grid(row=0, column=0, sticky="w")
-        ttk.Entry(watermark, textvariable=self.wm_path_var).grid(row=0, column=1, sticky="ew", padx=6)
-        ttk.Button(watermark, text="Вибрати", command=self.pick_watermark).grid(row=0, column=2, padx=4)
-        ttk.Label(watermark, text="Scale %:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        ttk.Spinbox(watermark, from_=1, to=200, textvariable=self.wm_scale_var, width=6).grid(row=1, column=1, sticky="w", padx=6, pady=(6, 0))
-        ttk.Label(watermark, text="Opacity %:").grid(row=1, column=2, sticky="w", pady=(6, 0))
-        ttk.Spinbox(watermark, from_=0, to=100, textvariable=self.wm_opacity_var, width=6).grid(row=1, column=3, sticky="w", padx=6, pady=(6, 0))
-        ttk.Label(watermark, text="Позиція:").grid(row=1, column=4, sticky="w", pady=(6, 0))
+        ttk.Entry(watermark, textvariable=self.wm_path_var).grid(row=0, column=1, sticky="ew", padx=SPACE_1)
+        ttk.Button(watermark, text="Вибрати", command=self.pick_watermark, style="Secondary.TButton").grid(
+            row=0, column=2, padx=SPACE_1
+        )
+        ttk.Label(watermark, text="Scale %:").grid(row=1, column=0, sticky="w", pady=(SPACE_1, 0))
+        ttk.Spinbox(watermark, from_=1, to=200, textvariable=self.wm_scale_var, width=6).grid(
+            row=1, column=1, sticky="w", padx=SPACE_1, pady=(SPACE_1, 0)
+        )
+        ttk.Label(watermark, text="Opacity %:").grid(row=1, column=2, sticky="w", pady=(SPACE_1, 0))
+        ttk.Spinbox(watermark, from_=0, to=100, textvariable=self.wm_opacity_var, width=6).grid(
+            row=1, column=3, sticky="w", padx=SPACE_1, pady=(SPACE_1, 0)
+        )
+        ttk.Label(watermark, text="Позиція:").grid(row=1, column=4, sticky="w", pady=(SPACE_1, 0))
         ttk.Combobox(watermark, textvariable=self.wm_pos_var, values=POSITION_OPTIONS, state="readonly", width=12).grid(
-            row=1, column=5, sticky="w", padx=6, pady=(6, 0)
+            row=1, column=5, sticky="w", padx=SPACE_1, pady=(SPACE_1, 0)
         )
 
-        text = ttk.LabelFrame(parent, text="Текст", padding=8)
-        text.pack(fill="x", pady=4)
+        text = ttk.LabelFrame(parent, text="Текст", padding=SPACE_2)
+        text.pack(fill="x", pady=(0, SPACE_2))
         text.columnconfigure(1, weight=1)
         ttk.Label(text, text="Текст:").grid(row=0, column=0, sticky="w")
-        ttk.Entry(text, textvariable=self.text_wm_var).grid(row=0, column=1, sticky="ew", padx=6)
+        ttk.Entry(text, textvariable=self.text_wm_var).grid(row=0, column=1, sticky="ew", padx=SPACE_1)
         ttk.Label(text, text="Розмір:").grid(row=0, column=2, sticky="w")
-        ttk.Spinbox(text, from_=8, to=120, textvariable=self.text_size_var, width=6).grid(row=0, column=3, sticky="w", padx=6)
-        ttk.Label(text, text="Колір:").grid(row=0, column=4, sticky="w")
-        ttk.Entry(text, textvariable=self.text_color_var, width=10).grid(row=0, column=5, sticky="w", padx=6)
-
-        ttk.Label(text, text="Позиція:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        ttk.Combobox(text, textvariable=self.text_pos_var, values=POSITION_OPTIONS, state="readonly", width=12).grid(
-            row=1, column=1, sticky="w", padx=6, pady=(6, 0)
+        ttk.Spinbox(text, from_=8, to=120, textvariable=self.text_size_var, width=6).grid(
+            row=0, column=3, sticky="w", padx=SPACE_1
         )
-        ttk.Label(text, text="Шрифт (.ttf):").grid(row=1, column=2, sticky="w", pady=(6, 0))
-        ttk.Entry(text, textvariable=self.text_font_var).grid(row=1, column=3, sticky="ew", padx=6, pady=(6, 0))
-        ttk.Button(text, text="Вибрати", command=self.pick_font).grid(row=1, column=4, padx=4, pady=(6, 0))
+        ttk.Label(text, text="Колір:").grid(row=0, column=4, sticky="w")
+        ttk.Entry(text, textvariable=self.text_color_var, width=10).grid(row=0, column=5, sticky="w", padx=SPACE_1)
 
-        ttk.Checkbutton(text, text="Фон тексту", variable=self.text_box_var).grid(row=2, column=0, sticky="w", pady=(6, 0))
-        ttk.Label(text, text="Колір:").grid(row=2, column=1, sticky="w", pady=(6, 0))
-        ttk.Entry(text, textvariable=self.text_box_color_var, width=10).grid(row=2, column=2, sticky="w", padx=6, pady=(6, 0))
-        ttk.Label(text, text="Opacity %:").grid(row=2, column=3, sticky="w", pady=(6, 0))
-        ttk.Spinbox(text, from_=0, to=100, textvariable=self.text_box_opacity_var, width=6).grid(row=2, column=4, sticky="w", padx=6, pady=(6, 0))
+        ttk.Label(text, text="Позиція:").grid(row=1, column=0, sticky="w", pady=(SPACE_1, 0))
+        ttk.Combobox(text, textvariable=self.text_pos_var, values=POSITION_OPTIONS, state="readonly", width=12).grid(
+            row=1, column=1, sticky="w", padx=SPACE_1, pady=(SPACE_1, 0)
+        )
+        ttk.Label(text, text="Шрифт (.ttf):").grid(row=1, column=2, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(text, textvariable=self.text_font_var).grid(row=1, column=3, sticky="ew", padx=SPACE_1, pady=(SPACE_1, 0))
+        ttk.Button(text, text="Вибрати", command=self.pick_font, style="Secondary.TButton").grid(
+            row=1, column=4, padx=SPACE_1, pady=(SPACE_1, 0)
+        )
+
+        ttk.Checkbutton(text, text="Фон тексту", variable=self.text_box_var).grid(row=2, column=0, sticky="w", pady=(SPACE_1, 0))
+        ttk.Label(text, text="Колір:").grid(row=2, column=1, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(text, textvariable=self.text_box_color_var, width=10).grid(
+            row=2, column=2, sticky="w", padx=SPACE_1, pady=(SPACE_1, 0)
+        )
+        ttk.Label(text, text="Opacity %:").grid(row=2, column=3, sticky="w", pady=(SPACE_1, 0))
+        ttk.Spinbox(text, from_=0, to=100, textvariable=self.text_box_opacity_var, width=6).grid(
+            row=2, column=4, sticky="w", padx=SPACE_1, pady=(SPACE_1, 0)
+        )
 
     def _build_codec_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(1, weight=1)
         ttk.Label(parent, text="Кодек відео:").grid(row=0, column=0, sticky="w")
         ttk.Combobox(parent, textvariable=self.codec_var, values=VIDEO_CODEC_OPTIONS, state="readonly", width=18).grid(
-            row=0, column=1, sticky="w", padx=(6, 0)
+            row=0, column=1, sticky="w", padx=(SPACE_1, 0)
         )
-        ttk.Label(parent, text="GPU/CPU:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(parent, text="GPU/CPU:").grid(row=1, column=0, sticky="w", pady=(SPACE_1, 0))
         ttk.Combobox(parent, textvariable=self.hw_var, values=HW_ENCODER_OPTIONS, state="readonly", width=18).grid(
-            row=1, column=1, sticky="w", padx=(6, 0), pady=(6, 0)
+            row=1, column=1, sticky="w", padx=(SPACE_1, 0), pady=(SPACE_1, 0)
         )
-        ttk.Label(parent, textvariable=self.encoder_info_var).grid(row=2, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        ttk.Label(parent, textvariable=self.encoder_info_var).grid(row=2, column=0, columnspan=2, sticky="w", pady=(SPACE_2, 0))
 
     def _build_presets_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(1, weight=1)
         ttk.Label(parent, text="Збережені:").grid(row=0, column=0, sticky="w")
         self.preset_combo = ttk.Combobox(parent, textvariable=self.preset_select_var, values=[], state="readonly")
-        self.preset_combo.grid(row=0, column=1, sticky="ew", padx=6)
-        ttk.Button(parent, text="Завантажити", command=self.load_preset).grid(row=0, column=2, padx=4)
-        ttk.Button(parent, text="Видалити", command=self.delete_preset).grid(row=0, column=3, padx=4)
+        self.preset_combo.grid(row=0, column=1, sticky="ew", padx=SPACE_1)
+        ttk.Button(parent, text="Завантажити", command=self.load_preset, style="Secondary.TButton").grid(row=0, column=2, padx=SPACE_1)
+        ttk.Button(parent, text="Видалити", command=self.delete_preset, style="Ghost.TButton").grid(row=0, column=3, padx=SPACE_1)
 
-        ttk.Label(parent, text="Назва нового:").grid(row=1, column=0, sticky="w", pady=(10, 0))
-        ttk.Entry(parent, textvariable=self.preset_name_var).grid(row=1, column=1, sticky="ew", padx=6, pady=(10, 0))
-        ttk.Button(parent, text="Зберегти", command=self.save_preset).grid(row=1, column=2, padx=4, pady=(10, 0))
+        ttk.Label(parent, text="Назва нового:").grid(row=1, column=0, sticky="w", pady=(SPACE_2, 0))
+        ttk.Entry(parent, textvariable=self.preset_name_var).grid(row=1, column=1, sticky="ew", padx=SPACE_1, pady=(SPACE_2, 0))
+        ttk.Button(parent, text="Зберегти", command=self.save_preset).grid(row=1, column=2, padx=SPACE_1, pady=(SPACE_2, 0))
 
     def _build_enhance_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
         header = ttk.Label(parent, text="Швидкі профілі покращення відео")
-        header.grid(row=0, column=0, sticky="w", pady=(0, 10))
+        header.grid(row=0, column=0, sticky="w", pady=(0, SPACE_2))
 
-        card = ttk.LabelFrame(parent, text="Масштабування (resize)", padding=10)
+        card = ttk.LabelFrame(parent, text="Масштабування (resize)", padding=SPACE_2)
         card.grid(row=1, column=0, sticky="ew")
         for col in range(3):
             card.columnconfigure(col, weight=1)
@@ -489,8 +601,8 @@ class MediaConverterApp(tk.Tk):
         row = 1
         col = 0
         for label, w, h in presets:
-            ttk.Button(card, text=f"До {label}", command=lambda ww=w, hh=h: self._apply_upscale(ww, hh)).grid(
-                row=row, column=col, sticky="ew", padx=6, pady=(8, 0)
+            ttk.Button(card, text=f"До {label}", command=lambda ww=w, hh=h: self._apply_upscale(ww, hh), style="Secondary.TButton").grid(
+                row=row, column=col, sticky="ew", padx=SPACE_1, pady=(SPACE_1, 0)
             )
             col += 1
             if col >= 3:
@@ -501,26 +613,28 @@ class MediaConverterApp(tk.Tk):
             parent,
             text="Порада: апскейл збільшує розмір/час. Використовуй адекватні параметри CRF і кодеки (H.265/AV1).",
             style="Muted.TLabel",
-            wraplength=520,
+            wraplength=640,
         )
-        hint.grid(row=2, column=0, sticky="w", pady=(12, 0))
+        hint.grid(row=2, column=0, sticky="w", pady=(SPACE_2, 0))
 
     def _build_metadata_tab(self, parent: ttk.Frame) -> None:
         ttk.Checkbutton(parent, text="Копіювати метадані з джерела", variable=self.copy_metadata_var).grid(row=0, column=0, sticky="w")
-        ttk.Checkbutton(parent, text="Очистити метадані", variable=self.strip_metadata_var).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ttk.Checkbutton(parent, text="Очистити метадані", variable=self.strip_metadata_var).grid(
+            row=1, column=0, sticky="w", pady=(SPACE_1, 0)
+        )
 
-        form = ttk.LabelFrame(parent, text="Поля", padding=8)
-        form.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        form = ttk.LabelFrame(parent, text="Поля", padding=SPACE_2)
+        form.grid(row=2, column=0, sticky="ew", pady=(SPACE_2, 0))
         form.columnconfigure(1, weight=1)
 
         ttk.Label(form, text="Title:").grid(row=0, column=0, sticky="w")
-        ttk.Entry(form, textvariable=self.meta_title_var).grid(row=0, column=1, sticky="ew", padx=6)
-        ttk.Label(form, text="Author:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        ttk.Entry(form, textvariable=self.meta_author_var).grid(row=1, column=1, sticky="ew", padx=6, pady=(6, 0))
-        ttk.Label(form, text="Comment:").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        ttk.Entry(form, textvariable=self.meta_comment_var).grid(row=2, column=1, sticky="ew", padx=6, pady=(6, 0))
-        ttk.Label(form, text="Copyright:").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        ttk.Entry(form, textvariable=self.meta_copyright_var).grid(row=3, column=1, sticky="ew", padx=6, pady=(6, 0))
+        ttk.Entry(form, textvariable=self.meta_title_var).grid(row=0, column=1, sticky="ew", padx=SPACE_1)
+        ttk.Label(form, text="Author:").grid(row=1, column=0, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(form, textvariable=self.meta_author_var).grid(row=1, column=1, sticky="ew", padx=SPACE_1, pady=(SPACE_1, 0))
+        ttk.Label(form, text="Comment:").grid(row=2, column=0, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(form, textvariable=self.meta_comment_var).grid(row=2, column=1, sticky="ew", padx=SPACE_1, pady=(SPACE_1, 0))
+        ttk.Label(form, text="Copyright:").grid(row=3, column=0, sticky="w", pady=(SPACE_1, 0))
+        ttk.Entry(form, textvariable=self.meta_copyright_var).grid(row=3, column=1, sticky="ew", padx=SPACE_1, pady=(SPACE_1, 0))
 
     def _on_theme_change(self) -> None:
         choice = self.theme_var.get()
@@ -540,7 +654,7 @@ class MediaConverterApp(tk.Tk):
         dialog.transient(self)
         dialog.grab_set()
 
-        frame = ttk.Frame(dialog, padding=12)
+        frame = ttk.Frame(dialog, padding=SPACE_2)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(1, weight=1)
 
@@ -556,17 +670,17 @@ class MediaConverterApp(tk.Tk):
         entries: Dict[str, tk.Entry] = {}
 
         for idx, (key, label) in enumerate(fields):
-            ttk.Label(frame, text=label + ":").grid(row=idx, column=0, sticky="w", pady=4)
+            ttk.Label(frame, text=label + ":").grid(row=idx, column=0, sticky="w", pady=SPACE_1)
             entry = ttk.Entry(frame)
             entry.insert(0, base.get(key, ""))
-            entry.grid(row=idx, column=1, sticky="ew", padx=6, pady=4)
+            entry.grid(row=idx, column=1, sticky="ew", padx=SPACE_1, pady=SPACE_1)
             entries[key] = entry
-            ttk.Button(frame, text="...", width=3, command=lambda k=key: self._pick_color(entries[k])).grid(
-                row=idx, column=2, padx=4, pady=4
+            ttk.Button(frame, text="...", width=3, command=lambda k=key: self._pick_color(entries[k]), style="Ghost.TButton").grid(
+                row=idx, column=2, padx=SPACE_1, pady=SPACE_1
             )
 
         btns = ttk.Frame(frame)
-        btns.grid(row=len(fields), column=0, columnspan=3, sticky="e", pady=(10, 0))
+        btns.grid(row=len(fields), column=0, columnspan=3, sticky="e", pady=(SPACE_2, 0))
 
         def _save():
             theme = dict(base)
@@ -580,7 +694,7 @@ class MediaConverterApp(tk.Tk):
             self._apply_theme("custom")
             dialog.destroy()
 
-        ttk.Button(btns, text="Скасувати", command=dialog.destroy, style="Secondary.TButton").pack(side="right", padx=6)
+        ttk.Button(btns, text="Скасувати", command=dialog.destroy, style="Secondary.TButton").pack(side="right", padx=SPACE_1)
         ttk.Button(btns, text="Зберегти", command=_save).pack(side="right")
 
     def _pick_color(self, entry: tk.Entry) -> None:

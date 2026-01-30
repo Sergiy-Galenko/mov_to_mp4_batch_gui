@@ -1,2 +1,1 @@
-# This project uses only the Python standard library (Tkinter).
-# No external dependencies are required.
+PySide6>=6.6

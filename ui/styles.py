@@ -5,27 +5,32 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Dict, Optional
 
+SPACE_1 = 8
+SPACE_2 = 16
+SPACE_3 = 24
+SPACE_4 = 32
+
 THEMES: Dict[str, Dict[str, str]] = {
     "light": {
-        "bg": "#F7F5F2",
+        "bg": "#F9FAFB",
         "panel": "#FFFFFF",
-        "text": "#1F2933",
+        "text": "#111827",
         "muted": "#6B7280",
-        "accent": "#2B6CB0",
-        "accent_alt": "#1E4E8C",
-        "border": "#E2E8F0",
+        "accent": "#2563EB",
+        "accent_alt": "#1D4ED8",
+        "border": "#E5E7EB",
         "success": "#0F766E",
         "warn": "#B45309",
         "error": "#B91C1C",
     },
     "dark": {
-        "bg": "#1F2933",
-        "panel": "#273142",
-        "text": "#F3F4F6",
-        "muted": "#9CA3AF",
-        "accent": "#4DD0A7",
-        "accent_alt": "#2E9E7B",
-        "border": "#374151",
+        "bg": "#0F172A",
+        "panel": "#111827",
+        "text": "#F8FAFC",
+        "muted": "#94A3B8",
+        "accent": "#3B82F6",
+        "accent_alt": "#2563EB",
+        "border": "#1F2937",
         "success": "#34D399",
         "warn": "#FBBF24",
         "error": "#F87171",
@@ -64,41 +69,102 @@ def apply_theme(root: tk.Tk, theme_name: str, custom: Optional[Dict[str, str]] =
     style = ttk.Style(root)
     style.theme_use("clam")
 
-    base_font = ("Segoe UI", 10)
-    title_font = ("Segoe UI Semibold", 14)
+    base_family = "Segoe UI"
+    base_font = (base_family, 11)
+    title_font = (base_family, 16, "bold")
+    subtitle_font = (base_family, 10)
+    label_font = (base_family, 11, "bold")
     style.configure("TFrame", background=colors["bg"])
     style.configure("Panel.TFrame", background=colors["panel"])
-    style.configure("TLabel", background=colors["bg"], foreground=colors["text"], font=base_font)
-    style.configure("Muted.TLabel", background=colors["bg"], foreground=colors["muted"], font=base_font)
-    style.configure("Title.TLabel", background=colors["bg"], foreground=colors["text"], font=title_font)
+    style.configure("Card.TFrame", background=colors["panel"], borderwidth=1, relief="solid")
+    style.configure("TLabel", background=colors["panel"], foreground=colors["text"], font=base_font)
+    style.configure("Muted.TLabel", background=colors["panel"], foreground=colors["muted"], font=base_font)
+    style.configure("Title.TLabel", background=colors["panel"], foreground=colors["text"], font=title_font)
+    style.configure("Subtitle.TLabel", background=colors["panel"], foreground=colors["muted"], font=subtitle_font)
 
-    style.configure("TButton", background=colors["accent"], foreground=colors["panel"], padding=(10, 6))
+    style.configure(
+        "TButton",
+        background=colors["accent"],
+        foreground=colors["panel"],
+        padding=(SPACE_2, SPACE_1),
+        borderwidth=0,
+        relief="flat",
+    )
     style.map(
         "TButton",
-        background=[("active", colors["accent_alt"])],
-        foreground=[("active", colors["panel"])],
+        background=[("active", colors["accent_alt"]), ("disabled", colors["border"])],
+        foreground=[("active", colors["panel"]), ("disabled", colors["muted"])],
     )
-    style.configure("Secondary.TButton", background=colors["panel"], foreground=colors["text"], padding=(10, 6))
+    style.configure(
+        "Secondary.TButton",
+        background=colors["panel"],
+        foreground=colors["text"],
+        padding=(SPACE_2, SPACE_1),
+        borderwidth=1,
+        relief="solid",
+        bordercolor=colors["border"],
+    )
     style.map(
         "Secondary.TButton",
-        background=[("active", colors["bg"])],
-        foreground=[("active", colors["text"])],
+        background=[("active", colors["bg"]), ("disabled", colors["bg"])],
+        foreground=[("active", colors["text"]), ("disabled", colors["muted"])],
+    )
+    style.configure(
+        "Ghost.TButton",
+        background=colors["bg"],
+        foreground=colors["accent"],
+        padding=(SPACE_2, SPACE_1),
+        borderwidth=0,
+        relief="flat",
+    )
+    style.map(
+        "Ghost.TButton",
+        background=[("active", colors["panel"]), ("disabled", colors["bg"])],
+        foreground=[("active", colors["accent_alt"]), ("disabled", colors["muted"])],
     )
 
-    style.configure("TEntry", fieldbackground=colors["panel"], foreground=colors["text"])
-    style.configure("TCombobox", fieldbackground=colors["panel"], foreground=colors["text"])
-    style.map("TCombobox", fieldbackground=[("readonly", colors["panel"])])
+    style.configure(
+        "TEntry",
+        fieldbackground=colors["panel"],
+        foreground=colors["text"],
+        padding=(SPACE_1, SPACE_1),
+        bordercolor=colors["border"],
+    )
+    style.configure(
+        "TSpinbox",
+        fieldbackground=colors["panel"],
+        foreground=colors["text"],
+        padding=(SPACE_1, SPACE_1),
+        bordercolor=colors["border"],
+    )
+    style.configure(
+        "TCombobox",
+        fieldbackground=colors["panel"],
+        foreground=colors["text"],
+        padding=(SPACE_1, SPACE_1),
+        bordercolor=colors["border"],
+    )
+    style.map("TCombobox", fieldbackground=[("readonly", colors["panel"])], bordercolor=[("focus", colors["accent"])])
+    style.map(
+        "TEntry",
+        fieldbackground=[("disabled", colors["bg"])],
+        foreground=[("disabled", colors["muted"])],
+    )
+    style.map("TEntry", bordercolor=[("focus", colors["accent"])])
+    style.map("TSpinbox", bordercolor=[("focus", colors["accent"])])
+    style.configure("TCheckbutton", background=colors["panel"], foreground=colors["text"], padding=(SPACE_1, SPACE_1))
+    style.map("TCheckbutton", foreground=[("disabled", colors["muted"])])
 
-    style.configure("TNotebook", background=colors["bg"], tabmargins=(8, 4, 8, 0))
-    style.configure("TNotebook.Tab", padding=(14, 8), background=colors["panel"], foreground=colors["text"])
+    style.configure("TNotebook", background=colors["panel"], tabmargins=(SPACE_2, SPACE_1, SPACE_2, 0))
+    style.configure("TNotebook.Tab", padding=(SPACE_2, SPACE_1), background=colors["panel"], foreground=colors["text"])
     style.map(
         "TNotebook.Tab",
         background=[("selected", colors["accent"])],
         foreground=[("selected", colors["panel"])],
     )
 
-    style.configure("TLabelframe", background=colors["bg"], foreground=colors["text"], bordercolor=colors["border"])
-    style.configure("TLabelframe.Label", background=colors["bg"], foreground=colors["text"], font=("Segoe UI Semibold", 10))
+    style.configure("TLabelframe", background=colors["panel"], foreground=colors["text"], bordercolor=colors["border"], borderwidth=1, relief="solid")
+    style.configure("TLabelframe.Label", background=colors["panel"], foreground=colors["text"], font=label_font)
 
     style.configure("Horizontal.TProgressbar", background=colors["accent"], troughcolor=colors["panel"])
 
