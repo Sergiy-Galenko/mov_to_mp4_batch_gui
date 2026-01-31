@@ -2,7 +2,10 @@
 
 use serde::Serialize;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
+use std::time::Duration;
+use std::thread;
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, Emitter};
 
 #[derive(Serialize, Clone)]
 struct QueueItem {
@@ -138,18 +141,63 @@ fn check_ffmpeg() -> Result<bool> {
 }
 
 #[tauri::command]
-fn start_conversion(ffmpeg_path: String, output_dir: String) -> Result<()> {
+fn start_conversion(app: AppHandle, ffmpeg_path: String, output_dir: String) -> Result<()> {
     let _ = (ffmpeg_path, output_dir);
+
+    let running_flag = app.state::<Arc<AtomicBool>>().inner().clone();
+    running_flag.store(true, Ordering::SeqCst);
+
+    let app_handle = app.clone();
+    let running_flag_thread = running_flag.clone();
+
+    thread::spawn(move || {
+        for i in 0..100 {
+            if !running_flag_thread.load(Ordering::SeqCst) {
+                let _ = app_handle.emit("log", "Зупинено користувачем");
+                break;
+            }
+
+            let file = ((i % 20) as f32) / 20.0;
+            let total = (i as f32) / 100.0;
+
+            let _ = app_handle.emit(
+                "progress",
+                ProgressPayload {
+                    file_progress: file,
+                    total_progress: total,
+                    file_text: format!("{:.0}%", file * 100.0),
+                    total_text: format!("{:.0}%", total * 100.0),
+                },
+            );
+            let _ = app_handle.emit("log", format!("Обробка кадру {}", i + 1));
+            thread::sleep(Duration::from_millis(120));
+        }
+        let _ = app_handle.emit("log", "Готово");
+    });
+
     Ok(())
 }
 
 #[tauri::command]
-fn stop_conversion() -> Result<()> {
+fn stop_conversion(app: AppHandle) -> Result<()> {
+    let running_flag = app.state::<Arc<AtomicBool>>().inner().clone();
+    running_flag.store(false, Ordering::SeqCst);
+    let _ = app.emit("log", "Зупинка процесу...");
     Ok(())
 }
 
+#[derive(Serialize, Clone)]
+struct ProgressPayload {
+    file_progress: f32,
+    total_progress: f32,
+    file_text: String,
+    total_text: String,
+}
+
 fn main() {
+    let running_flag = Arc::new(AtomicBool::new(false));
     tauri::Builder::default()
+        .manage(running_flag)
         .invoke_handler(tauri::generate_handler![
             pick_files,
             pick_folder,

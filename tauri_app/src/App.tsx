@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-const tabs = ["Основні", "Редагування", "Пресети", "Покращення", "Метадані"] as const;
+const tabKeys = ["basic", "edit", "presets", "enhance", "metadata"] as const;
 
 const themes = [
   { id: "netflix", name: "Netflix Dark", accent: "#e50914" },
@@ -13,7 +13,7 @@ const themes = [
 
 type ThemeId = (typeof themes)[number]["id"];
 
-type Tab = (typeof tabs)[number];
+type TabKey = (typeof tabKeys)[number];
 
 type QueueItem = {
   id: string;
@@ -31,7 +31,26 @@ const i18n = {
     settingsTitle: "Налаштування інтерфейсу",
     settingsDesc: "Персоналізуй тему, шрифти, щільність і вигляд елементів.",
     settingsBtn: "Налаштування",
-    tabs: ["Основні", "Редагування", "Пресети", "Покращення", "Метадані"],
+    filtersTitle: "Фільтри",
+    enabled: "Увімкнено",
+    disabled: "Вимкнено",
+    filterTrim: "Trim",
+    filterCrop: "Crop",
+    filterResize: "Resize",
+    filterSpeed: "Speed",
+    filterWatermark: "Watermark",
+    filterTrimDesc: "Обрізання початку/кінця",
+    filterCropDesc: "Кадрування області",
+    filterResizeDesc: "Зміна розміру/формату",
+    filterSpeedDesc: "Прискорення або сповільнення",
+    filterWatermarkDesc: "Накладення водяного знаку",
+    tabs: {
+      basic: "Основні",
+      edit: "Редагування",
+      presets: "Пресети",
+      enhance: "Покращення",
+      metadata: "Метадані"
+    },
     ffmpeg: "FFmpeg",
     choose: "Вказати",
     check: "Перевірити",
@@ -56,7 +75,26 @@ const i18n = {
     settingsTitle: "Настройки интерфейса",
     settingsDesc: "Персонализируй тему, шрифты, плотность и вид элементов.",
     settingsBtn: "Настройки",
-    tabs: ["Основные", "Редактирование", "Пресеты", "Улучшения", "Метаданные"],
+    filtersTitle: "Фильтры",
+    enabled: "Включено",
+    disabled: "Выключено",
+    filterTrim: "Trim",
+    filterCrop: "Crop",
+    filterResize: "Resize",
+    filterSpeed: "Speed",
+    filterWatermark: "Watermark",
+    filterTrimDesc: "Обрезка начала/конца",
+    filterCropDesc: "Кадрирование области",
+    filterResizeDesc: "Изменение размера/формата",
+    filterSpeedDesc: "Ускорение или замедление",
+    filterWatermarkDesc: "Наложение водяного знака",
+    tabs: {
+      basic: "Основные",
+      edit: "Редактирование",
+      presets: "Пресеты",
+      enhance: "Улучшения",
+      metadata: "Метаданные"
+    },
     ffmpeg: "FFmpeg",
     choose: "Указать",
     check: "Проверить",
@@ -81,7 +119,26 @@ const i18n = {
     settingsTitle: "Interface settings",
     settingsDesc: "Customize theme, fonts, density and appearance.",
     settingsBtn: "Settings",
-    tabs: ["Basics", "Edit", "Presets", "Enhance", "Metadata"],
+    filtersTitle: "Filters",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    filterTrim: "Trim",
+    filterCrop: "Crop",
+    filterResize: "Resize",
+    filterSpeed: "Speed",
+    filterWatermark: "Watermark",
+    filterTrimDesc: "Trim start/end",
+    filterCropDesc: "Crop area",
+    filterResizeDesc: "Resize or reformat",
+    filterSpeedDesc: "Speed up or slow down",
+    filterWatermarkDesc: "Apply watermark",
+    tabs: {
+      basic: "Basics",
+      edit: "Edit",
+      presets: "Presets",
+      enhance: "Enhance",
+      metadata: "Metadata"
+    },
     ffmpeg: "FFmpeg",
     choose: "Browse",
     check: "Check",
@@ -106,7 +163,26 @@ const i18n = {
     settingsTitle: "Configurações da interface",
     settingsDesc: "Personalize tema, fontes, densidade e aparência.",
     settingsBtn: "Configurações",
-    tabs: ["Básico", "Edição", "Predefinições", "Melhorias", "Metadados"],
+    filtersTitle: "Filtros",
+    enabled: "Ativado",
+    disabled: "Desativado",
+    filterTrim: "Trim",
+    filterCrop: "Crop",
+    filterResize: "Resize",
+    filterSpeed: "Speed",
+    filterWatermark: "Watermark",
+    filterTrimDesc: "Corte início/fim",
+    filterCropDesc: "Corte de área",
+    filterResizeDesc: "Redimensionar ou reformatar",
+    filterSpeedDesc: "Acelerar ou desacelerar",
+    filterWatermarkDesc: "Aplicar marca d'água",
+    tabs: {
+      basic: "Básico",
+      edit: "Edição",
+      presets: "Predefinições",
+      enhance: "Melhorias",
+      metadata: "Metadados"
+    },
     ffmpeg: "FFmpeg",
     choose: "Selecionar",
     check: "Verificar",
@@ -132,18 +208,26 @@ export default function App() {
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("settings") === "1";
 
-  const [activeTab, setActiveTab] = useState<Tab>("Основні");
+  const [activeTab, setActiveTab] = useState<TabKey>("basic");
   const [ffmpegPath, setFfmpegPath] = useState("/opt/homebrew/bin/ffmpeg");
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [outputDir, setOutputDir] = useState("~/Videos/converted");
   const [status, setStatus] = useState("Готово");
   const [fileProgress, setFileProgress] = useState(0);
   const [totalProgress, setTotalProgress] = useState(0);
+  const [logLines, setLogLines] = useState<string[]>([]);
   const [uiScale, setUiScale] = useState<"compact" | "comfortable">("comfortable");
   const [buttonSize, setButtonSize] = useState<"sm" | "md" | "lg">("md");
   const [themeId, setThemeId] = useState<ThemeId>("netflix");
   const [customAccent, setCustomAccent] = useState("#e50914");
   const [selectedUpscale, setSelectedUpscale] = useState<string | null>(null);
+  const [filters, setFilters] = useState({
+    trim: false,
+    crop: false,
+    resize: false,
+    speed: false,
+    watermark: false
+  });
   const [fontScale, setFontScale] = useState(1);
   const [radius, setRadius] = useState(16);
   const [cardShadow, setCardShadow] = useState(0.35);
@@ -259,6 +343,8 @@ export default function App() {
     let unlistenDrop: (() => void) | null = null;
     let unlistenHover: (() => void) | null = null;
     let unlistenCancel: (() => void) | null = null;
+    let unlistenLog: (() => void) | null = null;
+    let unlistenProgress: (() => void) | null = null;
 
     const setup = async () => {
       unlistenDrop = await listen<string[]>("tauri://file-drop", (event) => {
@@ -294,6 +380,21 @@ export default function App() {
       unlistenCancel = await listen("tauri://file-drop-cancelled", () => {
         setIsDragging(false);
       });
+
+      unlistenLog = await listen<string>("log", (event) => {
+        setLogLines((prev) => [...prev.slice(-200), event.payload ?? \"\"]);
+      });
+
+      unlistenProgress = await listen<{
+        file_progress: number;
+        total_progress: number;
+        file_text: string;
+        total_text: string;
+      }>(\"progress\", (event) => {
+        if (!event.payload) return;
+        setFileProgress(event.payload.file_progress);
+        setTotalProgress(event.payload.total_progress);
+      });
     };
 
     setup();
@@ -302,12 +403,18 @@ export default function App() {
       if (unlistenDrop) unlistenDrop();
       if (unlistenHover) unlistenHover();
       if (unlistenCancel) unlistenCancel();
+      if (unlistenLog) unlistenLog();
+      if (unlistenProgress) unlistenProgress();
     };
   }, [isSettingsWindow]);
 
   const handleSaveChanges = () => {
     setSaveNotice(i18n[lang].saved);
     window.setTimeout(() => setSaveNotice(""), 1500);
+  };
+
+  const toggleFilter = (key: keyof typeof filters) => {
+    setFilters((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const safeInvoke = async <T,>(cmd: string, args?: Record<string, unknown>, fallback?: T) => {
@@ -342,8 +449,9 @@ export default function App() {
 
   const onStart = async () => {
     setStatus("Запуск...");
-    setFileProgress(0.1);
-    setTotalProgress(0.05);
+    setFileProgress(0.0);
+    setTotalProgress(0.0);
+    setLogLines([]);
     await safeInvoke("start_conversion", { ffmpegPath, outputDir });
     setStatus("В роботі");
   };
@@ -413,13 +521,13 @@ export default function App() {
               </button>
             </div>
             <div className="tabs">
-              {i18n[lang].tabs.map((tab) => (
+              {tabKeys.map((tabKey) => (
                 <button
-                  key={tab}
-                  className={`tab ${activeTab === (tab as Tab) ? "active" : ""}`}
-                  onClick={() => setActiveTab(tab as Tab)}
+                  key={tabKey}
+                  className={`tab ${activeTab === tabKey ? "active" : ""}`}
+                  onClick={() => setActiveTab(tabKey)}
                 >
-                  {tab}
+                  {i18n[lang].tabs[tabKey]}
                 </button>
               ))}
             </div>
@@ -613,7 +721,7 @@ export default function App() {
           <section className="right">
             <div className="card">
               <h2>Налаштування</h2>
-              {activeTab === "Основні" && (
+              {activeTab === "basic" && (
                 <div className="form">
                   <div className="field">
                     <label>Формат відео</label>
@@ -646,20 +754,58 @@ export default function App() {
                 </div>
               )}
 
-              {activeTab === "Редагування" && (
+              {activeTab === "edit" && (
                 <div className="form">
-                  <div className="field">
-                    <label>Resize W</label>
-                    <input placeholder="1920" />
-                  </div>
-                  <div className="field">
-                    <label>Resize H</label>
-                    <input placeholder="1080" />
+                  <div className="filter-grid">
+                    {([
+                      {
+                        key: "trim",
+                        title: i18n[lang].filterTrim,
+                        desc: i18n[lang].filterTrimDesc
+                      },
+                      {
+                        key: "crop",
+                        title: i18n[lang].filterCrop,
+                        desc: i18n[lang].filterCropDesc
+                      },
+                      {
+                        key: "resize",
+                        title: i18n[lang].filterResize,
+                        desc: i18n[lang].filterResizeDesc
+                      },
+                      {
+                        key: "speed",
+                        title: i18n[lang].filterSpeed,
+                        desc: i18n[lang].filterSpeedDesc
+                      },
+                      {
+                        key: "watermark",
+                        title: i18n[lang].filterWatermark,
+                        desc: i18n[lang].filterWatermarkDesc
+                      }
+                    ] as const).map((filter) => {
+                      const active = filters[filter.key];
+                      return (
+                        <button
+                          key={filter.key}
+                          className={`filter-card ${active ? "active" : ""}`}
+                          onClick={() => toggleFilter(filter.key)}
+                        >
+                          <div>
+                            <div className="filter-card__title">{filter.title}</div>
+                            <div className="filter-card__desc">{filter.desc}</div>
+                          </div>
+                          <span className="filter-card__state">
+                            {active ? i18n[lang].enabled : i18n[lang].disabled}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {activeTab === "Пресети" && (
+              {activeTab === "presets" && (
                 <div className="form">
                   <div className="field">
                     <label>Збережені</label>
@@ -679,7 +825,7 @@ export default function App() {
                 </div>
               )}
 
-              {activeTab === "Покращення" && (
+              {activeTab === "enhance" && (
                 <div className="form">
                   <div className="row wrap">
                     {["360p", "480p", "540p", "720p", "1080p", "4K"].map((label) => (
@@ -695,7 +841,7 @@ export default function App() {
                 </div>
               )}
 
-              {activeTab === "Метадані" && (
+              {activeTab === "metadata" && (
                 <div className="form">
                   <div className="field">
                     <label>Title</label>
@@ -713,12 +859,16 @@ export default function App() {
               )}
             </div>
 
-            {showLog && (
-              <div className="card">
-                <h2>{i18n[lang].log}</h2>
-                <textarea rows={6} readOnly value="[12:00] OK: Готово" />
-              </div>
-            )}
+          {showLog && (
+            <div className="card">
+              <h2>{i18n[lang].log}</h2>
+              <textarea
+                rows={8}
+                readOnly
+                value={logLines.length ? logLines.join("\n") : "[12:00] OK: Готово"}
+              />
+            </div>
+          )}
           </section>
         </main>
       )}
