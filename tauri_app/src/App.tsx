@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 const tabs = ["Основні", "Редагування", "Пресети", "Покращення", "Метадані"] as const;
 
@@ -157,6 +158,7 @@ export default function App() {
   const [showLog, setShowLog] = useState(true);
   const [tabStyle, setTabStyle] = useState<"pill" | "underline">("pill");
   const [lang, setLang] = useState<Lang>("uk");
+  const [isDragging, setIsDragging] = useState(false);
   const [saveNotice, setSaveNotice] = useState("");
 
   const activeTheme = themes.find((t) => t.id === themeId) ?? themes[0];
@@ -252,6 +254,57 @@ export default function App() {
     lang
   ]);
 
+  useEffect(() => {
+    if (isSettingsWindow) return;
+    let unlistenDrop: (() => void) | null = null;
+    let unlistenHover: (() => void) | null = null;
+    let unlistenCancel: (() => void) | null = null;
+
+    const setup = async () => {
+      unlistenDrop = await listen<string[]>("tauri://file-drop", (event) => {
+        const paths = event.payload ?? [];
+        if (paths.length === 0) return;
+        const items: QueueItem[] = paths.map((path) => {
+          const name = path.split("/").pop() ?? "file";
+          const lower = name.toLowerCase();
+          const kind: QueueItem["kind"] =
+            lower.endsWith(".jpg") ||
+            lower.endsWith(".jpeg") ||
+            lower.endsWith(".png") ||
+            lower.endsWith(".webp") ||
+            lower.endsWith(".bmp")
+              ? "photo"
+              : "video";
+          return {
+            id: crypto.randomUUID(),
+            name,
+            path,
+            kind
+          };
+        });
+        setQueue((prev) => [...prev, ...items]);
+        setStatus(`Додано файлів: ${items.length}`);
+        setIsDragging(false);
+      });
+
+      unlistenHover = await listen("tauri://file-drop-hover", () => {
+        setIsDragging(true);
+      });
+
+      unlistenCancel = await listen("tauri://file-drop-cancelled", () => {
+        setIsDragging(false);
+      });
+    };
+
+    setup();
+
+    return () => {
+      if (unlistenDrop) unlistenDrop();
+      if (unlistenHover) unlistenHover();
+      if (unlistenCancel) unlistenCancel();
+    };
+  }, [isSettingsWindow]);
+
   const handleSaveChanges = () => {
     setSaveNotice(i18n[lang].saved);
     window.setTimeout(() => setSaveNotice(""), 1500);
@@ -321,6 +374,11 @@ export default function App() {
         ["--max-width" as any]: `${maxWidth}px`
       }}
     >
+      {!isSettingsWindow && (
+        <div className={`drop-overlay ${isDragging ? "active" : ""}`}>
+          <div className="drop-card">Перетягни файли сюди</div>
+        </div>
+      )}
       <header className="card header">
         <div className="header__top">
           <div>

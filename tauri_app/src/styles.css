@@ -55,6 +55,35 @@ body {
   gap: var(--space-3);
 }
 
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 5, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 9999;
+}
+
+.drop-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drop-card {
+  background: #141414;
+  border: 1px dashed var(--accent);
+  color: var(--text);
+  padding: 28px 36px;
+  border-radius: 16px;
+  font-size: 18px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
 .app[data-bg="dim"] {
   --bg: #090909;
   --panel: #111111;
