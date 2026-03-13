@@ -14,6 +14,11 @@
 - ffprobe‑інфо (тривалість, кодеки, розмір)
 - Fast copy (копіювання без перекодування, коли можливо)
 - Метадані: копіювання / очищення / власні поля
+- Audio-only export
+- Subtitle burn-in / extract
+- Thumbnail / contact sheet
+- Watch folder, recent folders, deduplicate, reorder, retry failed
+- Per-file overrides, skip existing, export log, output name templates
 - Світла **тема**
 
 ## Вимоги
@@ -73,7 +78,7 @@ sudo pacman -S ffmpeg
 
 ### 1) Створити віртуальне середовище (рекомендовано)
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 ```
 
 Активація:
@@ -97,12 +102,12 @@ pip install -r requirements.txt
 
 ### 3) Запуск
 ```bash
-python main.py
+python3 main.py
 ```
 
 ## Швидкий старт
 
-1. Запусти `python main.py`
+1. Запусти `python3 main.py`
 2. Додай файли або папку
 3. Обери формат виходу та параметри
 4. Натисни **Старт**
@@ -144,6 +149,40 @@ npm run tauri dev
 - інтеграція з FFmpeg (через Python sidecar або перепис на Rust)
 - реальні діалоги вибору файлів/папок і лог‑стрімінг
 
+## Тести
+
+```bash
+python3 -m unittest discover -s tests -q
+```
+
+Або через `pytest`:
+
+```bash
+python3 -m pip install -r requirements.txt -r requirements-dev.txt
+python3 -m pytest -q
+```
+
+## Збірка для користувача
+
+### PyInstaller
+
+```bash
+python3 -m pip install -r requirements.txt -r requirements-dev.txt
+python3 scripts/find_ffmpeg.py
+python3 scripts/build_pyinstaller.py
+```
+
+Артефакт буде в `dist/MediaConverter/`.
+
+### Бандлінг FFmpeg
+
+- Скрипт `scripts/find_ffmpeg.py` підказує, де знайдено `ffmpeg` і `ffprobe`
+- `scripts/build_pyinstaller.py` автоматично додає ці binaries в збірку, якщо вони знайдені в одній папці
+- Можна вручну вказати:
+  - `MEDIA_CONVERTER_FFMPEG`
+  - `MEDIA_CONVERTER_FFPROBE`
+  - `MEDIA_CONVERTER_BUNDLE_FFMPEG_DIR`
+
 ## Структура проєкту
 
 ```
@@ -177,4 +216,6 @@ mov_to_mp4_batch_gui/
 
 ---
 
-Ліцензія: вільне використання для власних проєктів.
+## Ліцензія
+
+MIT. Дивись файл `LICENSE`.

@@ -1,13 +1,13 @@
-﻿import threading
-import time
 import subprocess
+import threading
+import time
 from pathlib import Path
 from queue import Queue
 from typing import Dict, List, Optional, Tuple
 
 from core.models import ConversionSettings, MediaInfo, TaskItem
 from services.ffmpeg_service import FfmpegService
-from utils.files import safe_output_name
+from utils.files import build_output_path, safe_output_path
 from utils.formatting import format_bytes, format_time, parse_ffmpeg_time
 
 
@@ -48,9 +48,47 @@ class ConverterService:
     def _log(self, level: str, msg: str) -> None:
         self._emit("log", level, msg)
 
+    def _task_state(self, task_path: Path, status: str, message: str = "", output_path: str = "") -> None:
+        self._emit("task_state", task_path, status, message, output_path)
+
+    def _effective_settings(self, task: TaskItem, defaults: ConversionSettings) -> ConversionSettings:
+        return task.resolved_settings or defaults
+
+    def _task_duration(self, task: TaskItem) -> float:
+        info = self.media_info.get(task.path)
+        return info.duration or 0.0 if info else 0.0
+
+    def _resolve_output_path(self, task: TaskItem, settings: ConversionSettings, out_dir: Path, index: int) -> Path:
+        out_ext = self.ffmpeg.output_extension_for(task.media_type, settings)
+        return build_output_path(
+            out_dir,
+            task.path,
+            out_ext,
+            template=settings.output_template,
+            index=index,
+            operation=settings.operation,
+            media_type_name=task.media_type,
+            overwrite=settings.overwrite,
+            skip_existing=settings.skip_existing,
+        )
+
+    def _validate_operation(self, task: TaskItem, settings: ConversionSettings) -> Tuple[bool, str]:
+        if settings.operation in {"audio_only", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet"}:
+            if task.media_type != "video":
+                return False, "Операція підтримується лише для відео"
+        return True, ""
+
+    def _total_duration_for(self, tasks: List[TaskItem], defaults: ConversionSettings) -> float:
+        total_duration = 0.0
+        for task in tasks:
+            settings = self._effective_settings(task, defaults)
+            if settings.operation in {"convert", "audio_only", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet"}:
+                total_duration += self._task_duration(task)
+        return total_duration
+
     def _run(self, tasks: List[TaskItem], settings: ConversionSettings, out_dir: Path) -> None:
         if not self.ffmpeg.ffmpeg_path:
-            self._log("ERROR", "FFmpeg не знайдено. Вкажи шлях до ffmpeg.exe.")
+            self._log("ERROR", "FFmpeg не знайдено. Вкажи шлях до ffmpeg.")
             self._emit("done", True)
             return
 
@@ -59,13 +97,10 @@ class ConverterService:
             self._emit("done", True)
             return
 
+        out_dir.mkdir(parents=True, exist_ok=True)
         total_files = len(tasks)
         done_files = 0
-        done_duration = 0.0
-        total_duration = 0.0
         total_start = time.time()
-
-        out_dir.mkdir(parents=True, exist_ok=True)
 
         self.media_info.clear()
         if self.ffmpeg.ffprobe_path:
@@ -73,8 +108,6 @@ class ConverterService:
                 info = self.ffmpeg.probe_media(task.path)
                 if info:
                     self.media_info[task.path] = info
-                    if task.media_type == "video" and info.duration:
-                        total_duration += info.duration
                     self._log(
                         "INFO",
                         f"{task.path.name}: {format_time(info.duration)} | {info.vcodec or '-'}"
@@ -83,13 +116,16 @@ class ConverterService:
         else:
             self._log("WARN", "FFprobe не знайдено. Прогрес/ETA можуть бути неточні.")
 
+        total_duration = self._total_duration_for(tasks, settings)
+        done_duration = 0.0
         self._emit("set_total", total_files, total_duration)
 
-        merge_enabled = settings.merge
-        video_inputs = [t.path for t in tasks if t.media_type == "video"]
-        if merge_enabled and len(video_inputs) < 2:
-            self._log("WARN", "Merge увімкнено, але відео менше 2. Пропускаю merge.")
-            merge_enabled = False
+        merge_candidates = [task for task in tasks if task.media_type == "video" and self._effective_settings(task, settings).operation == "convert"]
+        merge_enabled = settings.merge and len(merge_candidates) >= 2
+        if settings.merge and not merge_enabled:
+            self._log("WARN", "Merge доступний лише для щонайменше 2 відео в режимі конвертації.")
+
+        merged_video_paths = {task.path for task in merge_candidates} if merge_enabled else set()
 
         if merge_enabled:
             name = settings.merge_name.strip() or "merged"
@@ -98,109 +134,191 @@ class ConverterService:
                 outp = out_dir / f"{name}.{settings.out_video_format}"
             else:
                 outp = out_dir / outp.name
-            if not settings.overwrite:
-                outp = safe_output_name(out_dir, outp, outp.suffix.lstrip("."))
+            if not settings.overwrite and not settings.skip_existing:
+                outp = safe_output_path(outp)
 
-            duration = sum(self.media_info.get(p, MediaInfo()).duration or 0 for p in video_inputs)
-            self._emit("status", f"Обробка (merge): {outp.name}")
-            self._log("INFO", f"Merge відео: {len(video_inputs)} файлів → {outp.name}")
-
-            filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(settings, outp.suffix, log_cb=self._log)
-            audio_filter = self.ffmpeg.build_audio_speed_filter(settings)
-            trim_args = self.ffmpeg.build_trim_args(settings, log_cb=self._log)
-            fast_copy_ok, reason = self.ffmpeg.merge_copy_allowed(
-                video_inputs, outp.suffix, self.media_info, filters_used, audio_filter is not None, trim_args
-            )
-            allow_fast = settings.fast_copy and fast_copy_ok
-            if settings.fast_copy and not fast_copy_ok:
-                self._log("WARN", f"Fast copy (merge) вимкнено: {reason}")
-
-            list_path = ""
-            try:
-                cmd, list_path = self.ffmpeg.build_merge_command(
-                    video_inputs, outp, settings, self.media_info, allow_fast, log_cb=self._log
-                )
-                rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
-                if rc == 0 and outp.exists():
-                    self._log("OK", f"Готово (merge): {outp.name}")
-                else:
-                    self._log("ERROR", f"Помилка merge (код {rc})")
-            except FileNotFoundError:
-                self._log("ERROR", "FFmpeg не знайдено під час запуску.")
-                self.stop_event.set()
-            except Exception as exc:
-                self._log("ERROR", f"Merge помилка: {exc}")
-            finally:
-                if list_path:
+            merge_duration = sum(self._task_duration(task) for task in merge_candidates)
+            if settings.skip_existing and outp.exists() and not settings.overwrite:
+                self._log("INFO", f"Пропускаю merge, файл вже існує: {outp.name}")
+                for task in merge_candidates:
+                    self._task_state(task.path, "skipped", "Вихідний файл вже існує", str(outp))
+                    done_files += 1
+                    done_duration += self._task_duration(task)
+                self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
+            else:
+                self._emit("status", f"Обробка (merge): {outp.name}")
+                self._log("INFO", f"Merge відео: {len(merge_candidates)} файлів → {outp.name}")
+                for task in merge_candidates:
+                    self._task_state(task.path, "running")
+                try:
+                    filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
+                        merge_candidates[0].path,
+                        settings,
+                        outp.suffix,
+                        log_cb=self._log,
+                    )
+                    audio_filter = self.ffmpeg.build_audio_speed_filter(settings)
+                    trim_args = self.ffmpeg.build_trim_args(settings, log_cb=self._log)
+                    fast_copy_ok, reason = self.ffmpeg.merge_copy_allowed(
+                        [task.path for task in merge_candidates],
+                        outp.suffix,
+                        self.media_info,
+                        filters_used,
+                        audio_filter is not None,
+                        trim_args,
+                    )
+                    allow_fast = settings.fast_copy and fast_copy_ok
+                    if settings.fast_copy and not fast_copy_ok:
+                        self._log("WARN", f"Fast copy (merge) вимкнено: {reason}")
+                    cmd, list_path = self.ffmpeg.build_merge_command(
+                        [task.path for task in merge_candidates],
+                        outp,
+                        settings,
+                        self.media_info,
+                        allow_fast,
+                        log_cb=self._log,
+                    )
                     try:
-                        Path(list_path).unlink(missing_ok=True)
-                    except Exception:
-                        pass
+                        rc = self._run_ffmpeg(
+                            cmd,
+                            merge_duration,
+                            done_duration,
+                            total_duration,
+                            done_files,
+                            total_files,
+                            total_start,
+                        )
+                    finally:
+                        try:
+                            Path(list_path).unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    success = rc == 0 and outp.exists()
+                    message = "" if success else f"Помилка merge (код {rc})"
+                    if success:
+                        self._log("OK", f"Готово (merge): {outp.name}")
+                    else:
+                        self._log("ERROR", message)
+                    for task in merge_candidates:
+                        self._task_state(task.path, "success" if success else "failed", message, str(outp))
+                        done_files += 1
+                        done_duration += self._task_duration(task)
+                except FileNotFoundError:
+                    self._log("ERROR", "FFmpeg не знайдено під час запуску.")
+                    self.stop_event.set()
+                except Exception as exc:
+                    self._log("ERROR", f"Merge помилка: {exc}")
+                    for task in merge_candidates:
+                        self._task_state(task.path, "failed", str(exc))
+                        done_files += 1
+                        done_duration += self._task_duration(task)
 
-            done_files += len(video_inputs)
-            if duration:
-                done_duration += duration
-            self._emit("file_done", None, True)
-
-        for task in list(tasks):
+        for index, task in enumerate(tasks, start=1):
             if self.stop_event.is_set():
                 self._log("WARN", "Зупинено користувачем.")
                 break
-            if merge_enabled and task.media_type == "video":
+            if task.path in merged_video_paths:
                 continue
 
-            if not task.path.exists():
-                self._log("ERROR", f"Файл не знайдено: {task.path}")
+            settings_for_task = self._effective_settings(task, settings)
+            valid, message = self._validate_operation(task, settings_for_task)
+            if not valid:
+                self._log("WARN", f"{task.path.name}: {message}")
+                self._task_state(task.path, "failed", message)
                 done_files += 1
                 self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
                 continue
 
-            out_ext = settings.out_video_format if task.media_type == "video" else settings.out_image_format
-            if settings.overwrite:
-                outp = out_dir / f"{task.path.stem}.{out_ext}"
-            else:
-                outp = safe_output_name(out_dir, task.path, out_ext)
+            if not task.path.exists():
+                self._log("ERROR", f"Файл не знайдено: {task.path}")
+                self._task_state(task.path, "failed", "Файл не знайдено")
+                done_files += 1
+                self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
+                continue
 
-            info = self.media_info.get(task.path)
-            duration = info.duration if info and task.media_type == "video" else None
+            outp = self._resolve_output_path(task, settings_for_task, out_dir, index)
+            duration = self._task_duration(task) if task.media_type == "video" else None
+
+            if settings_for_task.skip_existing and outp.exists() and not settings_for_task.overwrite:
+                self._log("INFO", f"Пропускаю, файл вже існує: {outp.name}")
+                self._task_state(task.path, "skipped", "Вихідний файл вже існує", str(outp))
+                done_files += 1
+                if duration:
+                    done_duration += duration
+                self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
+                continue
 
             self._emit("status", f"Обробка: {task.path.name}")
+            self._task_state(task.path, "running")
             self._log("INFO", f"→ {task.path.name} ({task.media_type}) ==> {outp.name}")
 
             try:
-                if task.media_type == "video":
-                    filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
-                        settings, outp.suffix, log_cb=self._log
-                    )
-                    audio_filter = self.ffmpeg.build_audio_speed_filter(settings)
-                    fast_copy_ok, reason = self.ffmpeg.fast_copy_allowed(
-                        task.path, outp.suffix, info, filters_used, audio_filter is not None
-                    )
-                    allow_fast = settings.fast_copy and fast_copy_ok
-                    if settings.fast_copy and not fast_copy_ok:
-                        self._log("WARN", f"Fast copy вимкнено для {task.path.name}: {reason}")
-                    cmd = self.ffmpeg.build_video_command(task.path, outp, settings, info, allow_fast, log_cb=self._log)
+                op = settings_for_task.operation
+                if op in {"convert", "subtitle_burn"}:
+                    if task.media_type == "video":
+                        info = self.media_info.get(task.path)
+                        filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
+                            task.path,
+                            settings_for_task,
+                            outp.suffix,
+                            log_cb=self._log,
+                        )
+                        audio_filter = self.ffmpeg.build_audio_speed_filter(settings_for_task)
+                        fast_copy_ok, reason = self.ffmpeg.fast_copy_allowed(
+                            task.path,
+                            outp.suffix,
+                            info,
+                            filters_used,
+                            audio_filter is not None,
+                        )
+                        allow_fast = settings_for_task.fast_copy and fast_copy_ok
+                        if settings_for_task.fast_copy and not fast_copy_ok:
+                            self._log("WARN", f"Fast copy вимкнено для {task.path.name}: {reason}")
+                        cmd = self.ffmpeg.build_video_command(
+                            task.path,
+                            outp,
+                            settings_for_task,
+                            info,
+                            allow_fast,
+                            log_cb=self._log,
+                        )
+                    else:
+                        cmd = self.ffmpeg.build_image_command(task.path, outp, settings_for_task, log_cb=self._log)
+                elif op == "audio_only":
+                    cmd = self.ffmpeg.build_audio_command(task.path, outp, settings_for_task, log_cb=self._log)
+                elif op == "subtitle_extract":
+                    cmd = self.ffmpeg.build_subtitle_extract_command(task.path, outp, settings_for_task)
+                elif op == "thumbnail":
+                    cmd = self.ffmpeg.build_thumbnail_command(task.path, outp, settings_for_task, log_cb=self._log)
+                elif op == "contact_sheet":
+                    cmd = self.ffmpeg.build_contact_sheet_command(task.path, outp, settings_for_task)
                 else:
-                    cmd = self.ffmpeg.build_image_command(task.path, outp, settings, log_cb=self._log)
+                    raise ValueError(f"Непідтримувана операція: {op}")
+
                 rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
-                if rc == 0 and outp.exists():
+                success = rc == 0 and outp.exists()
+                if success:
                     self._log("OK", f"Готово: {outp.name}")
+                    self._task_state(task.path, "success", "", str(outp))
                 else:
-                    self._log("ERROR", f"Помилка конвертації: {task.path.name} (код {rc})")
+                    error_msg = f"Помилка конвертації: {task.path.name} (код {rc})"
+                    self._log("ERROR", error_msg)
+                    self._task_state(task.path, "failed", error_msg)
             except FileNotFoundError:
-                self._log("ERROR", "FFmpeg не знайдено під час запуску. Перевір шлях до ffmpeg.exe.")
+                self._log("ERROR", "FFmpeg не знайдено під час запуску. Перевір шлях до ffmpeg.")
+                self._task_state(task.path, "failed", "FFmpeg не знайдено")
                 break
             except Exception as exc:
                 self._log("ERROR", f"Несподівана помилка: {exc}")
+                self._task_state(task.path, "failed", str(exc))
 
             done_files += 1
-            if task.media_type == "video" and duration:
+            if duration:
                 done_duration += duration
-            self._emit("file_done", task.path, True)
 
         self._emit("done", self.stop_event.is_set())
 
-    def _consume_stderr(self, pipe):
+    def _consume_stderr(self, pipe) -> None:
         for line in pipe:
             line = line.strip()
             if not line:
@@ -251,12 +369,7 @@ class ConverterService:
                 if not line or "=" not in line:
                     continue
                 key, value = line.split("=", 1)
-                if key == "out_time_ms":
-                    try:
-                        out_time = int(value) / 1_000_000
-                    except ValueError:
-                        pass
-                elif key == "out_time_us":
+                if key in {"out_time_ms", "out_time_us"}:
                     try:
                         out_time = int(value) / 1_000_000
                     except ValueError:

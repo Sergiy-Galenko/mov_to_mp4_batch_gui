@@ -1,6 +1,6 @@
-﻿from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -18,18 +18,30 @@ class MediaInfo:
 class TaskItem:
     path: Path
     media_type: str
+    status: str = "queued"
+    last_error: str = ""
+    attempts: int = 0
+    last_output: str = ""
+    overrides: Dict[str, Any] = field(default_factory=dict)
+    resolved_settings: Optional["ConversionSettings"] = None
 
 
 @dataclass
 class ConversionSettings:
+    operation: str = "convert"
     out_video_format: str = "mp4"
     out_image_format: str = "jpg"
+    out_audio_format: str = "mp3"
+    out_subtitle_format: str = "srt"
+    audio_bitrate: str = "192k"
     crf: int = 23
     preset: str = "medium"
     portrait: str = "Вимкнено"
     img_quality: int = 90
     overwrite: bool = False
     fast_copy: bool = False
+    skip_existing: bool = False
+    output_template: str = "{stem}"
 
     trim_start: Optional[float] = None
     trim_end: Optional[float] = None
@@ -44,6 +56,17 @@ class ConversionSettings:
     crop_y: Optional[int] = None
     rotate: str = "0"
     speed: Optional[float] = None
+
+    subtitle_mode: str = "none"
+    subtitle_path: str = ""
+    subtitle_stream: int = 0
+    subtitle_out_format: str = "srt"
+
+    thumbnail_time: Optional[float] = None
+    contact_sheet_cols: int = 4
+    contact_sheet_rows: int = 4
+    contact_sheet_width: int = 320
+    contact_sheet_interval: int = 10
 
     watermark_path: str = ""
     watermark_pos: str = "Низ-праворуч"

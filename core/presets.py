@@ -66,6 +66,23 @@ DEFAULT_PRESETS: Dict[str, Dict[str, Any]] = {
         "out_image_fmt": "webp",
         "img_quality": 80,
     },
+    "Audio Only • MP3": {
+        "operation": "Лише аудіо",
+        "out_audio_fmt": "mp3",
+        "audio_bitrate": "192k",
+    },
+    "Contact Sheet • 4x4": {
+        "operation": "Contact sheet",
+        "sheet_cols": 4,
+        "sheet_rows": 4,
+        "sheet_width": 320,
+        "sheet_interval": 10,
+    },
+    "Thumbnail • JPG": {
+        "operation": "Thumbnail",
+        "out_image_fmt": "jpg",
+        "thumbnail_time": "00:00:05",
+    },
 }
 
 

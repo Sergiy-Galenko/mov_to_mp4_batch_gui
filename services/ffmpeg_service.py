@@ -1,15 +1,10 @@
-﻿import json
+import json
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from config.constants import (
-    PORTRAIT_PRESETS,
-    POSITION_MAP,
-    VIDEO_CODEC_MAP,
-    HW_ENCODER_MAP,
-)
+from config.constants import HW_ENCODER_MAP, OPERATION_MAP, PORTRAIT_PRESETS, POSITION_MAP, VIDEO_CODEC_MAP
 from core.models import ConversionSettings, MediaInfo
 from utils.formatting import build_atempo_chain
 
@@ -50,13 +45,17 @@ class FfmpegService:
         if not self.ffmpeg_path:
             return set()
         try:
-            r = subprocess.run([self.ffmpeg_path, "-hide_banner", "-encoders"], capture_output=True, text=True)
+            result = subprocess.run(
+                [self.ffmpeg_path, "-hide_banner", "-encoders"],
+                capture_output=True,
+                text=True,
+            )
         except Exception:
             return set()
-        if r.returncode != 0:
+        if result.returncode != 0:
             return set()
         encoders: set[str] = set()
-        for line in r.stdout.splitlines():
+        for line in result.stdout.splitlines():
             line = line.strip()
             if not line or line.startswith("Encoders:") or line.startswith("--"):
                 continue
@@ -70,19 +69,22 @@ class FfmpegService:
             return None
         cmd = [
             self.ffprobe_path,
-            "-v", "error",
-            "-show_entries", "format=duration,size,format_name:stream=codec_type,codec_name,width,height",
-            "-of", "json",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration,size,format_name:stream=codec_type,codec_name,width,height",
+            "-of",
+            "json",
             str(path),
         ]
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True)
         except Exception:
             return None
-        if r.returncode != 0:
+        if result.returncode != 0:
             return None
         try:
-            data = json.loads(r.stdout)
+            data = json.loads(result.stdout)
         except json.JSONDecodeError:
             return None
 
@@ -116,6 +118,16 @@ class FfmpegService:
             except Exception:
                 pass
         return info
+
+    def output_extension_for(self, media_type_name: str, settings: ConversionSettings) -> str:
+        operation = settings.operation
+        if operation == "audio_only":
+            return settings.out_audio_format
+        if operation == "subtitle_extract":
+            return settings.out_subtitle_format
+        if operation in {"thumbnail", "contact_sheet"}:
+            return settings.out_image_format
+        return settings.out_video_format if media_type_name == "video" else settings.out_image_format
 
     def resolve_codec(self, out_ext: str, codec_choice: str, log_cb=None) -> str:
         choice = VIDEO_CODEC_MAP.get(codec_choice, "auto")
@@ -163,9 +175,9 @@ class FfmpegService:
 
         if hw_pref == "auto":
             for vendor in ["nvidia", "intel", "amd"]:
-                enc = hw_map.get(vendor, {}).get(codec)
-                if enc and enc in self.encoder_caps:
-                    return enc, True
+                encoder = hw_map.get(vendor, {}).get(codec)
+                if encoder and encoder in self.encoder_caps:
+                    return encoder, True
             encoder = cpu_map[codec]
             if self.encoder_caps and encoder not in self.encoder_caps:
                 if log_cb:
@@ -173,9 +185,9 @@ class FfmpegService:
                 return "libx264", False
             return encoder, False
 
-        enc = hw_map.get(hw_pref, {}).get(codec)
-        if enc and enc in self.encoder_caps:
-            return enc, True
+        encoder = hw_map.get(hw_pref, {}).get(codec)
+        if encoder and encoder in self.encoder_caps:
+            return encoder, True
 
         if log_cb:
             log_cb("WARN", "Обраний GPU-енкодер недоступний. Використовую CPU.")
@@ -248,6 +260,19 @@ class FfmpegService:
             return None
         return ",".join([f"atempo={factor:.3f}" for factor in chain])
 
+    def build_subtitle_burn_filter(self, inp: Path, settings: ConversionSettings, log_cb=None) -> Optional[str]:
+        should_burn = settings.operation == "subtitle_burn" or settings.subtitle_mode == "burn_in"
+        if not should_burn:
+            return None
+        source = settings.subtitle_path.strip()
+        subtitle_source = Path(source).expanduser() if source else inp
+        if source and not subtitle_source.exists():
+            if log_cb:
+                log_cb("WARN", f"Subtitle файл не знайдено: {source}")
+            return None
+        stream_idx = max(0, int(settings.subtitle_stream))
+        return f"subtitles='{escape_filter_path(str(subtitle_source.resolve()))}':si={stream_idx}"
+
     def build_text_filter(self, settings: ConversionSettings) -> Optional[str]:
         text = settings.text_wm.strip()
         if not text:
@@ -276,6 +301,7 @@ class FfmpegService:
 
     def build_video_filter_spec(
         self,
+        inp: Path,
         settings: ConversionSettings,
         out_ext: str,
         log_cb=None,
@@ -290,17 +316,21 @@ class FfmpegService:
         if crop_filter:
             filters.append(crop_filter)
 
-        rotate_filter = settings.rotate
         rotate_expr = None
-        if rotate_filter:
+        if settings.rotate:
             from config.constants import ROTATE_MAP
-            rotate_expr = ROTATE_MAP.get(rotate_filter)
+
+            rotate_expr = ROTATE_MAP.get(settings.rotate)
         if rotate_expr:
             filters.append(rotate_expr)
 
         speed = self._get_speed_value(settings)
         if speed and abs(speed - 1.0) > 0.001:
             filters.append(f"setpts=PTS/{speed}")
+
+        subtitle_filter = self.build_subtitle_burn_filter(inp, settings, log_cb=log_cb)
+        if subtitle_filter:
+            filters.append(subtitle_filter)
 
         text_filter = self.build_text_filter(settings)
         if text_filter:
@@ -332,9 +362,8 @@ class FfmpegService:
             wm_path = Path(watermark_path).expanduser()
             if wm_path.exists():
                 watermark_inputs.append(str(wm_path))
-            else:
-                if log_cb:
-                    log_cb("WARN", f"Водяний знак не знайдено: {watermark_path}")
+            elif log_cb:
+                log_cb("WARN", f"Водяний знак не знайдено: {watermark_path}")
 
         if not use_blur and not watermark_inputs:
             if filters:
@@ -386,6 +415,7 @@ class FfmpegService:
         rotate_expr = None
         if settings.rotate:
             from config.constants import ROTATE_MAP
+
             rotate_expr = ROTATE_MAP.get(settings.rotate)
         if rotate_expr:
             filters.append(rotate_expr)
@@ -400,9 +430,8 @@ class FfmpegService:
             wm_path = Path(watermark_path).expanduser()
             if wm_path.exists():
                 watermark_inputs.append(str(wm_path))
-            else:
-                if log_cb:
-                    log_cb("WARN", f"Водяний знак не знайдено: {watermark_path}")
+            elif log_cb:
+                log_cb("WARN", f"Водяний знак не знайдено: {watermark_path}")
 
         if not watermark_inputs:
             if filters:
@@ -460,9 +489,8 @@ class FfmpegService:
             return False, "Є фільтри/зміна швидкості"
         if inp.suffix.lower() != out_ext.lower():
             return False, "Контейнер відрізняється"
-        if info and info.vcodec:
-            if not _container_supports_codec(out_ext, info.vcodec):
-                return False, "Кодек несумісний з контейнером"
+        if info and info.vcodec and not _container_supports_codec(out_ext, info.vcodec):
+            return False, "Кодек несумісний з контейнером"
         return True, ""
 
     def merge_copy_allowed(
@@ -510,10 +538,9 @@ class FfmpegService:
     ) -> List[str]:
         overwrite = "-y" if settings.overwrite else "-n"
         out_ext = outp.suffix.lower()
-
         trim_args = self.build_trim_args(settings, log_cb=log_cb)
         filter_arg, filter_val, map_label, extra_inputs, filters_used = self.build_video_filter_spec(
-            settings, out_ext, log_cb=log_cb
+            inp, settings, out_ext, log_cb=log_cb
         )
         audio_filter = self.build_audio_speed_filter(settings)
 
@@ -557,26 +584,80 @@ class FfmpegService:
         encoder, is_hw = self.select_encoder(codec, HW_ENCODER_MAP.get(settings.hw_encoder, "auto"), log_cb=log_cb)
         cmd += ["-c:v", encoder]
         if not is_hw and encoder in {"libx264", "libx265"}:
-            preset = (settings.preset or "medium").strip()
-            cmd += ["-preset", preset]
+            cmd += ["-preset", (settings.preset or "medium").strip()]
         cmd += self.encoder_quality_args(encoder, settings.crf)
         if encoder in {
-            "libx264", "libx265",
-            "h264_nvenc", "hevc_nvenc",
-            "h264_qsv", "hevc_qsv",
-            "h264_amf", "hevc_amf",
+            "libx264",
+            "libx265",
+            "h264_nvenc",
+            "hevc_nvenc",
+            "h264_qsv",
+            "hevc_qsv",
+            "h264_amf",
+            "hevc_amf",
         }:
             cmd += ["-pix_fmt", "yuv420p"]
 
         if out_ext == ".webm":
             cmd += ["-c:a", "libopus", "-b:a", "128k"]
         else:
-            cmd += ["-c:a", "aac", "-b:a", "192k"]
+            cmd += ["-c:a", "aac", "-b:a", settings.audio_bitrate or "192k"]
 
         if out_ext in {".mp4", ".mov", ".m4v"}:
             cmd += ["-movflags", "+faststart"]
 
         cmd += self.metadata_args(settings)
+        cmd.append(str(outp))
+        return cmd
+
+    def build_audio_command(
+        self,
+        inp: Path,
+        outp: Path,
+        settings: ConversionSettings,
+        log_cb=None,
+    ) -> List[str]:
+        overwrite = "-y" if settings.overwrite else "-n"
+        out_ext = outp.suffix.lower()
+        trim_args = self.build_trim_args(settings, log_cb=log_cb)
+        audio_filter = self.build_audio_speed_filter(settings)
+        codec_map = {
+            ".mp3": "libmp3lame",
+            ".m4a": "aac",
+            ".aac": "aac",
+            ".wav": "pcm_s16le",
+            ".flac": "flac",
+            ".opus": "libopus",
+        }
+        codec = codec_map.get(out_ext, "aac")
+        cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
+        cmd += trim_args
+        cmd += ["-vn", "-sn", "-map", "0:a:0?"]
+        if audio_filter:
+            cmd += ["-filter:a", audio_filter]
+        cmd += ["-c:a", codec]
+        if codec in {"libmp3lame", "aac", "libopus"}:
+            cmd += ["-b:a", settings.audio_bitrate or "192k"]
+        cmd += self.metadata_args(settings)
+        cmd.append(str(outp))
+        return cmd
+
+    def build_subtitle_extract_command(
+        self,
+        inp: Path,
+        outp: Path,
+        settings: ConversionSettings,
+    ) -> List[str]:
+        overwrite = "-y" if settings.overwrite else "-n"
+        stream_idx = max(0, int(settings.subtitle_stream))
+        codec_map = {
+            ".srt": "srt",
+            ".ass": "ass",
+            ".vtt": "webvtt",
+        }
+        codec = codec_map.get(outp.suffix.lower(), "srt")
+        cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
+        cmd += ["-map", f"0:s:{stream_idx}?", "-vn", "-an", "-c:s", codec]
         cmd.append(str(outp))
         return cmd
 
@@ -601,13 +682,54 @@ class FfmpegService:
 
         cmd += self.metadata_args(settings)
 
-        q = int(settings.img_quality)
+        quality = int(settings.img_quality)
         if ext in {".jpg", ".jpeg"}:
-            qv = max(2, min(31, int(round(31 - (q / 100) * 29))))
+            qv = max(2, min(31, int(round(31 - (quality / 100) * 29))))
             cmd += ["-q:v", str(qv)]
         elif ext == ".webp":
-            cmd += ["-q:v", str(max(0, min(100, q)))]
+            cmd += ["-q:v", str(max(0, min(100, quality)))]
 
+        cmd.append(str(outp))
+        return cmd
+
+    def build_thumbnail_command(
+        self,
+        inp: Path,
+        outp: Path,
+        settings: ConversionSettings,
+        log_cb=None,
+    ) -> List[str]:
+        overwrite = "-y" if settings.overwrite else "-n"
+        time_value = settings.thumbnail_time
+        if time_value is None:
+            time_value = settings.trim_start if settings.trim_start is not None else 5.0
+        filter_arg, filter_val, map_label, extra_inputs = self.build_image_filter_spec(settings, log_cb=log_cb)
+        cmd = [self.ffmpeg_path, overwrite, "-ss", f"{time_value:.3f}", "-i", str(inp)]
+        if extra_inputs:
+            cmd += ["-i", extra_inputs[0]]
+        if filter_arg:
+            cmd += [filter_arg, filter_val]
+            if filter_arg == "-filter_complex" and map_label:
+                cmd += ["-map", map_label]
+        cmd += ["-frames:v", "1"]
+        cmd += self.metadata_args(settings)
+        cmd.append(str(outp))
+        return cmd
+
+    def build_contact_sheet_command(
+        self,
+        inp: Path,
+        outp: Path,
+        settings: ConversionSettings,
+    ) -> List[str]:
+        overwrite = "-y" if settings.overwrite else "-n"
+        cols = max(1, settings.contact_sheet_cols)
+        rows = max(1, settings.contact_sheet_rows)
+        interval = max(1, settings.contact_sheet_interval)
+        width = max(80, settings.contact_sheet_width)
+        vf = f"fps=1/{interval},scale={width}:-1,tile={cols}x{rows}"
+        cmd = [self.ffmpeg_path, overwrite, "-i", str(inp), "-vf", vf, "-frames:v", "1"]
+        cmd += self.metadata_args(settings)
         cmd.append(str(outp))
         return cmd
 
@@ -623,10 +745,9 @@ class FfmpegService:
         overwrite = "-y" if settings.overwrite else "-n"
         list_path = self._write_concat_list(inputs)
         out_ext = outp.suffix.lower()
-
         trim_args = self.build_trim_args(settings, log_cb=log_cb)
         filter_arg, filter_val, map_label, extra_inputs, _ = self.build_video_filter_spec(
-            settings, out_ext, log_cb=log_cb
+            inputs[0], settings, out_ext, log_cb=log_cb
         )
         audio_filter = self.build_audio_speed_filter(settings)
 
@@ -668,21 +789,24 @@ class FfmpegService:
         encoder, is_hw = self.select_encoder(codec, HW_ENCODER_MAP.get(settings.hw_encoder, "auto"), log_cb=log_cb)
         cmd += ["-c:v", encoder]
         if not is_hw and encoder in {"libx264", "libx265"}:
-            preset = (settings.preset or "medium").strip()
-            cmd += ["-preset", preset]
+            cmd += ["-preset", (settings.preset or "medium").strip()]
         cmd += self.encoder_quality_args(encoder, settings.crf)
         if encoder in {
-            "libx264", "libx265",
-            "h264_nvenc", "hevc_nvenc",
-            "h264_qsv", "hevc_qsv",
-            "h264_amf", "hevc_amf",
+            "libx264",
+            "libx265",
+            "h264_nvenc",
+            "hevc_nvenc",
+            "h264_qsv",
+            "hevc_qsv",
+            "h264_amf",
+            "hevc_amf",
         }:
             cmd += ["-pix_fmt", "yuv420p"]
 
         if out_ext == ".webm":
             cmd += ["-c:a", "libopus", "-b:a", "128k"]
         else:
-            cmd += ["-c:a", "aac", "-b:a", "192k"]
+            cmd += ["-c:a", "aac", "-b:a", settings.audio_bitrate or "192k"]
 
         if out_ext in {".mp4", ".mov", ".m4v"}:
             cmd += ["-movflags", "+faststart"]

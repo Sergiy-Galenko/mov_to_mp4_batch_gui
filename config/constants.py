@@ -1,12 +1,32 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 APP_TITLE = "Media Converter — Фото + Відео (FFmpeg)"
 
 VIDEO_EXTS = {".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv", ".wmv", ".mts", ".m2ts"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"}
+SUBTITLE_EXTS = {".srt", ".ass", ".ssa", ".vtt", ".webvtt"}
 
 OUT_VIDEO_FORMATS = ["mp4", "mkv", "webm", "mov", "avi", "gif"]
 OUT_IMAGE_FORMATS = ["jpg", "png", "webp", "bmp", "tiff"]
+OUT_AUDIO_FORMATS = ["mp3", "m4a", "aac", "wav", "flac", "opus"]
+OUT_SUBTITLE_FORMATS = ["srt", "ass", "vtt"]
+
+OPERATION_OPTIONS = [
+    "Конвертація",
+    "Лише аудіо",
+    "Extract subtitle",
+    "Burn-in subtitle",
+    "Thumbnail",
+    "Contact sheet",
+]
+OPERATION_MAP = {
+    "Конвертація": "convert",
+    "Лише аудіо": "audio_only",
+    "Extract subtitle": "subtitle_extract",
+    "Burn-in subtitle": "subtitle_burn",
+    "Thumbnail": "thumbnail",
+    "Contact sheet": "contact_sheet",
+}
 
 PORTRAIT_PRESETS = {
     "Вимкнено": None,
@@ -75,3 +95,5 @@ DEFAULT_THEME = "light"
 PRESET_STORE = Path.home() / ".media_converter_gui_presets.json"
 DEFAULT_OUTPUT_DIR = Path.home() / "Videos" / "converted"
 THEME_STORE = Path.home() / ".media_converter_gui_theme.json"
+STATE_STORE = Path.home() / ".media_converter_gui_state.json"
+RECENT_FOLDERS_LIMIT = 8
