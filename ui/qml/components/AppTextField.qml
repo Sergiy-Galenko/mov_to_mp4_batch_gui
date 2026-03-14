@@ -7,16 +7,25 @@ TextField {
     id: control
     font.pixelSize: 13
     color: Theme.text
-    padding: 10
-    implicitHeight: 36
+    padding: 11
+    implicitHeight: Theme.inputHeight
     Layout.fillWidth: true
-    placeholderTextColor: Theme.muted
+    placeholderTextColor: Theme.subtleText
     selectionColor: Theme.accent
     selectedTextColor: "#FFFFFF"
 
     background: Rectangle {
-        radius: 10
+        radius: Theme.radiusInput
         color: control.enabled ? Theme.input : Theme.disabledBg
-        border.color: Theme.border
+        border.width: 1
+        border.color: control.activeFocus ? Theme.accent : Theme.border
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: 1
+            color: Qt.rgba(1, 1, 1, 0.06)
+        }
     }
 }

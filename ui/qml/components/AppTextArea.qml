@@ -7,14 +7,15 @@ TextArea {
     id: control
     font.pixelSize: 13
     color: Theme.text
-    padding: 10
+    padding: 12
     Layout.fillWidth: true
     selectionColor: Theme.accent
     selectedTextColor: "#FFFFFF"
 
     background: Rectangle {
-        radius: 10
+        radius: Theme.radiusInput
         color: control.enabled ? Theme.input : Theme.disabledBg
-        border.color: Theme.border
+        border.width: 1
+        border.color: control.activeFocus ? Theme.borderStrong : Theme.border
     }
 }

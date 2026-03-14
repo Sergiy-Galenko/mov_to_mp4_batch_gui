@@ -5,10 +5,13 @@ import App 1.0
 
 SpinBox {
     id: control
+    property int stepperWidth: 34
+
     font.pixelSize: 13
-    implicitHeight: 36
-    leftPadding: 10
-    rightPadding: 28
+    implicitHeight: Theme.inputHeight
+    leftPadding: 12
+    rightPadding: stepperWidth + 12
+    editable: true
     Layout.fillWidth: true
 
     contentItem: TextInput {
@@ -23,10 +26,10 @@ SpinBox {
         selectByMouse: true
         inputMethodHints: Qt.ImhFormattedNumbersOnly
         validator: control.validator
+        leftPadding: 0
+        rightPadding: control.stepperWidth + 4
 
-        onEditingFinished: {
-            control.value = control.valueFromText(text, control.locale)
-        }
+        onEditingFinished: control.value = control.valueFromText(text, control.locale)
 
         Binding {
             target: input
@@ -36,9 +39,48 @@ SpinBox {
         }
     }
 
+    up.indicator: Rectangle {
+        x: control.width - width - 6
+        y: 6
+        width: control.stepperWidth
+        height: Math.floor((control.availableHeight - 8) / 2)
+        radius: 9
+        color: control.up.pressed ? Theme.hover : Theme.panelAlt
+        border.width: 1
+        border.color: control.up.hovered ? Theme.borderStrong : Theme.border
+
+        Label {
+            anchors.centerIn: parent
+            text: "+"
+            color: Theme.text
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+        }
+    }
+
+    down.indicator: Rectangle {
+        x: control.width - width - 6
+        y: control.height - height - 6
+        width: control.stepperWidth
+        height: Math.floor((control.availableHeight - 8) / 2)
+        radius: 9
+        color: control.down.pressed ? Theme.hover : Theme.panelAlt
+        border.width: 1
+        border.color: control.down.hovered ? Theme.borderStrong : Theme.border
+
+        Label {
+            anchors.centerIn: parent
+            text: "-"
+            color: Theme.text
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+        }
+    }
+
     background: Rectangle {
-        radius: 10
+        radius: Theme.radiusInput
         color: control.enabled ? Theme.input : Theme.disabledBg
-        border.color: Theme.border
+        border.width: 1
+        border.color: control.activeFocus ? Theme.accent : Theme.border
     }
 }

@@ -6,65 +6,78 @@ import App 1.0
 ComboBox {
     id: control
     font.pixelSize: 13
-    implicitHeight: 36
-    leftPadding: 10
-    rightPadding: 28
+    implicitHeight: Theme.inputHeight
+    leftPadding: 12
+    rightPadding: 34
     Layout.fillWidth: true
+    hoverEnabled: true
 
     contentItem: Label {
         text: control.displayText
         color: control.enabled ? Theme.text : Theme.disabledText
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
+        leftPadding: 0
+        rightPadding: 8
     }
 
     indicator: Item {
         width: 18
         height: 18
         anchors.right: parent.right
-        anchors.rightMargin: 8
+        anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
+
         Text {
             anchors.centerIn: parent
-            text: "v"
+            text: "▾"
             color: Theme.muted
             font.pixelSize: 12
         }
     }
 
     background: Rectangle {
-        radius: 10
+        radius: Theme.radiusInput
         color: control.enabled ? Theme.input : Theme.disabledBg
-        border.color: Theme.border
+        border.width: 1
+        border.color: control.activeFocus || control.hovered ? Theme.borderStrong : Theme.border
     }
 
     delegate: ItemDelegate {
         width: control.width
+        height: 38
+
         contentItem: Label {
             text: modelData
             color: Theme.text
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
         }
+
         background: Rectangle {
             color: highlighted ? Theme.hover : "transparent"
+            radius: 10
         }
     }
 
     popup: Popup {
-        y: control.height + 4
+        y: control.height + 6
         width: control.width
-        implicitHeight: Math.min(contentItem.implicitHeight, 240)
+        implicitHeight: Math.min(contentItem.implicitHeight, 260)
+        padding: 8
         background: Rectangle {
-            color: Theme.panel
-            border.color: Theme.border
-            radius: 10
+            color: Theme.panelAlt
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radiusInput + 2
         }
+
         contentItem: ListView {
             clip: true
             implicitHeight: contentHeight
             model: control.delegateModel
             currentIndex: control.highlightedIndex
+            spacing: 4
         }
     }
 }

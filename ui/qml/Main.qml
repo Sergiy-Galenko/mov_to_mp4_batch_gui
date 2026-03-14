@@ -19,7 +19,46 @@ ApplicationWindow {
     palette.highlight: Theme.accent
     palette.highlightedText: "#FFFFFF"
 
-    property bool compact: contentWrap.width < Theme.compactBreakpoint
+    Rectangle {
+        anchors.fill: parent
+        z: -3
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: Theme.bgLift }
+            GradientStop { position: 0.4; color: Theme.bg }
+            GradientStop { position: 1.0; color: Theme.bgDeep }
+        }
+    }
+
+    Rectangle {
+        width: root.width * 0.42
+        height: width
+        radius: width / 2
+        x: root.width - width * 0.72
+        y: -width * 0.35
+        z: -2
+        color: Qt.rgba(1, 0.44, 0.25, 0.12)
+    }
+
+    Rectangle {
+        width: root.width * 0.34
+        height: width
+        radius: width / 2
+        x: -width * 0.28
+        y: root.height * 0.18
+        z: -2
+        color: Qt.rgba(1, 0.70, 0.28, 0.08)
+    }
+
+    property real layoutWidth: Math.min(contentWrap.availableWidth, Theme.maxWidth)
+    property int headerColumns: layoutWidth < 760 ? 1 : layoutWidth < 1080 ? 2 : 4
+    property int workspaceColumns: layoutWidth < Theme.compactBreakpoint ? 1 : 2
+    property real paneWidth: workspaceColumns === 1 ? layoutWidth : Math.max((layoutWidth - Theme.space2) / 2, 0)
+    property int formColumns: paneWidth < 740 ? 1 : 2
+    property int queueActionColumns: paneWidth < 440 ? 1 : paneWidth < 760 ? 2 : 4
+    property int dualActionColumns: paneWidth < 560 ? 1 : 2
+    property int tripleActionColumns: paneWidth < 540 ? 1 : paneWidth < 760 ? 2 : 3
+    property int statusColumns: layoutWidth < 560 ? 1 : layoutWidth < 900 ? 2 : layoutWidth < 1160 ? 3 : 5
+    property bool compact: formColumns === 1
     property bool hasBackend: backend !== null
     property var selectedQueue: []
     property int currentTab: 0
@@ -62,6 +101,18 @@ ApplicationWindow {
 
     function clearSelection() {
         selectedQueue = []
+    }
+
+    function statusColor(status) {
+        if (status === "success")
+            return Theme.success
+        if (status === "failed")
+            return Theme.danger
+        if (status === "skipped")
+            return Theme.warning
+        if (status === "running")
+            return Theme.accent
+        return Theme.muted
     }
 
     function collectSettings() {
@@ -272,90 +323,137 @@ ApplicationWindow {
         ScrollBar.vertical.policy: ScrollBar.AsNeeded
         background: Rectangle { color: "transparent" }
 
-        ColumnLayout {
-            width: Math.min(contentWrap.availableWidth, Theme.maxWidth)
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: Theme.space3
+        Item {
+            width: contentWrap.availableWidth
+            implicitHeight: pageColumn.implicitHeight
 
-            Card {
-                ColumnLayout {
-                    spacing: Theme.space2
+            ColumnLayout {
+                id: pageColumn
+                width: root.layoutWidth
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.space3
 
-                    Label {
-                        text: backend ? backend.appTitle : "Media Converter"
-                        font.pixelSize: 18
-                        font.weight: Font.DemiBold
-                        color: Theme.text
-                    }
+                Card {
+                    ColumnLayout {
+                        spacing: Theme.space2
 
-                    Label {
-                        text: "Пакетна конвертація, аудіо export, субтитри, thumbnail, contact sheet, watch folder."
-                        color: Theme.muted
-                        wrapMode: Text.WordWrap
-                    }
+                        Label {
+                            text: "MEDIA CONVERTER STUDIO"
+                            color: Theme.accent2
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
+                            font.letterSpacing: 1.6
+                        }
 
-                    GridLayout {
-                        columns: root.compact ? 1 : 4
-                        columnSpacing: Theme.space2
-                        rowSpacing: Theme.space1
+                        Label {
+                            text: backend ? backend.appTitle : "Media Converter"
+                            font.pixelSize: 26
+                            font.weight: Font.Black
+                            color: Theme.text
+                        }
 
-                        Label { text: "FFmpeg:"; color: Theme.text }
+                        Label {
+                            text: "Пакетна обробка медіа з сильним production-набором: conversion, audio export, subtitle flow, thumbnails і queue automation."
+                            color: Theme.muted
+                            wrapMode: Text.WordWrap
+                            font.pixelSize: 14
+                        }
 
-                        AppTextField {
-                            id: ffmpegField
-                            text: backend ? backend.ffmpegPath : ""
+                        Flow {
                             Layout.fillWidth: true
-                            onEditingFinished: if (backend) backend.ffmpegPath = text
-                        }
+                            spacing: Theme.space1
 
-                        SecondaryButton {
-                            text: "Вказати"
-                            onClicked: if (backend) backend.pickFfmpeg()
-                        }
+                            Repeater {
+                                model: [
+                                    "Queue: " + queueList.count,
+                                    "Status: " + (backend ? backend.statusText : "Готово"),
+                                    "Watch: " + (backend && backend.watchRunning ? "ON" : "OFF")
+                                ]
+                                delegate: Rectangle {
+                                    radius: Theme.radiusPill
+                                    color: Theme.panelAlt
+                                    border.width: 1
+                                    border.color: Theme.border
+                                    implicitWidth: chipLabel.implicitWidth + 18
+                                    implicitHeight: 30
 
-                        GhostButton {
-                            text: "Перевірити"
-                            onClicked: if (backend) backend.refreshEncoders()
-                        }
-                    }
-
-                    Flow {
-                        Layout.fillWidth: true
-                        spacing: Theme.space1
-
-                        Repeater {
-                            model: root.operationTabs
-                            delegate: Rectangle {
-                                radius: 10
-                                color: index === root.currentTab ? Theme.accent : Theme.panel
-                                border.color: Theme.border
-                                height: 32
-                                implicitWidth: tabLabel.implicitWidth + Theme.space2 * 2
-
-                                Label {
-                                    id: tabLabel
-                                    anchors.centerIn: parent
-                                    text: modelData
-                                    color: index === root.currentTab ? "#FFFFFF" : Theme.text
-                                    font.pixelSize: 12
-                                    font.weight: Font.Medium
+                                    Label {
+                                        id: chipLabel
+                                        anchors.centerIn: parent
+                                        text: modelData
+                                        color: Theme.text
+                                        font.pixelSize: 12
+                                        font.weight: Font.Medium
+                                    }
                                 }
+                            }
+                        }
 
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: root.currentTab = index
+                            GridLayout {
+                            columns: root.headerColumns
+                            columnSpacing: Theme.space2
+                            rowSpacing: Theme.space1
+                            Layout.fillWidth: true
+
+                            Label { text: "FFmpeg:"; color: Theme.text }
+
+                            AppTextField {
+                                id: ffmpegField
+                                text: backend ? backend.ffmpegPath : ""
+                                Layout.fillWidth: true
+                                onEditingFinished: if (backend) backend.ffmpegPath = text
+                            }
+
+                            SecondaryButton {
+                                text: "Вказати"
+                                onClicked: if (backend) backend.pickFfmpeg()
+                            }
+
+                            GhostButton {
+                                text: "Перевірити"
+                                onClicked: if (backend) backend.refreshEncoders()
+                            }
+                        }
+
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: Theme.space1
+
+                            Repeater {
+                                model: root.operationTabs
+                                delegate: Rectangle {
+                                    radius: Theme.radiusPill
+                                    color: index === root.currentTab ? Theme.accent : Theme.section
+                                    border.color: index === root.currentTab ? Theme.accent2 : Theme.border
+                                    border.width: 1
+                                    height: 36
+                                    implicitWidth: tabLabel.implicitWidth + Theme.space2 * 2 + 6
+
+                                    Label {
+                                        id: tabLabel
+                                        anchors.centerIn: parent
+                                        text: modelData
+                                        color: index === root.currentTab ? "#FFFFFF" : Theme.muted
+                                        font.pixelSize: 12
+                                        font.weight: Font.Medium
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: root.currentTab = index
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            GridLayout {
-                columns: root.compact ? 1 : 2
-                columnSpacing: Theme.space2
-                rowSpacing: Theme.space2
-                Layout.fillWidth: true
+                GridLayout {
+                    columns: root.workspaceColumns
+                    columnSpacing: Theme.space2
+                    rowSpacing: Theme.space2
+                    Layout.fillWidth: true
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -370,7 +468,7 @@ ApplicationWindow {
 
                             ScrollView {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 260
+                                Layout.preferredHeight: root.compact ? 220 : 260
                                 background: Rectangle { color: "transparent" }
 
                                 ListView {
@@ -381,10 +479,11 @@ ApplicationWindow {
 
                                     delegate: Rectangle {
                                         width: ListView.view.width
-                                        height: 54
-                                        radius: 8
-                                        color: ListView.isCurrentItem ? Theme.hover : "transparent"
-                                        border.color: Theme.border
+                                        height: 64
+                                        radius: 14
+                                        color: ListView.isCurrentItem ? Theme.panelAlt : Theme.section
+                                        border.width: 1
+                                        border.color: ListView.isCurrentItem ? Theme.borderStrong : Theme.border
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -409,12 +508,15 @@ ApplicationWindow {
                                                         color: Theme.text
                                                         elide: Text.ElideRight
                                                         Layout.fillWidth: true
+                                                        font.weight: Font.Medium
                                                     }
 
                                                     Rectangle {
                                                         visible: model.hasOverride
-                                                        radius: 8
+                                                        radius: Theme.radiusPill
                                                         color: Theme.accent
+                                                        border.width: 1
+                                                        border.color: Theme.accent2
                                                         implicitWidth: overrideLabel.implicitWidth + 10
                                                         implicitHeight: 22
 
@@ -432,23 +534,35 @@ ApplicationWindow {
                                                     Layout.fillWidth: true
                                                     spacing: 8
 
-                                                    Label {
-                                                        text: "Статус: " + model.status
-                                                        color: Theme.muted
-                                                        font.pixelSize: 11
+                                                    Rectangle {
+                                                        radius: Theme.radiusPill
+                                                        color: Qt.rgba(statusColor(model.status).r, statusColor(model.status).g, statusColor(model.status).b, 0.14)
+                                                        border.width: 1
+                                                        border.color: Qt.rgba(statusColor(model.status).r, statusColor(model.status).g, statusColor(model.status).b, 0.4)
+                                                        implicitWidth: statusLabel.implicitWidth + 14
+                                                        implicitHeight: 22
+
+                                                        Label {
+                                                            id: statusLabel
+                                                            anchors.centerIn: parent
+                                                            text: model.status
+                                                            color: statusColor(model.status)
+                                                            font.pixelSize: 11
+                                                            font.weight: Font.DemiBold
+                                                        }
                                                     }
 
                                                     Label {
                                                         visible: model.attempts > 0
-                                                        text: "Спроб: " + model.attempts
-                                                        color: Theme.muted
+                                                        text: "Try " + model.attempts
+                                                        color: Theme.subtleText
                                                         font.pixelSize: 11
                                                     }
 
                                                     Label {
                                                         visible: model.errorText.length > 0
                                                         text: model.errorText
-                                                        color: "#FCA5A5"
+                                                        color: Theme.danger
                                                         elide: Text.ElideRight
                                                         Layout.fillWidth: true
                                                         font.pixelSize: 11
@@ -469,9 +583,10 @@ ApplicationWindow {
                             }
 
                             GridLayout {
-                                columns: root.compact ? 2 : 4
+                                columns: root.queueActionColumns
                                 columnSpacing: Theme.space1
                                 rowSpacing: Theme.space1
+                                Layout.fillWidth: true
 
                                 SecondaryButton { text: "Додати файли"; onClicked: if (backend) backend.addFiles() }
                                 SecondaryButton { text: "Додати папку"; onClicked: if (backend) backend.addFolder() }
@@ -487,6 +602,18 @@ ApplicationWindow {
                                     text: "Вниз"
                                     onClicked: {
                                         if (backend) backend.moveSelectedDown(selectedQueue)
+                                    }
+                                }
+                                GhostButton {
+                                    text: "Top"
+                                    onClicked: {
+                                        if (backend) backend.moveSelectedTop(selectedQueue)
+                                    }
+                                }
+                                GhostButton {
+                                    text: "Bottom"
+                                    onClicked: {
+                                        if (backend) backend.moveSelectedBottom(selectedQueue)
                                     }
                                 }
                                 GhostButton {
@@ -519,13 +646,14 @@ ApplicationWindow {
                                 onEditingFinished: if (backend) backend.outputDir = text
                             }
 
-                            RowLayout {
+                            GridLayout {
+                                columns: root.dualActionColumns
+                                columnSpacing: Theme.space1
+                                rowSpacing: Theme.space1
                                 Layout.fillWidth: true
-                                spacing: Theme.space1
 
                                 SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickOutputDir() }
                                 GhostButton { text: "Відкрити"; onClicked: if (backend) backend.openOutputDir() }
-                                Item { Layout.fillWidth: true }
                             }
 
                             Label {
@@ -535,15 +663,17 @@ ApplicationWindow {
                                 font.pixelSize: 11
                             }
 
-                            RowLayout {
+                            AppComboBox {
+                                id: recentFoldersCombo
+                                model: backend ? backend.recentFoldersModel : []
                                 Layout.fillWidth: true
-                                spacing: Theme.space1
+                            }
 
-                                AppComboBox {
-                                    id: recentFoldersCombo
-                                    model: backend ? backend.recentFoldersModel : []
-                                    Layout.fillWidth: true
-                                }
+                            GridLayout {
+                                columns: root.dualActionColumns
+                                columnSpacing: Theme.space1
+                                rowSpacing: Theme.space1
+                                Layout.fillWidth: true
 
                                 GhostButton {
                                     text: "У вивід"
@@ -570,9 +700,11 @@ ApplicationWindow {
                                 onEditingFinished: if (backend) backend.watchFolder = text
                             }
 
-                            RowLayout {
+                            GridLayout {
+                                columns: root.tripleActionColumns
+                                columnSpacing: Theme.space1
+                                rowSpacing: Theme.space1
                                 Layout.fillWidth: true
-                                spacing: Theme.space1
 
                                 SecondaryButton { text: "Обрати"; onClicked: if (backend) backend.pickWatchFolder() }
                                 PrimaryButton {
@@ -642,7 +774,7 @@ ApplicationWindow {
                                             title: "Режим і формати"
 
                                             GridLayout {
-                                                columns: root.compact ? 1 : 2
+                                                columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
@@ -667,7 +799,7 @@ ApplicationWindow {
                                             title: "Кодеки та GPU"
 
                                             GridLayout {
-                                                columns: root.compact ? 1 : 2
+                                                columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
@@ -681,7 +813,7 @@ ApplicationWindow {
                                                 AppComboBox { id: codecCombo; model: root.codecOptions }
                                                 Label { text: "GPU/CPU:"; color: Theme.muted }
                                                 AppComboBox { id: hwCombo; model: root.hwOptions }
-                                                Label { text: backend ? backend.encoderInfo : "Доступні: --"; color: Theme.muted; Layout.columnSpan: root.compact ? 1 : 2 }
+                                                Label { text: backend ? backend.encoderInfo : "Доступні: --"; color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.columnSpan: root.formColumns }
                                             }
                                         }
 
@@ -713,7 +845,7 @@ ApplicationWindow {
                                             title: "Час / Merge"
 
                                             GridLayout {
-                                                columns: root.compact ? 1 : 2
+                                                columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
@@ -721,7 +853,7 @@ ApplicationWindow {
                                                 AppTextField { id: trimStartField; placeholderText: "hh:mm:ss або сек" }
                                                 Label { text: "Кінець:"; color: Theme.muted }
                                                 AppTextField { id: trimEndField; placeholderText: "hh:mm:ss або сек" }
-                                                AppCheckBox { id: mergeCheck; text: "Merge всі відео"; Layout.columnSpan: root.compact ? 1 : 2 }
+                                                AppCheckBox { id: mergeCheck; text: "Merge всі відео"; Layout.columnSpan: root.formColumns }
                                                 Label { text: "Назва merge:"; color: Theme.muted }
                                                 AppTextField { id: mergeNameField; text: "merged" }
                                             }
@@ -731,7 +863,7 @@ ApplicationWindow {
                                             title: "Трансформації"
 
                                             GridLayout {
-                                                columns: root.compact ? 1 : 2
+                                                columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
@@ -758,16 +890,18 @@ ApplicationWindow {
                                             title: "Субтитри"
 
                                             GridLayout {
-                                                columns: root.compact ? 1 : 2
+                                                columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
                                                 Label { text: "Режим:"; color: Theme.muted }
                                                 AppComboBox { id: subtitleModeCombo; model: root.subtitleModeOptions }
                                                 Label { text: "Файл:"; color: Theme.muted }
-                                                RowLayout {
+                                                GridLayout {
                                                     Layout.fillWidth: true
-                                                    spacing: Theme.space1
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
                                                     AppTextField { id: subtitlePathField; Layout.fillWidth: true }
                                                     SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickSubtitle() }
                                                 }
@@ -780,14 +914,16 @@ ApplicationWindow {
                                             title: "Водяний знак / Текст"
 
                                             GridLayout {
-                                                columns: root.compact ? 1 : 2
+                                                columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
                                                 Label { text: "WM файл:"; color: Theme.muted }
-                                                RowLayout {
+                                                GridLayout {
                                                     Layout.fillWidth: true
-                                                    spacing: Theme.space1
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
                                                     AppTextField { id: wmPathField; Layout.fillWidth: true }
                                                     SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickWatermark() }
                                                 }
@@ -806,13 +942,15 @@ ApplicationWindow {
                                                 Label { text: "Text color:"; color: Theme.muted }
                                                 AppTextField { id: textColorField; text: "white" }
                                                 Label { text: "Font:"; color: Theme.muted }
-                                                RowLayout {
+                                                GridLayout {
                                                     Layout.fillWidth: true
-                                                    spacing: Theme.space1
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
                                                     AppTextField { id: textFontField; Layout.fillWidth: true }
                                                     SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickFont() }
                                                 }
-                                                AppCheckBox { id: textBoxCheck; text: "Фон тексту"; Layout.columnSpan: root.compact ? 1 : 2 }
+                                                AppCheckBox { id: textBoxCheck; text: "Фон тексту"; Layout.columnSpan: root.formColumns }
                                                 Label { text: "Box color:"; color: Theme.muted }
                                                 AppTextField { id: textBoxColorField; text: "black" }
                                                 Label { text: "Box opacity %:"; color: Theme.muted }
@@ -835,15 +973,17 @@ ApplicationWindow {
                                             title: "Пресети"
 
                                             GridLayout {
-                                                columns: root.compact ? 1 : 2
+                                                columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
                                                 Label { text: "Збережені:"; color: Theme.muted }
                                                 AppComboBox { id: presetsCombo; model: backend ? backend.presetsModel : [] }
-                                                RowLayout {
-                                                    Layout.columnSpan: root.compact ? 1 : 2
-                                                    spacing: Theme.space1
+                                                GridLayout {
+                                                    Layout.columnSpan: root.formColumns
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
                                                     Layout.fillWidth: true
                                                     SecondaryButton { text: "Завантажити"; onClicked: if (backend) backend.loadPreset(presetsCombo.currentText) }
                                                     GhostButton { text: "Видалити"; onClicked: if (backend) backend.deletePreset(presetsCombo.currentText) }
@@ -852,7 +992,7 @@ ApplicationWindow {
                                                 AppTextField { id: newPresetField }
                                                 PrimaryButton {
                                                     text: "Зберегти"
-                                                    Layout.columnSpan: root.compact ? 1 : 2
+                                                    Layout.columnSpan: root.formColumns
                                                     onClicked: if (backend) backend.savePreset(newPresetField.text, collectSettings())
                                                 }
                                             }
@@ -862,7 +1002,7 @@ ApplicationWindow {
                                             title: "Per-file override"
 
                                             GridLayout {
-                                                columns: root.compact ? 1 : 2
+                                                columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
@@ -880,10 +1020,12 @@ ApplicationWindow {
                                                 AppComboBox { id: overrideSubtitleFmt; model: [inheritLabel].concat(root.subtitleFormats) }
                                                 Label { text: "Skip existing:"; color: Theme.muted }
                                                 AppComboBox { id: overrideSkipCombo; model: root.boolOverrideOptions }
-                                                RowLayout {
-                                                    Layout.columnSpan: root.compact ? 1 : 2
+                                                GridLayout {
+                                                    Layout.columnSpan: root.formColumns
+                                                    columns: root.dualActionColumns
                                                     Layout.fillWidth: true
-                                                    spacing: Theme.space1
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
                                                     PrimaryButton {
                                                         text: "Зберегти override"
                                                         onClicked: if (backend) backend.saveTaskOverride(queueList.currentIndex, collectTaskOverride())
@@ -911,7 +1053,7 @@ ApplicationWindow {
                                             title: "Thumbnail / Contact sheet"
 
                                             GridLayout {
-                                                columns: root.compact ? 1 : 2
+                                                columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
@@ -972,7 +1114,7 @@ ApplicationWindow {
                                                 AppCheckBox { id: copyMetadataCheck; text: "Копіювати метадані з джерела"; checked: true }
                                                 AppCheckBox { id: stripMetadataCheck; text: "Очистити метадані" }
                                                 GridLayout {
-                                                    columns: root.compact ? 1 : 2
+                                                    columns: root.formColumns
                                                     columnSpacing: Theme.space2
                                                     rowSpacing: Theme.space1
                                                     Label { text: "Title:"; color: Theme.muted }
@@ -996,20 +1138,66 @@ ApplicationWindow {
                         title: "Лог"
 
                         ColumnLayout {
-                            spacing: Theme.space1
+                            spacing: Theme.space2
 
-                            RowLayout {
+                            Rectangle {
                                 Layout.fillWidth: true
-                                GhostButton { text: "Експорт логів"; onClicked: if (backend) backend.exportLog() }
-                                GhostButton {
-                                    text: "Top"
-                                    onClicked: if (backend) backend.moveSelectedTop(selectedQueue)
+                                radius: Theme.radiusSection
+                                color: Theme.section
+                                border.width: 1
+                                border.color: Theme.border
+                                implicitHeight: logToolbar.implicitHeight + Theme.space2 * 2
+
+                                RowLayout {
+                                    id: logToolbar
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.space2
+                                    spacing: Theme.space2
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+
+                                        Label {
+                                            text: "Журнал подій"
+                                            color: Theme.text
+                                            font.pixelSize: 13
+                                            font.weight: Font.DemiBold
+                                        }
+
+                                        Label {
+                                            text: "FFmpeg, ffprobe і системні повідомлення з автопрокруткою до останнього запису."
+                                            color: Theme.muted
+                                            font.pixelSize: 11
+                                            wrapMode: Text.WordWrap
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+
+                                    GridLayout {
+                                        columns: root.tripleActionColumns
+                                        columnSpacing: Theme.space1
+                                        rowSpacing: Theme.space1
+
+                                        SecondaryButton {
+                                            Layout.fillWidth: false
+                                            text: "Експорт"
+                                            onClicked: if (backend) backend.exportLog()
+                                        }
+
+                                        GhostButton {
+                                            Layout.fillWidth: false
+                                            text: "Очистити"
+                                            onClicked: logArea.text = ""
+                                        }
+
+                                        GhostButton {
+                                            Layout.fillWidth: false
+                                            text: "В кінець"
+                                            onClicked: logArea.cursorPosition = logArea.text.length
+                                        }
+                                    }
                                 }
-                                GhostButton {
-                                    text: "Bottom"
-                                    onClicked: if (backend) backend.moveSelectedBottom(selectedQueue)
-                                }
-                                Item { Layout.fillWidth: true }
                             }
 
                             AppTextArea {
@@ -1017,24 +1205,27 @@ ApplicationWindow {
                                 readOnly: true
                                 textFormat: Text.PlainText
                                 wrapMode: TextEdit.NoWrap
-                                Layout.preferredHeight: 220
+                                font.pixelSize: 12
+                                Layout.preferredHeight: root.compact ? 220 : 260
                             }
                         }
                     }
                 }
             }
 
-            Card {
-                GridLayout {
-                    columns: root.compact ? 1 : 5
-                    columnSpacing: Theme.space2
-                    rowSpacing: Theme.space1
+                Card {
+                    GridLayout {
+                        columns: root.statusColumns
+                        columnSpacing: Theme.space2
+                        rowSpacing: Theme.space1
+                        Layout.fillWidth: true
 
-                    Label { text: backend ? backend.statusText : "Готово"; color: Theme.text }
-                    ProgressBar { from: 0; to: 1; value: backend ? backend.fileProgress : 0; Layout.fillWidth: true }
-                    Label { text: backend ? backend.fileProgressText : "Файл: --"; color: Theme.muted }
-                    ProgressBar { from: 0; to: 1; value: backend ? backend.totalProgress : 0; Layout.fillWidth: true }
-                    Label { text: backend ? backend.totalProgressText : "Всього: --"; color: Theme.muted }
+                        Label { text: backend ? backend.statusText : "Готово"; color: Theme.text }
+                        ProgressBar { from: 0; to: 1; value: backend ? backend.fileProgress : 0; Layout.fillWidth: true }
+                        Label { text: backend ? backend.fileProgressText : "Файл: --"; color: Theme.muted }
+                        ProgressBar { from: 0; to: 1; value: backend ? backend.totalProgress : 0; Layout.fillWidth: true }
+                        Label { text: backend ? backend.totalProgressText : "Всього: --"; color: Theme.muted }
+                    }
                 }
             }
         }

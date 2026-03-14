@@ -9,23 +9,46 @@ Rectangle {
     default property alias content: bodyLayout.data
 
     color: Theme.section
-    border.color: Theme.border
+    border.width: 1
+    border.color: Qt.rgba(0.22, 0.34, 0.50, 0.95)
     radius: Theme.radiusSection
     implicitWidth: bodyLayout.implicitWidth + Theme.space2 * 2
     implicitHeight: bodyLayout.implicitHeight + Theme.space2 * 2 + titleLabel.implicitHeight
     Layout.fillWidth: true
+
+    Rectangle {
+        anchors.fill: parent
+        radius: parent.radius
+        color: "transparent"
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.02)
+    }
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Theme.space2
         spacing: Theme.space1
 
-        Label {
-            id: titleLabel
-            text: section.title
-            color: Theme.text
-            font.weight: Font.DemiBold
-            font.pixelSize: 13
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.space1
+
+            Rectangle {
+                width: 8
+                height: 8
+                radius: 4
+                color: Theme.accent
+            }
+
+            Label {
+                id: titleLabel
+                text: section.title
+                color: Theme.text
+                font.weight: Font.DemiBold
+                font.pixelSize: 13
+            }
+
+            Item { Layout.fillWidth: true }
         }
 
         ColumnLayout {

@@ -5,16 +5,26 @@ import App 1.0
 CheckBox {
     id: control
     spacing: Theme.space1
+    hoverEnabled: true
+    implicitHeight: Math.max(26, label.implicitHeight + 4)
+    leftPadding: 0
+    rightPadding: 0
+    topPadding: 0
+    bottomPadding: 0
 
     indicator: Rectangle {
-        width: 16
-        height: 16
-        radius: 4
+        x: 0
+        y: Math.round((control.availableHeight - height) / 2)
+        width: 20
+        height: 20
+        radius: 6
         color: control.checked ? Theme.accent : Theme.input
-        border.color: Theme.border
+        border.width: 1
+        border.color: control.checked ? Theme.accent2 : (control.hovered ? Theme.borderStrong : Theme.border)
+
         Rectangle {
-            width: 8
-            height: 8
+            width: 9
+            height: 9
             radius: 2
             anchors.centerIn: parent
             color: "#FFFFFF"
@@ -23,8 +33,15 @@ CheckBox {
     }
 
     contentItem: Label {
+        id: label
         text: control.text
         color: control.enabled ? Theme.text : Theme.disabledText
         verticalAlignment: Text.AlignVCenter
+        leftPadding: control.indicator.width + control.spacing + 2
+        rightPadding: 0
+        topPadding: 0
+        bottomPadding: 0
+        font.pixelSize: 13
+        wrapMode: Text.WordWrap
     }
 }
