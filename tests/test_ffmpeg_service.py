@@ -107,6 +107,70 @@ class FfmpegServiceTest(unittest.TestCase):
         self.assertIn("tile=3x2", " ".join(sheet_cmd))
         self.assertIn("fps=1/15", " ".join(sheet_cmd))
 
+    def test_build_audio_filter_supports_normalize_peak_and_silence_trim(self) -> None:
+        settings = ConversionSettings(
+            normalize_audio="ebu_r128",
+            audio_peak_limit_db=-1.0,
+            trim_silence=True,
+            silence_threshold_db=-42,
+            silence_duration=0.5,
+            speed=1.25,
+        )
+        audio_filter = self.service.build_audio_filter(settings)
+        assert audio_filter is not None
+        self.assertIn("atempo=", audio_filter)
+        self.assertIn("loudnorm=I=-16:TP=-1.5:LRA=11", audio_filter)
+        self.assertIn("alimiter=limit=", audio_filter)
+        self.assertIn("silenceremove=", audio_filter)
+
+    def test_video_command_can_replace_audio(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            replace_audio = tmp / "music.wav"
+            replace_audio.write_text("audio", encoding="utf-8")
+            settings = ConversionSettings(replace_audio_path=str(replace_audio), out_video_format="mp4")
+            cmd = self.service.build_video_command(
+                Path("/tmp/input.mp4"),
+                Path("/tmp/output.mp4"),
+                settings,
+                MediaInfo(vcodec="h264", acodec="aac"),
+                allow_fast_copy=False,
+            )
+            joined = " ".join(cmd)
+            self.assertIn(str(replace_audio), joined)
+            self.assertIn("-shortest", cmd)
+            self.assertIn("-map", cmd)
+
+    def test_audio_command_supports_cover_art_and_track_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            cover = tmp / "cover.jpg"
+            cover.write_text("cover", encoding="utf-8")
+            settings = ConversionSettings(
+                operation="audio_only",
+                out_audio_format="mp3",
+                cover_art_path=str(cover),
+                audio_track_index=1,
+            )
+            cmd = self.service.build_audio_command(Path("/tmp/input.mp4"), Path("/tmp/output.mp3"), settings)
+            joined = " ".join(cmd)
+            self.assertIn("0:a:1?", joined)
+            self.assertIn(str(cover), joined)
+            self.assertIn("attached_pic", joined)
+
+    def test_fast_copy_video_command_respects_selected_audio_track(self) -> None:
+        settings = ConversionSettings(out_video_format="mp4", audio_track_index=1)
+        cmd = self.service.build_video_command(
+            Path("/tmp/input.mp4"),
+            Path("/tmp/output.mp4"),
+            settings,
+            MediaInfo(vcodec="h264", acodec="aac"),
+            allow_fast_copy=True,
+        )
+        joined = " ".join(cmd)
+        self.assertIn("0:a:1?", joined)
+        self.assertIn("-c copy", joined)
+
 
 if __name__ == "__main__":
     unittest.main()

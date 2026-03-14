@@ -67,10 +67,19 @@ ApplicationWindow {
     property var operationOptions: [
         "Конвертація",
         "Лише аудіо",
+        "Авто субтитри",
         "Extract subtitle",
         "Burn-in subtitle",
         "Thumbnail",
         "Contact sheet"
+    ]
+    property var platformPresetNames: [
+        "YouTube • 1080p H.264",
+        "TikTok • 9:16",
+        "Instagram Reels • 9:16",
+        "Instagram Stories • 9:16",
+        "Telegram • Compact MP4",
+        "WhatsApp • Share MP4"
     ]
     property var videoFormats: ["mp4", "mkv", "webm", "mov", "avi", "gif"]
     property var imageFormats: ["jpg", "png", "webp", "bmp", "tiff"]
@@ -78,6 +87,8 @@ ApplicationWindow {
     property var subtitleFormats: ["srt", "ass", "vtt"]
     property var codecOptions: ["Авто", "H.264 (AVC)", "H.265 (HEVC)", "AV1", "VP9 (WebM)"]
     property var hwOptions: ["Авто", "Тільки CPU", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"]
+    property var normalizeOptions: ["none", "ebu_r128"]
+    property var subtitleEngineOptions: ["auto", "whisper"]
     property var rotateOptions: ["0", "90° вправо", "90° вліво", "180°"]
     property var portraitOptions: [
         "Вимкнено",
@@ -123,6 +134,7 @@ ApplicationWindow {
             out_audio_fmt: outAudioFmt.currentText,
             out_subtitle_fmt: outSubtitleFmt.currentText,
             audio_bitrate: audioBitrateField.text,
+            audio_track_index: audioTrackSpin.value - 1,
             crf: crfSpin.value,
             preset: presetCombo.currentText,
             portrait: portraitCombo.currentText,
@@ -131,6 +143,7 @@ ApplicationWindow {
             fast_copy: fastCopyCheck.checked,
             skip_existing: skipExistingCheck.checked,
             output_template: outputTemplateField.text,
+            platform_profile: platformProfileField.text,
             trim_start: trimStartField.text,
             trim_end: trimEndField.text,
             merge: mergeCheck.checked,
@@ -147,6 +160,9 @@ ApplicationWindow {
             subtitle_path: subtitlePathField.text,
             subtitle_stream: subtitleStreamSpin.value,
             subtitle_out_fmt: outSubtitleFmt.currentText,
+            subtitle_language: subtitleLanguageField.text,
+            subtitle_model: subtitleModelCombo.currentText,
+            subtitle_engine: subtitleEngineCombo.currentText,
             thumbnail_time: thumbnailTimeField.text,
             sheet_cols: sheetColsSpin.value,
             sheet_rows: sheetRowsSpin.value,
@@ -166,12 +182,26 @@ ApplicationWindow {
             text_font: textFontField.text,
             codec: codecCombo.currentText,
             hw: hwCombo.currentText,
+            replace_audio_path: replaceAudioPathField.text,
+            normalize_audio: normalizeAudioCombo.currentText,
+            audio_peak_limit_db: peakLimitField.text,
+            trim_silence: trimSilenceCheck.checked,
+            silence_threshold_db: silenceThresholdSpin.value,
+            silence_duration: silenceDurationField.text,
+            split_chapters: splitChaptersCheck.checked,
+            cover_art_path: coverArtField.text,
+            before_hook: beforeHookField.text,
+            after_hook: afterHookField.text,
             strip_metadata: stripMetadataCheck.checked,
             copy_metadata: copyMetadataCheck.checked,
             meta_title: metaTitleField.text,
             meta_comment: metaCommentField.text,
             meta_author: metaAuthorField.text,
-            meta_copyright: metaCopyrightField.text
+            meta_copyright: metaCopyrightField.text,
+            meta_album: metaAlbumField.text,
+            meta_genre: metaGenreField.text,
+            meta_year: metaYearField.text,
+            meta_track: metaTrackField.text
         }
     }
 
@@ -192,6 +222,7 @@ ApplicationWindow {
         if (preset.out_audio_fmt) setComboText(outAudioFmt, preset.out_audio_fmt)
         if (preset.out_subtitle_fmt) setComboText(outSubtitleFmt, preset.out_subtitle_fmt)
         if (preset.audio_bitrate) audioBitrateField.text = preset.audio_bitrate
+        if (preset.audio_track_index !== undefined) audioTrackSpin.value = Number(preset.audio_track_index) + 1
         if (preset.crf !== undefined) crfSpin.value = preset.crf
         if (preset.preset) setComboText(presetCombo, preset.preset)
         if (preset.portrait) setComboText(portraitCombo, preset.portrait)
@@ -200,6 +231,7 @@ ApplicationWindow {
         fastCopyCheck.checked = !!preset.fast_copy
         skipExistingCheck.checked = !!preset.skip_existing
         outputTemplateField.text = preset.output_template || "{stem}"
+        platformProfileField.text = preset.platform_profile || ""
         trimStartField.text = preset.trim_start || ""
         trimEndField.text = preset.trim_end || ""
         mergeCheck.checked = !!preset.merge
@@ -215,6 +247,9 @@ ApplicationWindow {
         setComboText(subtitleModeCombo, preset.subtitle_mode || "none")
         subtitlePathField.text = preset.subtitle_path || ""
         if (preset.subtitle_stream !== undefined) subtitleStreamSpin.value = preset.subtitle_stream
+        subtitleLanguageField.text = preset.subtitle_language || "auto"
+        setComboText(subtitleModelCombo, preset.subtitle_model || "base")
+        setComboText(subtitleEngineCombo, preset.subtitle_engine || "auto")
         thumbnailTimeField.text = preset.thumbnail_time || ""
         if (preset.sheet_cols !== undefined) sheetColsSpin.value = preset.sheet_cols
         if (preset.sheet_rows !== undefined) sheetRowsSpin.value = preset.sheet_rows
@@ -234,12 +269,26 @@ ApplicationWindow {
         textFontField.text = preset.text_font || ""
         if (preset.codec) setComboText(codecCombo, preset.codec)
         if (preset.hw) setComboText(hwCombo, preset.hw)
+        replaceAudioPathField.text = preset.replace_audio_path || ""
+        setComboText(normalizeAudioCombo, preset.normalize_audio || "none")
+        peakLimitField.text = preset.audio_peak_limit_db || ""
+        trimSilenceCheck.checked = !!preset.trim_silence
+        silenceThresholdSpin.value = preset.silence_threshold_db !== undefined ? preset.silence_threshold_db : -50
+        silenceDurationField.text = preset.silence_duration || "0.3"
+        splitChaptersCheck.checked = !!preset.split_chapters
+        coverArtField.text = preset.cover_art_path || ""
+        beforeHookField.text = preset.before_hook || ""
+        afterHookField.text = preset.after_hook || ""
         stripMetadataCheck.checked = !!preset.strip_metadata
         copyMetadataCheck.checked = !!preset.copy_metadata
         metaTitleField.text = preset.meta_title || ""
         metaCommentField.text = preset.meta_comment || ""
         metaAuthorField.text = preset.meta_author || ""
         metaCopyrightField.text = preset.meta_copyright || ""
+        metaAlbumField.text = preset.meta_album || ""
+        metaGenreField.text = preset.meta_genre || ""
+        metaYearField.text = preset.meta_year || ""
+        metaTrackField.text = preset.meta_track || ""
     }
 
     function collectTaskOverride() {
@@ -289,6 +338,8 @@ ApplicationWindow {
 
         function onPresetLoaded(preset) {
             applyPreset(preset)
+            if (backend)
+                backend.refreshOutputPreview(collectSettings())
         }
 
         function onTaskOverrideLoaded(overrideData) {
@@ -306,11 +357,22 @@ ApplicationWindow {
         function onSubtitlePicked(path) {
             subtitlePathField.text = path
         }
+
+        function onCoverArtPicked(path) {
+            coverArtField.text = path
+        }
+
+        function onAudioReplacePicked(path) {
+            replaceAudioPathField.text = path
+        }
     }
 
     Component.onCompleted: {
-        if (backend)
+        if (backend) {
             backend.refreshEncoders()
+            backend.restoreSession()
+            backend.refreshOutputPreview(collectSettings())
+        }
         applyTaskOverride({})
     }
 
@@ -591,6 +653,7 @@ ApplicationWindow {
                                 SecondaryButton { text: "Додати файли"; onClicked: if (backend) backend.addFiles() }
                                 SecondaryButton { text: "Додати папку"; onClicked: if (backend) backend.addFolder() }
                                 GhostButton { text: "Dedupe"; onClicked: if (backend) backend.deduplicateQueue() }
+                                GhostButton { text: "Hash dedupe"; onClicked: if (backend) backend.deduplicateQueueByHash() }
                                 GhostButton { text: "Retry failed"; onClicked: if (backend) backend.retryFailed() }
                                 GhostButton {
                                     text: "Вгору"
@@ -684,6 +747,35 @@ ApplicationWindow {
                                     text: "У watch"
                                     onClicked: if (backend) backend.useRecentFolder(recentFoldersCombo.currentIndex, "watch")
                                 }
+
+                                GhostButton {
+                                    text: "Оновити preview"
+                                    onClicked: if (backend) backend.refreshOutputPreview(collectSettings())
+                                }
+                            }
+                        }
+                    }
+
+                    Card {
+                        title: "Preview назв"
+
+                        ColumnLayout {
+                            spacing: Theme.space1
+
+                            Label {
+                                text: "Фінальні імена файлів до запуску з урахуванням шаблону, формату й per-file override."
+                                color: Theme.muted
+                                wrapMode: Text.WordWrap
+                                font.pixelSize: 11
+                            }
+
+                            AppTextArea {
+                                text: backend ? backend.outputPreviewText : ""
+                                readOnly: true
+                                textFormat: Text.PlainText
+                                wrapMode: TextEdit.NoWrap
+                                font.pixelSize: 12
+                                Layout.preferredHeight: 150
                             }
                         }
                     }
@@ -732,6 +824,8 @@ ApplicationWindow {
                             RowLayout { Label { text: "Роздільність:"; color: Theme.muted } Label { text: backend ? backend.infoRes : "—"; color: Theme.text; Layout.fillWidth: true } }
                             RowLayout { Label { text: "Розмір:"; color: Theme.muted } Label { text: backend ? backend.infoSize : "—"; color: Theme.text; Layout.fillWidth: true } }
                             RowLayout { Label { text: "Контейнер:"; color: Theme.muted } Label { text: backend ? backend.infoContainer : "—"; color: Theme.text; Layout.fillWidth: true } }
+                            RowLayout { Label { text: "Аналіз:"; color: Theme.muted } Label { text: backend ? backend.infoAnalysis : "—"; color: Theme.text; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
+                            RowLayout { Label { text: "Попередження:"; color: Theme.muted } Label { text: backend ? backend.infoWarnings : "—"; color: Theme.warning; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
                         }
                     }
 
@@ -742,6 +836,35 @@ ApplicationWindow {
                             spacing: Theme.space1
                             PrimaryButton { text: "Старт"; enabled: backend ? !backend.isRunning : false; onClicked: if (backend) backend.startConversion(collectSettings()) }
                             SecondaryButton { text: "Стоп"; enabled: backend ? backend.isRunning : false; onClicked: if (backend) backend.stopConversion() }
+                            GhostButton { text: "Експорт проєкту"; onClicked: if (backend) backend.exportProject(collectSettings()) }
+                            GhostButton { text: "Імпорт проєкту"; onClicked: if (backend) backend.importProject() }
+                        }
+                    }
+
+                    Card {
+                        title: "Історія запусків"
+
+                        ColumnLayout {
+                            spacing: Theme.space1
+
+                            AppTextArea {
+                                text: backend ? backend.historyText : ""
+                                readOnly: true
+                                textFormat: Text.PlainText
+                                wrapMode: TextEdit.NoWrap
+                                font.pixelSize: 12
+                                Layout.preferredHeight: 140
+                            }
+
+                            GridLayout {
+                                columns: root.dualActionColumns
+                                Layout.fillWidth: true
+                                columnSpacing: Theme.space1
+                                rowSpacing: Theme.space1
+
+                                GhostButton { text: "Оновити preview"; onClicked: if (backend) backend.refreshOutputPreview(collectSettings()) }
+                                GhostButton { text: "Очистити історію"; onClicked: if (backend) backend.clearHistory() }
+                            }
                         }
                     }
                 }
@@ -792,6 +915,36 @@ ApplicationWindow {
                                                 AppTextField { id: audioBitrateField; text: "192k" }
                                                 Label { text: "Output template:"; color: Theme.muted }
                                                 AppTextField { id: outputTemplateField; text: "{stem}" }
+                                                Label { text: "Platform profile:"; color: Theme.muted }
+                                                AppTextField { id: platformProfileField; placeholderText: "YouTube / TikTok / ..." }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Готові platform presets"
+
+                                            ColumnLayout {
+                                                spacing: Theme.space1
+
+                                                Label {
+                                                    text: "Швидке застосування профілів під соцмережі й месенджери."
+                                                    color: Theme.muted
+                                                    wrapMode: Text.WordWrap
+                                                    font.pixelSize: 11
+                                                }
+
+                                                Flow {
+                                                    Layout.fillWidth: true
+                                                    spacing: Theme.space1
+
+                                                    Repeater {
+                                                        model: root.platformPresetNames
+                                                        delegate: SecondaryButton {
+                                                            text: modelData
+                                                            onClicked: if (backend) backend.loadPreset(modelData)
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
 
@@ -907,6 +1060,34 @@ ApplicationWindow {
                                                 }
                                                 Label { text: "Subtitle stream:"; color: Theme.muted }
                                                 AppSpinBox { id: subtitleStreamSpin; from: 0; to: 10; value: 0 }
+                                                Label { text: "Мова AI subtitle:"; color: Theme.muted }
+                                                AppTextField { id: subtitleLanguageField; text: "auto"; placeholderText: "auto / uk / en" }
+                                                Label { text: "Whisper model:"; color: Theme.muted }
+                                                AppComboBox { id: subtitleModelCombo; model: ["tiny", "base", "small", "medium"] }
+                                                Label { text: "Engine:"; color: Theme.muted }
+                                                AppComboBox { id: subtitleEngineCombo; model: root.subtitleEngineOptions }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Аудіо доріжка"
+
+                                            GridLayout {
+                                                columns: root.formColumns
+                                                columnSpacing: Theme.space2
+                                                rowSpacing: Theme.space1
+
+                                                Label { text: "Track для збереження:"; color: Theme.muted }
+                                                AppSpinBox { id: audioTrackSpin; from: 1; to: 8; value: 1 }
+                                                Label { text: "Замінити аудіо:"; color: Theme.muted }
+                                                GridLayout {
+                                                    Layout.fillWidth: true
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
+                                                    AppTextField { id: replaceAudioPathField; Layout.fillWidth: true }
+                                                    SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickAudioReplace() }
+                                                }
                                             }
                                         }
 
@@ -1037,6 +1218,36 @@ ApplicationWindow {
                                                 }
                                             }
                                         }
+
+                                        Section {
+                                            title: "Проєкт"
+
+                                            GridLayout {
+                                                columns: root.formColumns
+                                                columnSpacing: Theme.space2
+                                                rowSpacing: Theme.space1
+
+                                                Label {
+                                                    text: "Зберегти/відновити всю чергу, overrides і активні налаштування в JSON."
+                                                    color: Theme.muted
+                                                    wrapMode: Text.WordWrap
+                                                    Layout.columnSpan: root.formColumns
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                PrimaryButton {
+                                                    text: "Експорт .json"
+                                                    Layout.columnSpan: root.formColumns
+                                                    onClicked: if (backend) backend.exportProject(collectSettings())
+                                                }
+
+                                                GhostButton {
+                                                    text: "Імпорт .json"
+                                                    Layout.columnSpan: root.formColumns
+                                                    onClicked: if (backend) backend.importProject()
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 
@@ -1067,6 +1278,36 @@ ApplicationWindow {
                                                 AppSpinBox { id: sheetWidthSpin; from: 80; to: 1200; value: 320 }
                                                 Label { text: "Interval sec:"; color: Theme.muted }
                                                 AppSpinBox { id: sheetIntervalSpin; from: 1; to: 600; value: 10 }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Audio processing"
+
+                                            GridLayout {
+                                                columns: root.formColumns
+                                                columnSpacing: Theme.space2
+                                                rowSpacing: Theme.space1
+
+                                                Label { text: "Нормалізація:"; color: Theme.muted }
+                                                AppComboBox { id: normalizeAudioCombo; model: root.normalizeOptions }
+                                                Label { text: "Peak limit dB:"; color: Theme.muted }
+                                                AppTextField { id: peakLimitField; placeholderText: "-1.0" }
+                                                AppCheckBox { id: trimSilenceCheck; text: "Обрізати тишу"; Layout.columnSpan: root.formColumns }
+                                                Label { text: "Поріг тиші dB:"; color: Theme.muted }
+                                                AppSpinBox { id: silenceThresholdSpin; from: -90; to: -10; value: -50 }
+                                                Label { text: "Тривалість тиші:"; color: Theme.muted }
+                                                AppTextField { id: silenceDurationField; text: "0.3"; placeholderText: "0.3" }
+                                                AppCheckBox { id: splitChaptersCheck; text: "Split by chapters"; Layout.columnSpan: root.formColumns }
+                                                Label { text: "Cover art:"; color: Theme.muted }
+                                                GridLayout {
+                                                    Layout.fillWidth: true
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
+                                                    AppTextField { id: coverArtField; Layout.fillWidth: true }
+                                                    SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickCoverArt() }
+                                                }
                                             }
                                         }
 
@@ -1121,11 +1362,34 @@ ApplicationWindow {
                                                     AppTextField { id: metaTitleField }
                                                     Label { text: "Author:"; color: Theme.muted }
                                                     AppTextField { id: metaAuthorField }
+                                                    Label { text: "Album:"; color: Theme.muted }
+                                                    AppTextField { id: metaAlbumField }
+                                                    Label { text: "Genre:"; color: Theme.muted }
+                                                    AppTextField { id: metaGenreField }
+                                                    Label { text: "Year:"; color: Theme.muted }
+                                                    AppTextField { id: metaYearField }
+                                                    Label { text: "Track:"; color: Theme.muted }
+                                                    AppTextField { id: metaTrackField }
                                                     Label { text: "Comment:"; color: Theme.muted }
                                                     AppTextField { id: metaCommentField }
                                                     Label { text: "Copyright:"; color: Theme.muted }
                                                     AppTextField { id: metaCopyrightField }
                                                 }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Hooks"
+
+                                            GridLayout {
+                                                columns: root.formColumns
+                                                columnSpacing: Theme.space2
+                                                rowSpacing: Theme.space1
+
+                                                Label { text: "Before hook:"; color: Theme.muted }
+                                                AppTextField { id: beforeHookField; placeholderText: "bash script.sh before" }
+                                                Label { text: "After hook:"; color: Theme.muted }
+                                                AppTextField { id: afterHookField; placeholderText: "bash script.sh after" }
                                             }
                                         }
                                     }

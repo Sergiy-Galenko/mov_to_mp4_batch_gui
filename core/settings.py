@@ -43,6 +43,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
         settings.subtitle_out_format = out_subtitle_format
 
     settings.audio_bitrate = str(settings_map.get("audio_bitrate") or settings.audio_bitrate).strip() or settings.audio_bitrate
+    settings.audio_track_index = max(0, int(settings_map.get("audio_track_index", settings.audio_track_index)))
     settings.crf = int(settings_map.get("crf", settings.crf))
     settings.preset = str(settings_map.get("preset") or settings.preset).strip()
     settings.portrait = settings_map.get("portrait") or settings.portrait
@@ -51,6 +52,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.fast_copy = bool(settings_map.get("fast_copy", settings.fast_copy))
     settings.skip_existing = bool(settings_map.get("skip_existing", settings.skip_existing))
     settings.output_template = str(settings_map.get("output_template") or settings.output_template).strip() or "{stem}"
+    settings.platform_profile = str(settings_map.get("platform_profile") or settings.platform_profile).strip()
 
     settings.trim_start = parse_time_to_seconds(str(settings_map.get("trim_start", "")))
     settings.trim_end = parse_time_to_seconds(str(settings_map.get("trim_end", "")))
@@ -73,6 +75,9 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.subtitle_mode = str(settings_map.get("subtitle_mode") or settings.subtitle_mode).strip() or "none"
     settings.subtitle_path = str(settings_map.get("subtitle_path") or settings.subtitle_path).strip()
     settings.subtitle_stream = int(settings_map.get("subtitle_stream", settings.subtitle_stream))
+    settings.subtitle_language = str(settings_map.get("subtitle_language") or settings.subtitle_language).strip() or "auto"
+    settings.subtitle_model = str(settings_map.get("subtitle_model") or settings.subtitle_model).strip() or "base"
+    settings.subtitle_engine = str(settings_map.get("subtitle_engine") or settings.subtitle_engine).strip() or "auto"
     subtitle_out_format = str(settings_map.get("subtitle_out_fmt") or settings.subtitle_out_format).strip().lower()
     if subtitle_out_format in OUT_SUBTITLE_FORMATS:
         settings.subtitle_out_format = subtitle_out_format
@@ -109,12 +114,30 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     if hw in HW_ENCODER_OPTIONS:
         settings.hw_encoder = hw
 
+    settings.replace_audio_path = str(settings_map.get("replace_audio_path") or settings.replace_audio_path).strip()
+    settings.normalize_audio = str(settings_map.get("normalize_audio") or settings.normalize_audio).strip() or "none"
+    peak_limit = parse_float(str(settings_map.get("audio_peak_limit_db", "")))
+    settings.audio_peak_limit_db = peak_limit
+    settings.trim_silence = bool(settings_map.get("trim_silence", settings.trim_silence))
+    silence_threshold = parse_int(str(settings_map.get("silence_threshold_db", settings.silence_threshold_db)))
+    settings.silence_threshold_db = silence_threshold if silence_threshold is not None else settings.silence_threshold_db
+    silence_duration = parse_float(str(settings_map.get("silence_duration", settings.silence_duration)))
+    settings.silence_duration = silence_duration if silence_duration and silence_duration > 0 else settings.silence_duration
+    settings.split_chapters = bool(settings_map.get("split_chapters", settings.split_chapters))
+    settings.cover_art_path = str(settings_map.get("cover_art_path") or settings.cover_art_path).strip()
+    settings.before_hook = str(settings_map.get("before_hook") or settings.before_hook).strip()
+    settings.after_hook = str(settings_map.get("after_hook") or settings.after_hook).strip()
+
     settings.copy_metadata = bool(settings_map.get("copy_metadata", settings.copy_metadata))
     settings.strip_metadata = bool(settings_map.get("strip_metadata", settings.strip_metadata))
     settings.meta_title = str(settings_map.get("meta_title", settings.meta_title))
     settings.meta_comment = str(settings_map.get("meta_comment", settings.meta_comment))
     settings.meta_author = str(settings_map.get("meta_author", settings.meta_author))
     settings.meta_copyright = str(settings_map.get("meta_copyright", settings.meta_copyright))
+    settings.meta_album = str(settings_map.get("meta_album", settings.meta_album))
+    settings.meta_genre = str(settings_map.get("meta_genre", settings.meta_genre))
+    settings.meta_year = str(settings_map.get("meta_year", settings.meta_year))
+    settings.meta_track = str(settings_map.get("meta_track", settings.meta_track))
     return settings
 
 

@@ -14,6 +14,7 @@ OUT_SUBTITLE_FORMATS = ["srt", "ass", "vtt"]
 OPERATION_OPTIONS = [
     "Конвертація",
     "Лише аудіо",
+    "Авто субтитри",
     "Extract subtitle",
     "Burn-in subtitle",
     "Thumbnail",
@@ -22,6 +23,7 @@ OPERATION_OPTIONS = [
 OPERATION_MAP = {
     "Конвертація": "convert",
     "Лише аудіо": "audio_only",
+    "Авто субтитри": "auto_subtitle",
     "Extract subtitle": "subtitle_extract",
     "Burn-in subtitle": "subtitle_burn",
     "Thumbnail": "thumbnail",
@@ -96,4 +98,5 @@ PRESET_STORE = Path.home() / ".media_converter_gui_presets.json"
 DEFAULT_OUTPUT_DIR = Path.home() / "Videos" / "converted"
 THEME_STORE = Path.home() / ".media_converter_gui_theme.json"
 STATE_STORE = Path.home() / ".media_converter_gui_state.json"
+HISTORY_STORE = Path.home() / ".media_converter_gui_history.json"
 RECENT_FOLDERS_LIMIT = 8

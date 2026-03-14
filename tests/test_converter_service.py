@@ -13,14 +13,20 @@ class FakeFfmpegService:
         self.ffprobe_path = None
         self.audio_called = False
         self.video_called = False
+        self.auto_audio_processing = False
 
     def output_extension_for(self, media_type_name, settings):
         if settings.operation == "audio_only":
             return "mp3"
+        if settings.operation == "auto_subtitle":
+            return "srt"
         return "mp4" if media_type_name == "video" else "jpg"
 
     def build_audio_speed_filter(self, settings):
         return None
+
+    def has_audio_processing(self, settings):
+        return self.auto_audio_processing
 
     def build_video_filter_spec(self, inp, settings, out_ext, log_cb=None):
         return None, None, None, [], False
@@ -47,6 +53,16 @@ class FakeFfmpegService:
 
     def build_contact_sheet_command(self, inp, outp, settings):
         return ["ffmpeg", "-i", str(inp), str(outp)]
+
+
+class FakeTranscriber:
+    def __init__(self) -> None:
+        self.called = False
+
+    def generate(self, inp, outp, settings, log_cb=None):
+        self.called = True
+        Path(outp).write_text("subtitle", encoding="utf-8")
+        return 0
 
 
 class TestableConverterService(ConverterService):
@@ -119,6 +135,28 @@ class ConverterServiceTest(unittest.TestCase):
 
             task_events = [event for event in drain_events(events) if event[0] == "task_state"]
             self.assertTrue(any(event[2] == "failed" for event in task_events))
+
+    def test_auto_subtitle_uses_transcriber(self) -> None:
+        fake = FakeFfmpegService()
+        transcriber = FakeTranscriber()
+        events: "queue.Queue[tuple]" = queue.Queue()
+        service = TestableConverterService(fake, events)
+        service.transcriber = transcriber
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            inp = tmp / "input.mp4"
+            out_dir = tmp / "out"
+            out_dir.mkdir()
+            inp.write_text("video", encoding="utf-8")
+
+            task = TaskItem(path=inp, media_type="video")
+            settings = ConversionSettings(operation="auto_subtitle", out_subtitle_format="srt")
+            service._run([task], settings, out_dir)
+
+            self.assertTrue(transcriber.called)
+            task_events = [event for event in drain_events(events) if event[0] == "task_state"]
+            self.assertTrue(any(event[2] == "success" for event in task_events))
 
 
 if __name__ == "__main__":

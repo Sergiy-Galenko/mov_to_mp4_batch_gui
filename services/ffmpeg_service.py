@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from config.constants import HW_ENCODER_MAP, OPERATION_MAP, PORTRAIT_PRESETS, POSITION_MAP, VIDEO_CODEC_MAP
-from core.models import ConversionSettings, MediaInfo
+from core.models import ConversionSettings, MediaChapter, MediaInfo
 from utils.formatting import build_atempo_chain
 
 
@@ -15,6 +15,43 @@ def escape_drawtext(text: str) -> str:
 
 def escape_filter_path(path: str) -> str:
     return path.replace("\\", "/").replace(":", "\\:")
+
+
+def _ratio_to_float(value: Any) -> Optional[float]:
+    if value in (None, "", "0/0"):
+        return None
+    text = str(value)
+    if "/" in text:
+        num, den = text.split("/", 1)
+        try:
+            numerator = float(num)
+            denominator = float(den)
+        except ValueError:
+            return None
+        if denominator == 0:
+            return None
+        return numerator / denominator
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _guess_dynamic_range(color_transfer: str) -> str:
+    transfer = (color_transfer or "").lower()
+    if transfer in {"smpte2084", "arib-std-b67"}:
+        return "HDR"
+    return "SDR"
+
+
+def _aspect_warning(width: Optional[int], height: Optional[int]) -> Optional[str]:
+    if not width or not height:
+        return None
+    ratio = width / height
+    common = [16 / 9, 9 / 16, 4 / 3, 1.0, 21 / 9]
+    if min(abs(ratio - known) for known in common) > 0.08:
+        return f"Нестандартний aspect ratio: {width}:{height}"
+    return None
 
 
 def _container_supports_codec(ext: str, vcodec: str) -> bool:
@@ -72,7 +109,14 @@ class FfmpegService:
             "-v",
             "error",
             "-show_entries",
-            "format=duration,size,format_name:stream=codec_type,codec_name,width,height",
+            (
+                "format=duration,size,format_name:"
+                "stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,"
+                "color_space,color_transfer,color_primaries,pix_fmt,display_aspect_ratio:"
+                "stream_tags=rotate:stream_side_data=rotation:"
+                "chapter=id,start_time,end_time:chapter_tags=title"
+            ),
+            "-show_chapters",
             "-of",
             "json",
             str(path),
@@ -105,12 +149,64 @@ class FfmpegService:
                 pass
 
         for stream in data.get("streams", []):
-            if stream.get("codec_type") == "video" and info.vcodec is None:
-                info.vcodec = stream.get("codec_name")
-                info.width = stream.get("width")
-                info.height = stream.get("height")
-            if stream.get("codec_type") == "audio" and info.acodec is None:
-                info.acodec = stream.get("codec_name")
+            codec_type = stream.get("codec_type")
+            if codec_type == "video":
+                if info.vcodec is None:
+                    info.vcodec = stream.get("codec_name")
+                    info.width = stream.get("width")
+                    info.height = stream.get("height")
+                    info.fps = _ratio_to_float(stream.get("avg_frame_rate")) or _ratio_to_float(stream.get("r_frame_rate"))
+                    avg_fps = _ratio_to_float(stream.get("avg_frame_rate"))
+                    real_fps = _ratio_to_float(stream.get("r_frame_rate"))
+                    if avg_fps and real_fps:
+                        info.frame_rate_mode = "VFR" if abs(avg_fps - real_fps) > 0.01 else "CFR"
+                    info.color_space = stream.get("color_space")
+                    info.color_transfer = stream.get("color_transfer")
+                    info.color_primaries = stream.get("color_primaries")
+                    info.pix_fmt = stream.get("pix_fmt")
+                    info.display_aspect_ratio = stream.get("display_aspect_ratio")
+                    info.dynamic_range = _guess_dynamic_range(info.color_transfer or "")
+
+                    rotate = stream.get("tags", {}).get("rotate")
+                    if rotate is None:
+                        for side_data in stream.get("side_data_list", []):
+                            if "rotation" in side_data:
+                                rotate = side_data.get("rotation")
+                                break
+                    if rotate is not None:
+                        try:
+                            info.rotation = int(float(rotate))
+                        except ValueError:
+                            info.rotation = None
+                continue
+
+            if codec_type == "audio":
+                info.audio_streams += 1
+                if info.acodec is None:
+                    info.acodec = stream.get("codec_name")
+                continue
+
+            if codec_type == "subtitle":
+                info.subtitle_streams += 1
+
+        for index, chapter in enumerate(data.get("chapters", []), start=1):
+            start_value = _ratio_to_float(chapter.get("start_time")) or 0.0
+            end_value = _ratio_to_float(chapter.get("end_time")) or 0.0
+            if end_value <= start_value:
+                continue
+            title = str(chapter.get("tags", {}).get("title") or "").strip()
+            info.chapters.append(MediaChapter(index=index, start=start_value, end=end_value, title=title))
+
+        if info.width and info.height:
+            if info.width % 2 or info.height % 2:
+                info.warnings.append("Непарна роздільність може бути проблемною для деяких енкодерів.")
+            aspect_warning = _aspect_warning(info.width, info.height)
+            if aspect_warning:
+                info.warnings.append(aspect_warning)
+        if info.rotation not in (None, 0):
+            info.warnings.append(f"Відео має rotation={info.rotation}°.")
+        if info.dynamic_range == "HDR":
+            info.warnings.append("HDR-джерело: перевір тонмапінг для SDR-платформ.")
 
         if info.size_bytes is None:
             try:
@@ -123,7 +219,7 @@ class FfmpegService:
         operation = settings.operation
         if operation == "audio_only":
             return settings.out_audio_format
-        if operation == "subtitle_extract":
+        if operation in {"subtitle_extract", "auto_subtitle"}:
             return settings.out_subtitle_format
         if operation in {"thumbnail", "contact_sheet"}:
             return settings.out_image_format
@@ -259,6 +355,37 @@ class FfmpegService:
         if not chain:
             return None
         return ",".join([f"atempo={factor:.3f}" for factor in chain])
+
+    def build_audio_filter(self, settings: ConversionSettings) -> Optional[str]:
+        filters: List[str] = []
+
+        speed_filter = self.build_audio_speed_filter(settings)
+        if speed_filter:
+            filters.append(speed_filter)
+
+        if settings.trim_silence:
+            silence_duration = max(0.1, float(settings.silence_duration))
+            silence_threshold = int(settings.silence_threshold_db)
+            filters.append(
+                "silenceremove="
+                f"start_periods=1:start_duration={silence_duration:.2f}:start_threshold={silence_threshold}dB:"
+                f"stop_periods=-1:stop_duration={silence_duration:.2f}:stop_threshold={silence_threshold}dB"
+            )
+
+        if settings.normalize_audio == "ebu_r128":
+            filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
+
+        if settings.audio_peak_limit_db is not None:
+            peak_linear = pow(10.0, float(settings.audio_peak_limit_db) / 20.0)
+            peak_linear = max(0.01, min(1.0, peak_linear))
+            filters.append(f"alimiter=limit={peak_linear:.3f}")
+
+        if not filters:
+            return None
+        return ",".join(filters)
+
+    def has_audio_processing(self, settings: ConversionSettings) -> bool:
+        return bool(self.build_audio_filter(settings))
 
     def build_subtitle_burn_filter(self, inp: Path, settings: ConversionSettings, log_cb=None) -> Optional[str]:
         should_burn = settings.operation == "subtitle_burn" or settings.subtitle_mode == "burn_in"
@@ -473,6 +600,18 @@ class FfmpegService:
         copyright_text = settings.meta_copyright.strip()
         if copyright_text:
             args += ["-metadata", f"copyright={copyright_text}"]
+        album = settings.meta_album.strip()
+        if album:
+            args += ["-metadata", f"album={album}"]
+        genre = settings.meta_genre.strip()
+        if genre:
+            args += ["-metadata", f"genre={genre}"]
+        year = settings.meta_year.strip()
+        if year:
+            args += ["-metadata", f"date={year}"]
+        track = settings.meta_track.strip()
+        if track:
+            args += ["-metadata", f"track={track}"]
         return args
 
     def fast_copy_allowed(
@@ -519,6 +658,28 @@ class FfmpegService:
             return False, "Різні кодеки"
         return True, ""
 
+    def _resolve_replace_audio_path(self, settings: ConversionSettings, log_cb=None) -> Optional[Path]:
+        source = settings.replace_audio_path.strip()
+        if not source:
+            return None
+        audio_path = Path(source).expanduser()
+        if not audio_path.exists():
+            if log_cb:
+                log_cb("WARN", f"Файл заміни аудіо не знайдено: {source}")
+            return None
+        return audio_path
+
+    def _resolve_cover_art_path(self, settings: ConversionSettings, log_cb=None) -> Optional[Path]:
+        source = settings.cover_art_path.strip()
+        if not source:
+            return None
+        cover_path = Path(source).expanduser()
+        if not cover_path.exists():
+            if log_cb:
+                log_cb("WARN", f"Cover art не знайдено: {source}")
+            return None
+        return cover_path
+
     def _write_concat_list(self, inputs: List[Path]) -> str:
         tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt", encoding="utf-8")
         with tmp as fh:
@@ -542,12 +703,15 @@ class FfmpegService:
         filter_arg, filter_val, map_label, extra_inputs, filters_used = self.build_video_filter_spec(
             inp, settings, out_ext, log_cb=log_cb
         )
-        audio_filter = self.build_audio_speed_filter(settings)
+        audio_filter = self.build_audio_filter(settings)
+        replace_audio = self._resolve_replace_audio_path(settings, log_cb=log_cb)
 
-        if allow_fast_copy:
+        if allow_fast_copy and replace_audio is None:
+            track_index = max(0, int(settings.audio_track_index))
             cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
             cmd += trim_args
-            cmd += ["-map", "0", "-c", "copy"]
+            cmd += ["-map", "0:v:0?", "-map", f"0:a:{track_index}?", "-map", "0:s?"]
+            cmd += ["-c", "copy"]
             cmd += self.metadata_args(settings)
             if out_ext in {".mp4", ".mov", ".m4v"}:
                 cmd += ["-movflags", "+faststart"]
@@ -557,6 +721,9 @@ class FfmpegService:
         cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
         if extra_inputs:
             cmd += ["-i", extra_inputs[0]]
+        audio_input_index = 1 + len(extra_inputs)
+        if replace_audio is not None:
+            cmd += ["-i", str(replace_audio)]
         cmd += trim_args
 
         if filter_arg:
@@ -569,7 +736,11 @@ class FfmpegService:
             cmd += ["-map", "0:v:0?"]
 
         if out_ext != ".gif":
-            cmd += ["-map", "0:a:0?"]
+            if replace_audio is not None:
+                cmd += ["-map", f"{audio_input_index}:a:0?"]
+            else:
+                track_index = max(0, int(settings.audio_track_index))
+                cmd += ["-map", f"0:a:{track_index}?"]
             if audio_filter:
                 cmd += ["-filter:a", audio_filter]
         else:
@@ -605,6 +776,8 @@ class FfmpegService:
 
         if out_ext in {".mp4", ".mov", ".m4v"}:
             cmd += ["-movflags", "+faststart"]
+        if replace_audio is not None:
+            cmd += ["-shortest"]
 
         cmd += self.metadata_args(settings)
         cmd.append(str(outp))
@@ -620,7 +793,7 @@ class FfmpegService:
         overwrite = "-y" if settings.overwrite else "-n"
         out_ext = outp.suffix.lower()
         trim_args = self.build_trim_args(settings, log_cb=log_cb)
-        audio_filter = self.build_audio_speed_filter(settings)
+        audio_filter = self.build_audio_filter(settings)
         codec_map = {
             ".mp3": "libmp3lame",
             ".m4a": "aac",
@@ -631,13 +804,23 @@ class FfmpegService:
         }
         codec = codec_map.get(out_ext, "aac")
         cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
+        cover_art = self._resolve_cover_art_path(settings, log_cb=log_cb)
+        if cover_art and out_ext in {".mp3", ".m4a", ".aac"}:
+            cmd += ["-i", str(cover_art)]
         cmd += trim_args
-        cmd += ["-vn", "-sn", "-map", "0:a:0?"]
+        track_index = max(0, int(settings.audio_track_index))
+        cmd += ["-vn", "-sn", "-map", f"0:a:{track_index}?"]
+        if cover_art and out_ext in {".mp3", ".m4a", ".aac"}:
+            cmd += ["-map", "1:v:0"]
         if audio_filter:
             cmd += ["-filter:a", audio_filter]
         cmd += ["-c:a", codec]
         if codec in {"libmp3lame", "aac", "libopus"}:
             cmd += ["-b:a", settings.audio_bitrate or "192k"]
+        if cover_art and out_ext in {".mp3", ".m4a", ".aac"}:
+            cmd += ["-c:v", "mjpeg", "-disposition:v:0", "attached_pic"]
+            if out_ext == ".mp3":
+                cmd += ["-id3v2_version", "3"]
         cmd += self.metadata_args(settings)
         cmd.append(str(outp))
         return cmd
@@ -749,7 +932,7 @@ class FfmpegService:
         filter_arg, filter_val, map_label, extra_inputs, _ = self.build_video_filter_spec(
             inputs[0], settings, out_ext, log_cb=log_cb
         )
-        audio_filter = self.build_audio_speed_filter(settings)
+        audio_filter = self.build_audio_filter(settings)
 
         cmd = [self.ffmpeg_path, overwrite, "-f", "concat", "-safe", "0", "-i", list_path]
         if extra_inputs:
@@ -757,7 +940,9 @@ class FfmpegService:
         cmd += trim_args
 
         if allow_fast_copy:
-            cmd += ["-map", "0", "-c", "copy"]
+            track_index = max(0, int(settings.audio_track_index))
+            cmd += ["-map", "0:v:0?", "-map", f"0:a:{track_index}?", "-map", "0:s?"]
+            cmd += ["-c", "copy"]
             cmd += self.metadata_args(settings)
             if out_ext in {".mp4", ".mov", ".m4v"}:
                 cmd += ["-movflags", "+faststart"]
@@ -774,7 +959,8 @@ class FfmpegService:
             cmd += ["-map", "0:v:0?"]
 
         if out_ext != ".gif":
-            cmd += ["-map", "0:a:0?"]
+            track_index = max(0, int(settings.audio_track_index))
+            cmd += ["-map", f"0:a:{track_index}?"]
             if audio_filter:
                 cmd += ["-filter:a", audio_filter]
         else:

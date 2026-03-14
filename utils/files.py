@@ -1,3 +1,4 @@
+import hashlib
 import re
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +46,17 @@ def safe_output_path(out_path: Path) -> Path:
         if not candidate.exists():
             return candidate
         i += 1
+
+
+def file_sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        while True:
+            chunk = fh.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class _TemplateDict(dict):
