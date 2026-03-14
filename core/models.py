@@ -43,6 +43,7 @@ class TaskItem:
     last_error: str = ""
     attempts: int = 0
     last_output: str = ""
+    preview_output: str = ""
     content_hash: str = ""
     overrides: Dict[str, Any] = field(default_factory=dict)
     resolved_settings: Optional["ConversionSettings"] = None

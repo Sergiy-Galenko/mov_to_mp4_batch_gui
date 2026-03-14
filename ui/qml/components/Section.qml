@@ -12,8 +12,8 @@ Rectangle {
     border.width: 1
     border.color: Qt.rgba(0.22, 0.34, 0.50, 0.95)
     radius: Theme.radiusSection
-    implicitWidth: bodyLayout.implicitWidth + Theme.space2 * 2
-    implicitHeight: bodyLayout.implicitHeight + Theme.space2 * 2 + titleLabel.implicitHeight
+    implicitWidth: bodyLayout.implicitWidth + Theme.sectionPadding * 2
+    implicitHeight: bodyLayout.implicitHeight + Theme.sectionPadding * 2 + titleLabel.implicitHeight
     Layout.fillWidth: true
 
     Rectangle {
@@ -26,8 +26,8 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.space2
-        spacing: Theme.space1
+        anchors.margins: Theme.sectionPadding
+        spacing: Theme.space2
 
         RowLayout {
             Layout.fillWidth: true
@@ -53,7 +53,7 @@ Rectangle {
 
         ColumnLayout {
             id: bodyLayout
-            spacing: Theme.space1
+            spacing: Theme.space2
         }
     }
 }

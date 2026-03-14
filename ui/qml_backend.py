@@ -45,6 +45,7 @@ class QueueModel(QtCore.QAbstractListModel):
     AttemptsRole = QtCore.Qt.UserRole + 7
     HasOverrideRole = QtCore.Qt.UserRole + 8
     OutputRole = QtCore.Qt.UserRole + 9
+    PreviewRole = QtCore.Qt.UserRole + 10
 
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
@@ -77,6 +78,8 @@ class QueueModel(QtCore.QAbstractListModel):
             return bool(item.overrides)
         if role == self.OutputRole:
             return item.last_output
+        if role == self.PreviewRole:
+            return item.preview_output
         return None
 
     def roleNames(self) -> Dict[int, bytes]:
@@ -90,6 +93,7 @@ class QueueModel(QtCore.QAbstractListModel):
             self.AttemptsRole: b"attempts",
             self.HasOverrideRole: b"hasOverride",
             self.OutputRole: b"outputPath",
+            self.PreviewRole: b"previewOutput",
         }
 
     def items(self) -> List[TaskItem]:
@@ -137,6 +141,16 @@ class QueueModel(QtCore.QAbstractListModel):
             self.update_item(idx, item)
             return
 
+    def set_preview_output(self, task_path: Path, preview_output: str) -> None:
+        for idx, item in enumerate(self._items):
+            if item.path != task_path:
+                continue
+            if item.preview_output == preview_output:
+                return
+            item.preview_output = preview_output
+            self.update_item(idx, item)
+            return
+
     def paths_set(self) -> set[Path]:
         return {item.path for item in self._items}
 
@@ -168,6 +182,8 @@ class Backend(QtCore.QObject):
     watchRunningChanged = QtCore.Signal()
     outputPreviewChanged = QtCore.Signal()
     historyChanged = QtCore.Signal()
+    queueStatsChanged = QtCore.Signal()
+    onboardingChanged = QtCore.Signal()
     taskOverrideLoaded = QtCore.Signal(dict)
     watermarkPicked = QtCore.Signal(str)
     fontPicked = QtCore.Signal(str)
@@ -191,6 +207,8 @@ class Backend(QtCore.QObject):
         self._selected_index = -1
         self._last_settings_map: Dict[str, Any] = {}
         self._output_preview_text = "Preview ще не згенеровано."
+        self._selected_preview_source = "—"
+        self._selected_preview_output = "—"
         self._history_entries = load_json_file(HISTORY_STORE) or []
         if not isinstance(self._history_entries, list):
             self._history_entries = []
@@ -207,6 +225,7 @@ class Backend(QtCore.QObject):
         self._output_dir = str(app_state.get("output_dir") or DEFAULT_OUTPUT_DIR)
         self._encoder_info = "Доступні: --"
         self._status_text = "Готово"
+        self._show_onboarding = not bool(app_state.get("onboarding_completed"))
         self._file_progress = 0.0
         self._total_progress = 0.0
         self._file_progress_text = "Файл: --"
@@ -303,6 +322,10 @@ class Backend(QtCore.QObject):
     def watchRunning(self) -> bool:
         return self._watch_running
 
+    @QtCore.Property(bool, notify=onboardingChanged)
+    def onboardingVisible(self) -> bool:
+        return self._show_onboarding
+
     @QtCore.Property(str, notify=encoderInfoChanged)
     def encoderInfo(self) -> str:
         return self._encoder_info
@@ -367,6 +390,14 @@ class Backend(QtCore.QObject):
     def outputPreviewText(self) -> str:
         return self._output_preview_text
 
+    @QtCore.Property(str, notify=outputPreviewChanged)
+    def selectedPreviewSource(self) -> str:
+        return self._selected_preview_source
+
+    @QtCore.Property(str, notify=outputPreviewChanged)
+    def selectedPreviewOutput(self) -> str:
+        return self._selected_preview_output
+
     @QtCore.Property(str, notify=historyChanged)
     def historyText(self) -> str:
         if not self._history_entries:
@@ -386,6 +417,22 @@ class Backend(QtCore.QObject):
             )
         return "\n".join(lines) or "Історія запусків порожня."
 
+    @QtCore.Property(int, notify=queueStatsChanged)
+    def queueCount(self) -> int:
+        return len(self.queue_model.items())
+
+    @QtCore.Property(int, notify=queueStatsChanged)
+    def completedCount(self) -> int:
+        return sum(1 for item in self.queue_model.items() if item.status in {"success", "skipped"})
+
+    @QtCore.Property(int, notify=queueStatsChanged)
+    def failedCount(self) -> int:
+        return sum(1 for item in self.queue_model.items() if item.status == "failed")
+
+    @QtCore.Property(int, notify=queueStatsChanged)
+    def runningCount(self) -> int:
+        return sum(1 for item in self.queue_model.items() if item.status == "running")
+
     def _serialize_task(self, item: TaskItem) -> Dict[str, Any]:
         return {
             "path": str(item.path),
@@ -394,6 +441,7 @@ class Backend(QtCore.QObject):
             "last_error": item.last_error,
             "attempts": item.attempts,
             "last_output": item.last_output,
+            "preview_output": item.preview_output,
             "content_hash": item.content_hash,
             "overrides": dict(item.overrides),
         }
@@ -420,6 +468,7 @@ class Backend(QtCore.QObject):
                     last_error=str(raw.get("last_error") or ""),
                     attempts=int(raw.get("attempts") or 0),
                     last_output=str(raw.get("last_output") or ""),
+                    preview_output=str(raw.get("preview_output") or ""),
                     content_hash=str(raw.get("content_hash") or ""),
                     overrides=dict(raw.get("overrides") or {}),
                 )
@@ -439,6 +488,7 @@ class Backend(QtCore.QObject):
                 "last_settings": self._last_settings_map,
                 "queue_items": [self._serialize_task(item) for item in self.queue_model.items()],
                 "pending_recovery": bool(pending_recovery),
+                "onboarding_completed": not self._show_onboarding,
             },
         )
 
@@ -453,6 +503,18 @@ class Backend(QtCore.QObject):
             return
         self._output_preview_text = value
         self.outputPreviewChanged.emit()
+
+    def _set_selected_preview(self, source: str, output_name: str) -> None:
+        source_value = source or "—"
+        output_value = output_name or "—"
+        if self._selected_preview_source == source_value and self._selected_preview_output == output_value:
+            return
+        self._selected_preview_source = source_value
+        self._selected_preview_output = output_value
+        self.outputPreviewChanged.emit()
+
+    def _notify_queue_stats(self) -> None:
+        self.queueStatsChanged.emit()
 
     def _refresh_recent_folders(self) -> None:
         self.recent_folders_model.setStringList(self._recent_folders)
@@ -537,6 +599,14 @@ class Backend(QtCore.QObject):
         if folder:
             self.outputDir = folder
 
+    @QtCore.Slot()
+    def dismissOnboarding(self) -> None:
+        if not self._show_onboarding:
+            return
+        self._show_onboarding = False
+        self.onboardingChanged.emit()
+        self._save_state()
+
     @QtCore.Slot(int, str)
     def useRecentFolder(self, index: int, target: str) -> None:
         if index < 0 or index >= len(self._recent_folders):
@@ -567,6 +637,24 @@ class Backend(QtCore.QObject):
             self._remember_folder(str(paths[0].parent))
         self._add_paths(paths)
 
+    @QtCore.Slot("QVariantList")
+    def addDroppedUrls(self, urls: List[Any]) -> None:
+        paths: List[Path] = []
+        for value in urls:
+            if isinstance(value, QtCore.QUrl):
+                local_path = value.toLocalFile()
+            else:
+                local_path = QtCore.QUrl(str(value)).toLocalFile()
+            if local_path:
+                path = Path(local_path)
+                if path.is_dir():
+                    paths.extend([p for p in path.rglob("*") if p.is_file()])
+                else:
+                    paths.append(path)
+        if paths:
+            self._remember_folder(str(paths[0].parent))
+            self._add_paths(paths)
+
     @QtCore.Slot()
     def addFolder(self) -> None:
         folder = QtWidgets.QFileDialog.getExistingDirectory(None, "Додати папку")
@@ -591,6 +679,7 @@ class Backend(QtCore.QObject):
             added.append(TaskItem(path=resolved, media_type=mtype))
         if added:
             self.queue_model.add_items(added)
+            self._notify_queue_stats()
             self._append_log("OK", f"Додано файлів: {len(added)}")
             if self._last_settings_map:
                 self._refresh_output_preview(dict(self._last_settings_map))
@@ -612,6 +701,7 @@ class Backend(QtCore.QObject):
             seen.add(item.path)
             unique.append(item)
         self.queue_model.set_items(unique)
+        self._notify_queue_stats()
         if self._last_settings_map:
             self._refresh_output_preview(dict(self._last_settings_map))
         self._save_state()
@@ -645,6 +735,7 @@ class Backend(QtCore.QObject):
                 seen[key] = item
             unique.append(item)
         self.queue_model.set_items(unique)
+        self._notify_queue_stats()
         if self._last_settings_map:
             self._refresh_output_preview(dict(self._last_settings_map))
         self._save_state()
@@ -674,6 +765,7 @@ class Backend(QtCore.QObject):
             rest = [item for idx, item in enumerate(items) if idx not in selected]
             items = rest + moved
         self.queue_model.set_items(items)
+        self._notify_queue_stats()
         if self._last_settings_map:
             self._refresh_output_preview(dict(self._last_settings_map))
         self._save_state()
@@ -701,6 +793,7 @@ class Backend(QtCore.QObject):
         remove_set = set(indices)
         keep = [item for idx, item in enumerate(self.queue_model.items()) if idx not in remove_set]
         self.queue_model.set_items(keep)
+        self._notify_queue_stats()
         if self._last_settings_map:
             self._refresh_output_preview(dict(self._last_settings_map))
         self._save_state()
@@ -710,7 +803,9 @@ class Backend(QtCore.QObject):
     @QtCore.Slot()
     def clearQueue(self) -> None:
         self.queue_model.set_items([])
+        self._notify_queue_stats()
         self._set_output_preview("Черга порожня.")
+        self._set_selected_preview("—", "—")
         self._save_state()
         self._append_log("INFO", "Чергу очищено")
         self._clear_info()
@@ -769,8 +864,10 @@ class Backend(QtCore.QObject):
         task = self.queue_model.item_at(index)
         if task is None:
             self._clear_info()
+            self._set_selected_preview("—", "—")
             self.taskOverrideLoaded.emit({})
             return
+        self._set_selected_preview(task.path.name, task.preview_output or "—")
         self._info_name = task.path.name
         self._info_duration = "--:--"
         self._info_codec = "—"
@@ -914,6 +1011,7 @@ class Backend(QtCore.QObject):
     def _refresh_output_preview(self, settings_map: Dict[str, Any]) -> None:
         if not self.queue_model.items():
             self._set_output_preview("Черга порожня.")
+            self._set_selected_preview("—", "—")
             return
         out_dir = Path(self.outputDir).expanduser()
         lines: List[str] = []
@@ -932,6 +1030,11 @@ class Backend(QtCore.QObject):
                 overwrite=resolved.overwrite,
                 skip_existing=resolved.skip_existing,
             )
+            self.queue_model.set_preview_output(item.path, preview_path.name)
+            if self._selected_index >= 0:
+                current = self.queue_model.item_at(self._selected_index)
+                if current and current.path == item.path:
+                    self._set_selected_preview(item.path.name, preview_path.name)
             lines.append(f"{item.path.name} -> {preview_path.name}")
         if len(lines) > 14:
             remaining = len(lines) - 14
@@ -984,6 +1087,7 @@ class Backend(QtCore.QObject):
             return
         queue_items = self._deserialize_queue_items(payload.get("queue_items", []), pending_recovery=False)
         self.queue_model.set_items(queue_items)
+        self._notify_queue_stats()
         self._last_settings_map = dict(payload.get("settings") or {})
         self.outputDir = str(payload.get("output_dir") or self.outputDir)
         imported_ffmpeg = str(payload.get("ffmpeg_path") or "").strip()
@@ -1017,6 +1121,7 @@ class Backend(QtCore.QObject):
                     last_error="",
                     attempts=item.attempts,
                     last_output=item.last_output,
+                    preview_output=item.preview_output,
                     overrides=dict(item.overrides),
                     resolved_settings=resolved,
                 )
@@ -1062,6 +1167,7 @@ class Backend(QtCore.QObject):
         if failed_only:
             paths = {task.path for task in run_tasks}
             self.queue_model.clear_statuses(paths=paths)
+            self._notify_queue_stats()
         self.converter.start(run_tasks, base_settings, out_dir)
 
     @QtCore.Slot("QVariantMap")
@@ -1184,6 +1290,7 @@ class Backend(QtCore.QObject):
                 elif etype == "task_state":
                     _, path, status, message, output_path = event
                     self.queue_model.update_task_state(path, status, message, output_path)
+                    self._notify_queue_stats()
                     self._save_state()
                 elif etype == "run_summary":
                     _, summary = event

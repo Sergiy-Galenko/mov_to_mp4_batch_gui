@@ -51,19 +51,22 @@ ApplicationWindow {
 
     property real layoutWidth: Math.min(contentWrap.availableWidth, Theme.maxWidth)
     property int headerColumns: layoutWidth < 760 ? 1 : layoutWidth < 1080 ? 2 : 4
+    property int dashboardColumns: layoutWidth < 700 ? 2 : 4
     property int workspaceColumns: layoutWidth < Theme.compactBreakpoint ? 1 : 2
     property real paneWidth: workspaceColumns === 1 ? layoutWidth : Math.max((layoutWidth - Theme.space2) / 2, 0)
     property int formColumns: paneWidth < 740 ? 1 : 2
     property int queueActionColumns: paneWidth < 440 ? 1 : paneWidth < 760 ? 2 : 4
     property int dualActionColumns: paneWidth < 560 ? 1 : 2
     property int tripleActionColumns: paneWidth < 540 ? 1 : paneWidth < 760 ? 2 : 3
+    property int presetColumns: paneWidth < 560 ? 1 : paneWidth < 980 ? 2 : 3
     property int statusColumns: layoutWidth < 560 ? 1 : layoutWidth < 900 ? 2 : layoutWidth < 1160 ? 3 : 5
     property bool compact: formColumns === 1
     property bool hasBackend: backend !== null
     property var selectedQueue: []
     property int currentTab: 0
     property string inheritLabel: "За замовчуванням"
-    property var operationTabs: ["Основні", "Редагування", "Пресети", "Покращення", "Метадані"]
+    property bool queueEmpty: queueList.count === 0
+    property var operationTabs: ["Старт", "Відео", "Фото", "Аудіо", "Субтитри", "Проєкт", "Система"]
     property var operationOptions: [
         "Конвертація",
         "Лише аудіо",
@@ -73,13 +76,22 @@ ApplicationWindow {
         "Thumbnail",
         "Contact sheet"
     ]
-    property var platformPresetNames: [
-        "YouTube • 1080p H.264",
-        "TikTok • 9:16",
-        "Instagram Reels • 9:16",
-        "Instagram Stories • 9:16",
-        "Telegram • Compact MP4",
-        "WhatsApp • Share MP4"
+    property var operationQuickCards: [
+        { name: "Конвертація", title: "Відео", meta: "Перекодування, resize, crop, watermark" },
+        { name: "Лише аудіо", title: "Аудіо", meta: "Витяг доріжки, normalize, cover art" },
+        { name: "Авто субтитри", title: "AI субтитри", meta: "Whisper transcription у SRT/VTT" },
+        { name: "Extract subtitle", title: "Extract subtitle", meta: "Витяг вбудованої subtitle доріжки" },
+        { name: "Burn-in subtitle", title: "Burn-in subtitle", meta: "Вшити субтитри у відео" },
+        { name: "Thumbnail", title: "Thumbnail", meta: "Один кадр у JPG/PNG/WebP" },
+        { name: "Contact sheet", title: "Contact sheet", meta: "Лист із кількох кадрів" }
+    ]
+    property var platformPresetCards: [
+        { name: "YouTube • 1080p H.264", title: "YouTube", meta: "16:9 • MP4 • H.264", badge: "1080p" },
+        { name: "TikTok • 9:16", title: "TikTok", meta: "9:16 • MP4 • Fast", badge: "Vertical" },
+        { name: "Instagram Reels • 9:16", title: "Reels", meta: "9:16 • MP4 • Social", badge: "Reel" },
+        { name: "Instagram Stories • 9:16", title: "Stories", meta: "9:16 • Crop • Quick", badge: "Story" },
+        { name: "Telegram • Compact MP4", title: "Telegram", meta: "720p • Compact • Share", badge: "Light" },
+        { name: "WhatsApp • Share MP4", title: "WhatsApp", meta: "480p • Small size", badge: "Mobile" }
     ]
     property var videoFormats: ["mp4", "mkv", "webm", "mov", "avi", "gif"]
     property var imageFormats: ["jpg", "png", "webp", "bmp", "tiff"]
@@ -122,7 +134,47 @@ ApplicationWindow {
         if (status === "skipped")
             return Theme.warning
         if (status === "running")
-            return Theme.accent
+            return Theme.running
+        return Theme.muted
+    }
+
+    function statusSurfaceColor(status) {
+        if (status === "success")
+            return Theme.successSoft
+        if (status === "failed")
+            return Theme.dangerSoft
+        if (status === "skipped")
+            return Theme.warningSoft
+        if (status === "running")
+            return Theme.runningSoft
+        return Theme.sectionAlt
+    }
+
+    function statusBorderColor(status) {
+        if (status === "success")
+            return Qt.rgba(0.18, 0.80, 0.60, 0.45)
+        if (status === "failed")
+            return Qt.rgba(1.0, 0.48, 0.54, 0.45)
+        if (status === "skipped")
+            return Qt.rgba(0.96, 0.77, 0.33, 0.45)
+        if (status === "running")
+            return Qt.rgba(0.33, 0.72, 1.0, 0.45)
+        return Theme.border
+    }
+
+    function mediaGlyph(mediaType) {
+        if (mediaType === "video")
+            return "VID"
+        if (mediaType === "image")
+            return "IMG"
+        return "MED"
+    }
+
+    function mediaColor(mediaType) {
+        if (mediaType === "video")
+            return Theme.running
+        if (mediaType === "image")
+            return Theme.accent2
         return Theme.muted
     }
 
@@ -398,61 +450,166 @@ ApplicationWindow {
 
                 Card {
                     ColumnLayout {
-                        spacing: Theme.space2
+                        spacing: Theme.space3
 
-                        Label {
-                            text: "MEDIA CONVERTER STUDIO"
-                            color: Theme.accent2
-                            font.pixelSize: 11
-                            font.weight: Font.DemiBold
-                            font.letterSpacing: 1.6
-                        }
-
-                        Label {
-                            text: backend ? backend.appTitle : "Media Converter"
-                            font.pixelSize: 26
-                            font.weight: Font.Black
-                            color: Theme.text
-                        }
-
-                        Label {
-                            text: "Пакетна обробка медіа з сильним production-набором: conversion, audio export, subtitle flow, thumbnails і queue automation."
-                            color: Theme.muted
-                            wrapMode: Text.WordWrap
-                            font.pixelSize: 14
-                        }
-
-                        Flow {
+                        RowLayout {
                             Layout.fillWidth: true
-                            spacing: Theme.space1
+                            spacing: Theme.space3
 
-                            Repeater {
-                                model: [
-                                    "Queue: " + queueList.count,
-                                    "Status: " + (backend ? backend.statusText : "Готово"),
-                                    "Watch: " + (backend && backend.watchRunning ? "ON" : "OFF")
-                                ]
-                                delegate: Rectangle {
-                                    radius: Theme.radiusPill
-                                    color: Theme.panelAlt
-                                    border.width: 1
-                                    border.color: Theme.border
-                                    implicitWidth: chipLabel.implicitWidth + 18
-                                    implicitHeight: 30
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: Theme.space1
+
+                                Label {
+                                    text: "MEDIA CONVERTER STUDIO"
+                                    color: Theme.accent2
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    font.letterSpacing: 1.6
+                                }
+
+                                Label {
+                                    text: backend ? backend.appTitle : "Media Converter"
+                                    font.pixelSize: 28
+                                    font.weight: Font.Black
+                                    color: Theme.text
+                                }
+
+                                Label {
+                                    text: "Черга, пресети під платформи, audio workflow, AI subtitle, preview і production-ready batch automation."
+                                    color: Theme.muted
+                                    wrapMode: Text.WordWrap
+                                    font.pixelSize: 14
+                                    Layout.fillWidth: true
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.preferredWidth: compact ? 0 : 240
+                                Layout.fillWidth: !compact
+                                Layout.alignment: Qt.AlignTop
+                                visible: !compact
+                                radius: Theme.radiusSection
+                                color: Theme.sectionAlt
+                                border.width: 1
+                                border.color: Theme.borderStrong
+                                implicitHeight: 102
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.sectionPadding
+                                    spacing: Theme.space1
 
                                     Label {
-                                        id: chipLabel
-                                        anchors.centerIn: parent
-                                        text: modelData
+                                        text: "System status"
+                                        color: Theme.muted
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                        font.letterSpacing: 1.2
+                                    }
+
+                                    Label {
+                                        text: backend ? backend.statusText : "Готово"
                                         color: Theme.text
-                                        font.pixelSize: 12
-                                        font.weight: Font.Medium
+                                        font.pixelSize: 18
+                                        font.weight: Font.Bold
+                                    }
+
+                                    Label {
+                                        text: backend ? backend.encoderInfo : "Доступні: --"
+                                        color: Theme.subtleText
+                                        wrapMode: Text.WordWrap
+                                        font.pixelSize: 11
+                                        Layout.fillWidth: true
                                     }
                                 }
                             }
                         }
 
-                            GridLayout {
+                        GridLayout {
+                            columns: root.dashboardColumns
+                            columnSpacing: Theme.space2
+                            rowSpacing: Theme.space2
+                            Layout.fillWidth: true
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: Theme.radiusSection
+                                color: Theme.runningSoft
+                                border.width: 1
+                                border.color: root.statusBorderColor("running")
+                                implicitHeight: 88
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.sectionPadding
+                                    spacing: Theme.space0
+
+                                    Label { text: "В черзі"; color: Theme.muted; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                    Label { text: backend ? backend.queueCount : 0; color: Theme.running; font.pixelSize: 24; font.weight: Font.Black }
+                                    Label { text: backend && backend.runningCount > 0 ? "Є активна обробка" : "Очікує запуск"; color: Theme.subtleText; font.pixelSize: 11 }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: Theme.radiusSection
+                                color: Theme.successSoft
+                                border.width: 1
+                                border.color: root.statusBorderColor("success")
+                                implicitHeight: 88
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.sectionPadding
+                                    spacing: Theme.space0
+
+                                    Label { text: "Готово"; color: Theme.muted; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                    Label { text: backend ? backend.completedCount : 0; color: Theme.success; font.pixelSize: 24; font.weight: Font.Black }
+                                    Label { text: "Success + skipped"; color: Theme.subtleText; font.pixelSize: 11 }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: Theme.radiusSection
+                                color: Theme.dangerSoft
+                                border.width: 1
+                                border.color: root.statusBorderColor("failed")
+                                implicitHeight: 88
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.sectionPadding
+                                    spacing: Theme.space0
+
+                                    Label { text: "Помилки"; color: Theme.muted; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                    Label { text: backend ? backend.failedCount : 0; color: Theme.danger; font.pixelSize: 24; font.weight: Font.Black }
+                                    Label { text: "Потребують retry"; color: Theme.subtleText; font.pixelSize: 11 }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: Theme.radiusSection
+                                color: backend && backend.watchRunning ? Theme.warningSoft : Theme.sectionAlt
+                                border.width: 1
+                                border.color: backend && backend.watchRunning ? root.statusBorderColor("skipped") : Theme.border
+                                implicitHeight: 88
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.sectionPadding
+                                    spacing: Theme.space0
+
+                                    Label { text: "Watch"; color: Theme.muted; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                    Label { text: backend && backend.watchRunning ? "ON" : "OFF"; color: backend && backend.watchRunning ? Theme.warning : Theme.text; font.pixelSize: 24; font.weight: Font.Black }
+                                    Label { text: backend && backend.watchRunning ? "Папка моніториться" : "Неактивно"; color: Theme.subtleText; font.pixelSize: 11 }
+                                }
+                            }
+                        }
+
+                        GridLayout {
                             columns: root.headerColumns
                             columnSpacing: Theme.space2
                             rowSpacing: Theme.space1
@@ -485,12 +642,17 @@ ApplicationWindow {
                             Repeater {
                                 model: root.operationTabs
                                 delegate: Rectangle {
+                                    id: tabPill
                                     radius: Theme.radiusPill
-                                    color: index === root.currentTab ? Theme.accent : Theme.section
-                                    border.color: index === root.currentTab ? Theme.accent2 : Theme.border
+                                    color: index === root.currentTab ? Theme.accent : tabMouse.containsMouse ? Theme.sectionAlt : Theme.section
+                                    border.color: index === root.currentTab ? Theme.accent2 : tabMouse.containsMouse ? Theme.borderStrong : Theme.border
                                     border.width: 1
                                     height: 36
                                     implicitWidth: tabLabel.implicitWidth + Theme.space2 * 2 + 6
+                                    scale: tabMouse.pressed ? 0.98 : tabMouse.containsMouse ? 1.02 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                    Behavior on scale { NumberAnimation { duration: 120 } }
 
                                     Label {
                                         id: tabLabel
@@ -502,7 +664,9 @@ ApplicationWindow {
                                     }
 
                                     MouseArea {
+                                        id: tabMouse
                                         anchors.fill: parent
+                                        hoverEnabled: true
                                         onClicked: root.currentTab = index
                                     }
                                 }
@@ -526,97 +690,210 @@ ApplicationWindow {
                         title: "Черга"
 
                         ColumnLayout {
-                            spacing: Theme.space1
+                            spacing: Theme.space2
+
+                            Rectangle {
+                                visible: root.queueEmpty
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: root.compact ? 260 : 300
+                                radius: Theme.radiusSection
+                                color: dropZone.containsDrag ? Theme.sectionAlt : Theme.section
+                                border.width: 1
+                                border.color: dropZone.containsDrag ? Theme.focusRing : Theme.border
+
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    width: Math.min(parent.width - Theme.space4 * 2, 420)
+                                    spacing: Theme.space2
+
+                                    Rectangle {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        width: 74
+                                        height: 74
+                                        radius: 22
+                                        color: Theme.panelAlt
+                                        border.width: 1
+                                        border.color: dropZone.containsDrag ? Theme.focusRing : Theme.borderStrong
+
+                                        Label {
+                                            anchors.centerIn: parent
+                                            text: "DROP"
+                                            color: Theme.accent2
+                                            font.pixelSize: 16
+                                            font.weight: Font.Black
+                                        }
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: "Перетягни файли або папку прямо сюди"
+                                        color: Theme.text
+                                        horizontalAlignment: Text.AlignHCenter
+                                        wrapMode: Text.WordWrap
+                                        font.pixelSize: 18
+                                        font.weight: Font.Bold
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: "Hero-зона для першого запуску: drop media, далі застосуй preset і перевір output preview."
+                                        color: Theme.muted
+                                        horizontalAlignment: Text.AlignHCenter
+                                        wrapMode: Text.WordWrap
+                                        font.pixelSize: 12
+                                    }
+
+                                    GridLayout {
+                                        columns: root.dualActionColumns
+                                        Layout.fillWidth: true
+                                        columnSpacing: Theme.space1
+                                        rowSpacing: Theme.space1
+
+                                        SecondaryButton { text: "Додати файли"; onClicked: if (backend) backend.addFiles() }
+                                        GhostButton { text: "Додати папку"; onClicked: if (backend) backend.addFolder() }
+                                    }
+                                }
+
+                                DropArea {
+                                    id: dropZone
+                                    anchors.fill: parent
+                                    onDropped: {
+                                        if (backend)
+                                            backend.addDroppedUrls(drop.urls)
+                                        clearSelection()
+                                    }
+                                }
+                            }
 
                             ScrollView {
+                                visible: !root.queueEmpty
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: root.compact ? 220 : 260
+                                Layout.preferredHeight: root.compact ? 280 : 360
                                 background: Rectangle { color: "transparent" }
 
                                 ListView {
                                     id: queueList
                                     model: backend ? backend.queueModel : null
                                     clip: true
-                                    spacing: 6
+                                    spacing: Theme.space1
 
                                     delegate: Rectangle {
+                                        id: queueCard
+                                        property bool hovered: queueHover.hovered
                                         width: ListView.view.width
-                                        height: 64
-                                        radius: 14
-                                        color: ListView.isCurrentItem ? Theme.panelAlt : Theme.section
+                                        height: 94
+                                        radius: Theme.radiusSection
+                                        color: ListView.isCurrentItem ? Theme.panelHover : hovered ? Theme.sectionAlt : Theme.section
                                         border.width: 1
-                                        border.color: ListView.isCurrentItem ? Theme.borderStrong : Theme.border
+                                        border.color: ListView.isCurrentItem ? Theme.focusRing : hovered ? Theme.borderStrong : Theme.border
 
                                         RowLayout {
                                             anchors.fill: parent
-                                            anchors.margins: 8
-                                            spacing: 8
+                                            anchors.margins: 12
+                                            spacing: Theme.space2
 
                                             AppCheckBox {
                                                 checked: selectedQueue.indexOf(index) !== -1
                                                 onToggled: toggleQueueIndex(index, checked)
                                             }
 
+                                            Rectangle {
+                                                width: 46
+                                                height: 46
+                                                radius: 14
+                                                color: Qt.rgba(mediaColor(model.mediaType).r, mediaColor(model.mediaType).g, mediaColor(model.mediaType).b, 0.14)
+                                                border.width: 1
+                                                border.color: Qt.rgba(mediaColor(model.mediaType).r, mediaColor(model.mediaType).g, mediaColor(model.mediaType).b, 0.40)
+                                                Layout.alignment: Qt.AlignTop
+
+                                                Label {
+                                                    anchors.centerIn: parent
+                                                    text: mediaGlyph(model.mediaType)
+                                                    color: mediaColor(model.mediaType)
+                                                    font.pixelSize: 12
+                                                    font.weight: Font.Black
+                                                }
+                                            }
+
                                             ColumnLayout {
                                                 Layout.fillWidth: true
-                                                spacing: 2
+                                                spacing: Theme.space0
 
                                                 RowLayout {
                                                     Layout.fillWidth: true
-                                                    spacing: 6
+                                                    spacing: Theme.space1
 
                                                     Label {
-                                                        text: model.display
+                                                        text: model.name
                                                         color: Theme.text
                                                         elide: Text.ElideRight
                                                         Layout.fillWidth: true
-                                                        font.weight: Font.Medium
+                                                        font.pixelSize: 13
+                                                        font.weight: Font.Bold
                                                     }
 
                                                     Rectangle {
                                                         visible: model.hasOverride
                                                         radius: Theme.radiusPill
-                                                        color: Theme.accent
+                                                        color: Theme.accentSoft
                                                         border.width: 1
                                                         border.color: Theme.accent2
-                                                        implicitWidth: overrideLabel.implicitWidth + 10
-                                                        implicitHeight: 22
+                                                        implicitWidth: overrideLabel.implicitWidth + 14
+                                                        implicitHeight: 24
 
                                                         Label {
                                                             id: overrideLabel
                                                             anchors.centerIn: parent
-                                                            text: "OVR"
-                                                            color: "#FFFFFF"
-                                                            font.pixelSize: 11
+                                                            text: "OVERRIDE"
+                                                            color: Theme.accent2
+                                                            font.pixelSize: 10
+                                                            font.weight: Font.Black
+                                                            font.letterSpacing: 0.8
                                                         }
                                                     }
                                                 }
 
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: "Source: " + model.name
+                                                    color: Theme.subtleText
+                                                    elide: Text.ElideRight
+                                                    font.pixelSize: 11
+                                                }
+
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: "Output: " + (model.previewOutput && model.previewOutput.length > 0 ? model.previewOutput : "—")
+                                                    color: Theme.muted
+                                                    elide: Text.ElideRight
+                                                    font.pixelSize: 12
+                                                }
+
                                                 RowLayout {
                                                     Layout.fillWidth: true
-                                                    spacing: 8
+                                                    spacing: Theme.space1
 
                                                     Rectangle {
                                                         radius: Theme.radiusPill
-                                                        color: Qt.rgba(statusColor(model.status).r, statusColor(model.status).g, statusColor(model.status).b, 0.14)
+                                                        color: root.statusSurfaceColor(model.status)
                                                         border.width: 1
-                                                        border.color: Qt.rgba(statusColor(model.status).r, statusColor(model.status).g, statusColor(model.status).b, 0.4)
+                                                        border.color: root.statusBorderColor(model.status)
                                                         implicitWidth: statusLabel.implicitWidth + 14
-                                                        implicitHeight: 22
+                                                        implicitHeight: 24
 
                                                         Label {
                                                             id: statusLabel
                                                             anchors.centerIn: parent
                                                             text: model.status
-                                                            color: statusColor(model.status)
+                                                            color: root.statusColor(model.status)
                                                             font.pixelSize: 11
-                                                            font.weight: Font.DemiBold
+                                                            font.weight: Font.Black
                                                         }
                                                     }
 
                                                     Label {
                                                         visible: model.attempts > 0
-                                                        text: "Try " + model.attempts
+                                                        text: "Спроба " + model.attempts
                                                         color: Theme.subtleText
                                                         font.pixelSize: 11
                                                     }
@@ -632,6 +909,8 @@ ApplicationWindow {
                                                 }
                                             }
                                         }
+
+                                        HoverHandler { id: queueHover }
 
                                         TapHandler {
                                             onTapped: {
@@ -652,9 +931,9 @@ ApplicationWindow {
 
                                 SecondaryButton { text: "Додати файли"; onClicked: if (backend) backend.addFiles() }
                                 SecondaryButton { text: "Додати папку"; onClicked: if (backend) backend.addFolder() }
-                                GhostButton { text: "Dedupe"; onClicked: if (backend) backend.deduplicateQueue() }
-                                GhostButton { text: "Hash dedupe"; onClicked: if (backend) backend.deduplicateQueueByHash() }
-                                GhostButton { text: "Retry failed"; onClicked: if (backend) backend.retryFailed() }
+                                GhostButton { text: "Прибрати дублікати"; onClicked: if (backend) backend.deduplicateQueue() }
+                                GhostButton { text: "Hash дублікати"; onClicked: if (backend) backend.deduplicateQueueByHash() }
+                                GhostButton { text: "Повторити помилки"; onClicked: if (backend) backend.retryFailed() }
                                 GhostButton {
                                     text: "Вгору"
                                     onClicked: {
@@ -668,13 +947,13 @@ ApplicationWindow {
                                     }
                                 }
                                 GhostButton {
-                                    text: "Top"
+                                    text: "На верх"
                                     onClicked: {
                                         if (backend) backend.moveSelectedTop(selectedQueue)
                                     }
                                 }
                                 GhostButton {
-                                    text: "Bottom"
+                                    text: "На низ"
                                     onClicked: {
                                         if (backend) backend.moveSelectedBottom(selectedQueue)
                                     }
@@ -692,122 +971,6 @@ ApplicationWindow {
                                         if (backend) backend.clearQueue()
                                         clearSelection()
                                     }
-                                }
-                            }
-                        }
-                    }
-
-                    Card {
-                        title: "Вивід"
-
-                        ColumnLayout {
-                            spacing: Theme.space1
-
-                            AppTextField {
-                                id: outputDirField
-                                text: backend ? backend.outputDir : ""
-                                onEditingFinished: if (backend) backend.outputDir = text
-                            }
-
-                            GridLayout {
-                                columns: root.dualActionColumns
-                                columnSpacing: Theme.space1
-                                rowSpacing: Theme.space1
-                                Layout.fillWidth: true
-
-                                SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickOutputDir() }
-                                GhostButton { text: "Відкрити"; onClicked: if (backend) backend.openOutputDir() }
-                            }
-
-                            Label {
-                                text: "Шаблон імені: {stem}, {ext}, {dir}, {index}, {date}, {time}, {op}"
-                                color: Theme.muted
-                                wrapMode: Text.WordWrap
-                                font.pixelSize: 11
-                            }
-
-                            AppComboBox {
-                                id: recentFoldersCombo
-                                model: backend ? backend.recentFoldersModel : []
-                                Layout.fillWidth: true
-                            }
-
-                            GridLayout {
-                                columns: root.dualActionColumns
-                                columnSpacing: Theme.space1
-                                rowSpacing: Theme.space1
-                                Layout.fillWidth: true
-
-                                GhostButton {
-                                    text: "У вивід"
-                                    onClicked: if (backend) backend.useRecentFolder(recentFoldersCombo.currentIndex, "output")
-                                }
-
-                                GhostButton {
-                                    text: "У watch"
-                                    onClicked: if (backend) backend.useRecentFolder(recentFoldersCombo.currentIndex, "watch")
-                                }
-
-                                GhostButton {
-                                    text: "Оновити preview"
-                                    onClicked: if (backend) backend.refreshOutputPreview(collectSettings())
-                                }
-                            }
-                        }
-                    }
-
-                    Card {
-                        title: "Preview назв"
-
-                        ColumnLayout {
-                            spacing: Theme.space1
-
-                            Label {
-                                text: "Фінальні імена файлів до запуску з урахуванням шаблону, формату й per-file override."
-                                color: Theme.muted
-                                wrapMode: Text.WordWrap
-                                font.pixelSize: 11
-                            }
-
-                            AppTextArea {
-                                text: backend ? backend.outputPreviewText : ""
-                                readOnly: true
-                                textFormat: Text.PlainText
-                                wrapMode: TextEdit.NoWrap
-                                font.pixelSize: 12
-                                Layout.preferredHeight: 150
-                            }
-                        }
-                    }
-
-                    Card {
-                        title: "Watch Folder"
-
-                        ColumnLayout {
-                            spacing: Theme.space1
-
-                            AppTextField {
-                                id: watchFolderField
-                                text: backend ? backend.watchFolder : ""
-                                onEditingFinished: if (backend) backend.watchFolder = text
-                            }
-
-                            GridLayout {
-                                columns: root.tripleActionColumns
-                                columnSpacing: Theme.space1
-                                rowSpacing: Theme.space1
-                                Layout.fillWidth: true
-
-                                SecondaryButton { text: "Обрати"; onClicked: if (backend) backend.pickWatchFolder() }
-                                PrimaryButton {
-                                    text: backend && backend.watchRunning ? "Watching..." : "Старт"
-                                    enabled: backend ? !backend.watchRunning : false
-                                    onClicked: if (backend) backend.startWatching()
-                                }
-                                SecondaryButton {
-                                    text: "Стоп"
-                                    enabled: backend ? backend.watchRunning : false
-                                    onClicked: if (backend) backend.stopWatching()
                                 }
                             }
                         }
@@ -833,38 +996,18 @@ ApplicationWindow {
                         title: "Дії"
 
                         ColumnLayout {
-                            spacing: Theme.space1
+                            spacing: Theme.space2
+
+                            Label {
+                                text: "Запуск batch, проєкт і preview тепер знаходяться у вкладці `Проєкт`, щоб ліва колонка залишалась простою."
+                                color: Theme.muted
+                                wrapMode: Text.WordWrap
+                                font.pixelSize: 11
+                            }
+
                             PrimaryButton { text: "Старт"; enabled: backend ? !backend.isRunning : false; onClicked: if (backend) backend.startConversion(collectSettings()) }
                             SecondaryButton { text: "Стоп"; enabled: backend ? backend.isRunning : false; onClicked: if (backend) backend.stopConversion() }
-                            GhostButton { text: "Експорт проєкту"; onClicked: if (backend) backend.exportProject(collectSettings()) }
-                            GhostButton { text: "Імпорт проєкту"; onClicked: if (backend) backend.importProject() }
-                        }
-                    }
-
-                    Card {
-                        title: "Історія запусків"
-
-                        ColumnLayout {
-                            spacing: Theme.space1
-
-                            AppTextArea {
-                                text: backend ? backend.historyText : ""
-                                readOnly: true
-                                textFormat: Text.PlainText
-                                wrapMode: TextEdit.NoWrap
-                                font.pixelSize: 12
-                                Layout.preferredHeight: 140
-                            }
-
-                            GridLayout {
-                                columns: root.dualActionColumns
-                                Layout.fillWidth: true
-                                columnSpacing: Theme.space1
-                                rowSpacing: Theme.space1
-
-                                GhostButton { text: "Оновити preview"; onClicked: if (backend) backend.refreshOutputPreview(collectSettings()) }
-                                GhostButton { text: "Очистити історію"; onClicked: if (backend) backend.clearHistory() }
-                            }
+                            GhostButton { text: "Відкрити вкладку Проєкт"; onClicked: root.currentTab = 5 }
                         }
                     }
                 }
@@ -885,63 +1028,71 @@ ApplicationWindow {
                                 Layout.fillWidth: true
 
                                 Item {
-                                    implicitWidth: basicColumn.implicitWidth
-                                    implicitHeight: basicColumn.implicitHeight
+                                    implicitWidth: startColumn.implicitWidth
+                                    implicitHeight: startColumn.implicitHeight
 
                                     ColumnLayout {
-                                        id: basicColumn
+                                        id: startColumn
                                         anchors.fill: parent
                                         spacing: Theme.space2
 
                                         Section {
-                                            title: "Режим і формати"
-
-                                            GridLayout {
-                                                columns: root.formColumns
-                                                columnSpacing: Theme.space2
-                                                rowSpacing: Theme.space1
-
-                                                Label { text: "Операція:"; color: Theme.muted }
-                                                AppComboBox { id: operationCombo; model: root.operationOptions }
-                                                Label { text: "Відео:"; color: Theme.muted }
-                                                AppComboBox { id: outVideoFmt; model: root.videoFormats }
-                                                Label { text: "Фото:"; color: Theme.muted }
-                                                AppComboBox { id: outImageFmt; model: root.imageFormats }
-                                                Label { text: "Аудіо:"; color: Theme.muted }
-                                                AppComboBox { id: outAudioFmt; model: root.audioFormats }
-                                                Label { text: "Субтитри:"; color: Theme.muted }
-                                                AppComboBox { id: outSubtitleFmt; model: root.subtitleFormats }
-                                                Label { text: "Audio bitrate:"; color: Theme.muted }
-                                                AppTextField { id: audioBitrateField; text: "192k" }
-                                                Label { text: "Output template:"; color: Theme.muted }
-                                                AppTextField { id: outputTemplateField; text: "{stem}" }
-                                                Label { text: "Platform profile:"; color: Theme.muted }
-                                                AppTextField { id: platformProfileField; placeholderText: "YouTube / TikTok / ..." }
-                                            }
-                                        }
-
-                                        Section {
-                                            title: "Готові platform presets"
+                                            title: "Що ти хочеш зробити?"
 
                                             ColumnLayout {
-                                                spacing: Theme.space1
+                                                spacing: Theme.space2
 
                                                 Label {
-                                                    text: "Швидке застосування профілів під соцмережі й месенджери."
+                                                    text: "Почни зі сценарію. Після вибору інтерфейс стає зрозумілішим: відео шукай у вкладці `Відео`, фото у `Фото`, звук у `Аудіо`, субтитри у `Субтитри`."
                                                     color: Theme.muted
                                                     wrapMode: Text.WordWrap
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: 12
                                                 }
 
-                                                Flow {
+                                                GridLayout {
                                                     Layout.fillWidth: true
-                                                    spacing: Theme.space1
+                                                    columns: root.presetColumns
+                                                    columnSpacing: Theme.space2
+                                                    rowSpacing: Theme.space2
 
                                                     Repeater {
-                                                        model: root.platformPresetNames
-                                                        delegate: SecondaryButton {
-                                                            text: modelData
-                                                            onClicked: if (backend) backend.loadPreset(modelData)
+                                                        model: root.operationQuickCards
+                                                        delegate: Rectangle {
+                                                            Layout.fillWidth: true
+                                                            implicitHeight: 108
+                                                            radius: Theme.radiusSection
+                                                            color: operationMouse.pressed ? Theme.panelHover : operationMouse.containsMouse ? Theme.sectionAlt : Theme.section
+                                                            border.width: 1
+                                                            border.color: operationCombo.currentText === modelData.name ? Theme.focusRing : operationMouse.containsMouse ? Theme.borderStrong : Theme.border
+
+                                                            ColumnLayout {
+                                                                anchors.fill: parent
+                                                                anchors.margins: Theme.sectionPadding
+                                                                spacing: Theme.space1
+
+                                                                Label { text: modelData.title; color: Theme.text; font.pixelSize: 16; font.weight: Font.Bold }
+                                                                Label { text: modelData.meta; color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
+                                                                Label { text: modelData.name; color: Theme.subtleText; font.pixelSize: 11 }
+                                                            }
+
+                                                            MouseArea {
+                                                                id: operationMouse
+                                                                anchors.fill: parent
+                                                                hoverEnabled: true
+                                                                onClicked: {
+                                                                    setComboText(operationCombo, modelData.name)
+                                                                    if (modelData.name === "Конвертація")
+                                                                        root.currentTab = 1
+                                                                    else if (modelData.name === "Лише аудіо")
+                                                                        root.currentTab = 3
+                                                                    else if (modelData.name === "Thumbnail" || modelData.name === "Contact sheet")
+                                                                        root.currentTab = 2
+                                                                    else
+                                                                        root.currentTab = 4
+                                                                    if (backend)
+                                                                        backend.refreshOutputPreview(collectSettings())
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -949,13 +1100,188 @@ ApplicationWindow {
                                         }
 
                                         Section {
-                                            title: "Кодеки та GPU"
+                                            title: "База проєкту"
+
+                                            ColumnLayout {
+                                                spacing: Theme.space2
+
+                                                Label {
+                                                    text: "Тут тільки те, що потрібне для старту. Детальні параметри рознесені по вкладках нижче: `Відео`, `Фото`, `Аудіо`, `Субтитри`, `Проєкт`, `Система`."
+                                                    color: Theme.muted
+                                                    wrapMode: Text.WordWrap
+                                                    font.pixelSize: 12
+                                                }
+
+                                                GridLayout {
+                                                    columns: root.formColumns
+                                                    columnSpacing: Theme.space2
+                                                    rowSpacing: Theme.space1
+
+                                                    Label { text: "Операція:"; color: Theme.muted }
+                                                    AppComboBox { id: operationCombo; model: root.operationOptions }
+                                                    Label { text: "Шаблон імені:"; color: Theme.muted }
+                                                    AppTextField { id: outputTemplateField; text: "{stem}" }
+                                                    Label { text: "Профіль платформи:"; color: Theme.muted }
+                                                    AppTextField { id: platformProfileField; placeholderText: "YouTube / TikTok / ..." }
+                                                }
+
+                                                GridLayout {
+                                                    Layout.fillWidth: true
+                                                    columns: root.presetColumns
+                                                    columnSpacing: Theme.space2
+                                                    rowSpacing: Theme.space2
+
+                                                    Repeater {
+                                                        model: [
+                                                            { title: "Відео", meta: "Кодек, resize, crop, watermark", tab: 1, color: Theme.runningSoft, border: root.statusBorderColor("running") },
+                                                            { title: "Фото", meta: "Thumbnail, contact sheet, image export", tab: 2, color: Theme.sectionAlt, border: Theme.borderStrong },
+                                                            { title: "Аудіо", meta: "Track, normalize, peak, silence, cover", tab: 3, color: Theme.successSoft, border: root.statusBorderColor("success") },
+                                                            { title: "Субтитри", meta: "Burn-in, extract, AI subtitle", tab: 4, color: Theme.warningSoft, border: root.statusBorderColor("skipped") },
+                                                            { title: "Проєкт", meta: "Output folder, preview, history, presets", tab: 5, color: Theme.accentSoft, border: Theme.accent2 },
+                                                            { title: "Система", meta: "Metadata, hooks, службові налаштування", tab: 6, color: Theme.sectionAlt, border: Theme.border }
+                                                        ]
+
+                                                        delegate: Rectangle {
+                                                            Layout.fillWidth: true
+                                                            implicitHeight: 82
+                                                            radius: Theme.radiusSection
+                                                            color: navMouse.pressed ? Theme.panelHover : navMouse.containsMouse ? modelData.color : Theme.section
+                                                            border.width: 1
+                                                            border.color: navMouse.containsMouse ? modelData.border : Theme.border
+
+                                                            ColumnLayout {
+                                                                anchors.fill: parent
+                                                                anchors.margins: Theme.sectionPadding
+                                                                spacing: Theme.space0
+
+                                                                Label {
+                                                                    text: modelData.title
+                                                                    color: Theme.text
+                                                                    font.pixelSize: 14
+                                                                    font.weight: Font.Bold
+                                                                }
+
+                                                                Label {
+                                                                    text: modelData.meta
+                                                                    color: Theme.muted
+                                                                    wrapMode: Text.WordWrap
+                                                                    Layout.fillWidth: true
+                                                                    font.pixelSize: 11
+                                                                }
+                                                            }
+
+                                                            MouseArea {
+                                                                id: navMouse
+                                                                anchors.fill: parent
+                                                                hoverEnabled: true
+                                                                onClicked: root.currentTab = modelData.tab
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Готові пресети під платформи"
+
+                                            ColumnLayout {
+                                                spacing: Theme.space2
+
+                                                Label {
+                                                    text: "Якщо задача типова, почни з platform preset, а далі точково підправ параметри у вкладках `Відео` або `Фото`."
+                                                    color: Theme.muted
+                                                    wrapMode: Text.WordWrap
+                                                    font.pixelSize: 11
+                                                }
+
+                                                GridLayout {
+                                                    Layout.fillWidth: true
+                                                    columns: root.presetColumns
+                                                    columnSpacing: Theme.space2
+                                                    rowSpacing: Theme.space2
+
+                                                    Repeater {
+                                                        model: root.platformPresetCards
+                                                        delegate: Rectangle {
+                                                            Layout.fillWidth: true
+                                                            implicitHeight: 112
+                                                            radius: Theme.radiusSection
+                                                            color: presetMouse.pressed ? Theme.panelHover : presetMouse.containsMouse ? Theme.sectionAlt : Theme.section
+                                                            border.width: 1
+                                                            border.color: presetMouse.containsMouse ? Theme.focusRing : Theme.border
+
+                                                            ColumnLayout {
+                                                                anchors.fill: parent
+                                                                anchors.margins: Theme.sectionPadding
+                                                                spacing: Theme.space1
+
+                                                                RowLayout {
+                                                                    Layout.fillWidth: true
+                                                                    Label { text: modelData.title; color: Theme.text; font.pixelSize: 15; font.weight: Font.Bold; Layout.fillWidth: true }
+                                                                    Rectangle {
+                                                                        radius: Theme.radiusPill
+                                                                        color: Theme.accentSoft
+                                                                        border.width: 1
+                                                                        border.color: Theme.accent2
+                                                                        implicitWidth: presetBadge.implicitWidth + 14
+                                                                        implicitHeight: 24
+                                                                        Label { id: presetBadge; anchors.centerIn: parent; text: modelData.badge; color: Theme.accent2; font.pixelSize: 10; font.weight: Font.Black }
+                                                                    }
+                                                                }
+
+                                                                Label { text: modelData.meta; color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
+                                                                Label { text: modelData.name; color: Theme.subtleText; elide: Text.ElideRight; Layout.fillWidth: true; font.pixelSize: 11 }
+                                                            }
+
+                                                            MouseArea {
+                                                                id: presetMouse
+                                                                anchors.fill: parent
+                                                                hoverEnabled: true
+                                                                onClicked: {
+                                                                    if (backend)
+                                                                        backend.loadPreset(modelData.name)
+                                                                    root.currentTab = 1
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Поведінка черги"
+
+                                            ColumnLayout {
+                                                spacing: Theme.space1
+                                                AppCheckBox { id: overwriteCheck; text: "Перезаписувати існуючі файли" }
+                                                AppCheckBox { id: skipExistingCheck; text: "Пропускати вже існуючі" }
+                                                AppCheckBox { id: fastCopyCheck; text: "Fast copy, коли це можливо" }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Item {
+                                    implicitWidth: videoColumn.implicitWidth
+                                    implicitHeight: videoColumn.implicitHeight
+
+                                    ColumnLayout {
+                                        id: videoColumn
+                                        anchors.fill: parent
+                                        spacing: Theme.space2
+
+                                        Section {
+                                            title: "Кодування відео"
 
                                             GridLayout {
                                                 columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
+                                                Label { text: "Вихідний формат:"; color: Theme.muted }
+                                                AppComboBox { id: outVideoFmt; model: root.videoFormats }
                                                 Label { text: "CRF:"; color: Theme.muted }
                                                 AppSpinBox { id: crfSpin; from: 14; to: 35; value: 23 }
                                                 Label { text: "Preset:"; color: Theme.muted }
@@ -971,31 +1297,7 @@ ApplicationWindow {
                                         }
 
                                         Section {
-                                            title: "Поведінка"
-
-                                            ColumnLayout {
-                                                spacing: Theme.space1
-                                                AppCheckBox { id: overwriteCheck; text: "Перезаписувати існуючі файли" }
-                                                AppCheckBox { id: skipExistingCheck; text: "Skip existing" }
-                                                AppCheckBox { id: fastCopyCheck; text: "Fast copy (без перекодування, якщо можливо)" }
-                                                Label { text: "Якість зображення (1-100)"; color: Theme.muted }
-                                                AppSpinBox { id: imgQualitySpin; from: 1; to: 100; value: 90 }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Item {
-                                    implicitWidth: editColumn.implicitWidth
-                                    implicitHeight: editColumn.implicitHeight
-
-                                    ColumnLayout {
-                                        id: editColumn
-                                        anchors.fill: parent
-                                        spacing: Theme.space2
-
-                                        Section {
-                                            title: "Час / Merge"
+                                            title: "Час і монтаж"
 
                                             GridLayout {
                                                 columns: root.formColumns
@@ -1006,6 +1308,8 @@ ApplicationWindow {
                                                 AppTextField { id: trimStartField; placeholderText: "hh:mm:ss або сек" }
                                                 Label { text: "Кінець:"; color: Theme.muted }
                                                 AppTextField { id: trimEndField; placeholderText: "hh:mm:ss або сек" }
+                                                Label { text: "Швидкість:"; color: Theme.muted }
+                                                AppTextField { id: speedField; text: "1.0" }
                                                 AppCheckBox { id: mergeCheck; text: "Merge всі відео"; Layout.columnSpan: root.formColumns }
                                                 Label { text: "Назва merge:"; color: Theme.muted }
                                                 AppTextField { id: mergeNameField; text: "merged" }
@@ -1013,7 +1317,7 @@ ApplicationWindow {
                                         }
 
                                         Section {
-                                            title: "Трансформації"
+                                            title: "Кадр і композиція"
 
                                             GridLayout {
                                                 columns: root.formColumns
@@ -1034,65 +1338,11 @@ ApplicationWindow {
                                                 AppTextField { id: cropYField }
                                                 Label { text: "Поворот:"; color: Theme.muted }
                                                 AppComboBox { id: rotateCombo; model: root.rotateOptions }
-                                                Label { text: "Speed:"; color: Theme.muted }
-                                                AppTextField { id: speedField; text: "1.0" }
                                             }
                                         }
 
                                         Section {
-                                            title: "Субтитри"
-
-                                            GridLayout {
-                                                columns: root.formColumns
-                                                columnSpacing: Theme.space2
-                                                rowSpacing: Theme.space1
-
-                                                Label { text: "Режим:"; color: Theme.muted }
-                                                AppComboBox { id: subtitleModeCombo; model: root.subtitleModeOptions }
-                                                Label { text: "Файл:"; color: Theme.muted }
-                                                GridLayout {
-                                                    Layout.fillWidth: true
-                                                    columns: root.dualActionColumns
-                                                    columnSpacing: Theme.space1
-                                                    rowSpacing: Theme.space1
-                                                    AppTextField { id: subtitlePathField; Layout.fillWidth: true }
-                                                    SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickSubtitle() }
-                                                }
-                                                Label { text: "Subtitle stream:"; color: Theme.muted }
-                                                AppSpinBox { id: subtitleStreamSpin; from: 0; to: 10; value: 0 }
-                                                Label { text: "Мова AI subtitle:"; color: Theme.muted }
-                                                AppTextField { id: subtitleLanguageField; text: "auto"; placeholderText: "auto / uk / en" }
-                                                Label { text: "Whisper model:"; color: Theme.muted }
-                                                AppComboBox { id: subtitleModelCombo; model: ["tiny", "base", "small", "medium"] }
-                                                Label { text: "Engine:"; color: Theme.muted }
-                                                AppComboBox { id: subtitleEngineCombo; model: root.subtitleEngineOptions }
-                                            }
-                                        }
-
-                                        Section {
-                                            title: "Аудіо доріжка"
-
-                                            GridLayout {
-                                                columns: root.formColumns
-                                                columnSpacing: Theme.space2
-                                                rowSpacing: Theme.space1
-
-                                                Label { text: "Track для збереження:"; color: Theme.muted }
-                                                AppSpinBox { id: audioTrackSpin; from: 1; to: 8; value: 1 }
-                                                Label { text: "Замінити аудіо:"; color: Theme.muted }
-                                                GridLayout {
-                                                    Layout.fillWidth: true
-                                                    columns: root.dualActionColumns
-                                                    columnSpacing: Theme.space1
-                                                    rowSpacing: Theme.space1
-                                                    AppTextField { id: replaceAudioPathField; Layout.fillWidth: true }
-                                                    SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickAudioReplace() }
-                                                }
-                                            }
-                                        }
-
-                                        Section {
-                                            title: "Водяний знак / Текст"
+                                            title: "Водяний знак і текст"
 
                                             GridLayout {
                                                 columns: root.formColumns
@@ -1142,13 +1392,349 @@ ApplicationWindow {
                                 }
 
                                 Item {
-                                    implicitWidth: presetColumn.implicitWidth
-                                    implicitHeight: presetColumn.implicitHeight
+                                    implicitWidth: photoColumn.implicitWidth
+                                    implicitHeight: photoColumn.implicitHeight
 
                                     ColumnLayout {
-                                        id: presetColumn
+                                        id: photoColumn
                                         anchors.fill: parent
                                         spacing: Theme.space2
+
+                                        Section {
+                                            title: "Фото і кадри"
+
+                                            GridLayout {
+                                                columns: root.formColumns
+                                                columnSpacing: Theme.space2
+                                                rowSpacing: Theme.space1
+
+                                                Label { text: "Формат фото:"; color: Theme.muted }
+                                                AppComboBox { id: outImageFmt; model: root.imageFormats }
+                                                Label { text: "Якість фото:"; color: Theme.muted }
+                                                AppSpinBox { id: imgQualitySpin; from: 1; to: 100; value: 90 }
+                                                Label { text: "Thumbnail time:"; color: Theme.muted }
+                                                AppTextField { id: thumbnailTimeField; placeholderText: "hh:mm:ss або сек" }
+                                                Label { text: "Sheet cols:"; color: Theme.muted }
+                                                AppSpinBox { id: sheetColsSpin; from: 1; to: 10; value: 4 }
+                                                Label { text: "Sheet rows:"; color: Theme.muted }
+                                                AppSpinBox { id: sheetRowsSpin; from: 1; to: 10; value: 4 }
+                                                Label { text: "Cell width:"; color: Theme.muted }
+                                                AppSpinBox { id: sheetWidthSpin; from: 80; to: 1200; value: 320 }
+                                                Label { text: "Interval sec:"; color: Theme.muted }
+                                                AppSpinBox { id: sheetIntervalSpin; from: 1; to: 600; value: 10 }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Швидкі resize-пресети"
+
+                                            Flow {
+                                                Layout.fillWidth: true
+                                                spacing: Theme.space1
+
+                                                Repeater {
+                                                    model: [
+                                                        ["720p", 1280, 720],
+                                                        ["1080p", 1920, 1080],
+                                                        ["1440p", 2560, 1440],
+                                                        ["4K", 3840, 2160]
+                                                    ]
+                                                    delegate: SecondaryButton {
+                                                        text: "До " + modelData[0]
+                                                        onClicked: {
+                                                            resizeWField.text = modelData[1]
+                                                            resizeHField.text = modelData[2]
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Підказка"
+
+                                            Label {
+                                                text: "Для `Thumbnail` і `Contact sheet` спочатку обери відповідну операцію у вкладці `Старт`, а потім налаштуй параметри тут."
+                                                color: Theme.muted
+                                                wrapMode: Text.WordWrap
+                                                font.pixelSize: 12
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Item {
+                                    implicitWidth: audioColumn.implicitWidth
+                                    implicitHeight: audioColumn.implicitHeight
+
+                                    ColumnLayout {
+                                        id: audioColumn
+                                        anchors.fill: parent
+                                        spacing: Theme.space2
+
+                                        Section {
+                                            title: "Аудіо вихід"
+
+                                            GridLayout {
+                                                columns: root.formColumns
+                                                columnSpacing: Theme.space2
+                                                rowSpacing: Theme.space1
+
+                                                Label { text: "Формат аудіо:"; color: Theme.muted }
+                                                AppComboBox { id: outAudioFmt; model: root.audioFormats }
+                                                Label { text: "Audio bitrate:"; color: Theme.muted }
+                                                AppTextField { id: audioBitrateField; text: "192k" }
+                                                Label { text: "Track для збереження:"; color: Theme.muted }
+                                                AppSpinBox { id: audioTrackSpin; from: 1; to: 8; value: 1 }
+                                                Label { text: "Замінити аудіо:"; color: Theme.muted }
+                                                GridLayout {
+                                                    Layout.fillWidth: true
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
+                                                    AppTextField { id: replaceAudioPathField; Layout.fillWidth: true }
+                                                    SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickAudioReplace() }
+                                                }
+                                                Label { text: "Cover art:"; color: Theme.muted }
+                                                GridLayout {
+                                                    Layout.fillWidth: true
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
+                                                    AppTextField { id: coverArtField; Layout.fillWidth: true }
+                                                    SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickCoverArt() }
+                                                }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Обробка аудіо"
+
+                                            GridLayout {
+                                                columns: root.formColumns
+                                                columnSpacing: Theme.space2
+                                                rowSpacing: Theme.space1
+
+                                                Label { text: "Нормалізація:"; color: Theme.muted }
+                                                AppComboBox { id: normalizeAudioCombo; model: root.normalizeOptions }
+                                                Label { text: "Peak limit dB:"; color: Theme.muted }
+                                                AppTextField { id: peakLimitField; placeholderText: "-1.0" }
+                                                AppCheckBox { id: trimSilenceCheck; text: "Обрізати тишу"; Layout.columnSpan: root.formColumns }
+                                                Label { text: "Поріг тиші dB:"; color: Theme.muted }
+                                                AppSpinBox { id: silenceThresholdSpin; from: -90; to: -10; value: -50 }
+                                                Label { text: "Тривалість тиші:"; color: Theme.muted }
+                                                AppTextField { id: silenceDurationField; text: "0.3"; placeholderText: "0.3" }
+                                                AppCheckBox { id: splitChaptersCheck; text: "Split by chapters"; Layout.columnSpan: root.formColumns }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Item {
+                                    implicitWidth: subtitleColumn.implicitWidth
+                                    implicitHeight: subtitleColumn.implicitHeight
+
+                                    ColumnLayout {
+                                        id: subtitleColumn
+                                        anchors.fill: parent
+                                        spacing: Theme.space2
+
+                                        Section {
+                                            title: "Субтитри"
+
+                                            GridLayout {
+                                                columns: root.formColumns
+                                                columnSpacing: Theme.space2
+                                                rowSpacing: Theme.space1
+
+                                                Label { text: "Вихідний формат:"; color: Theme.muted }
+                                                AppComboBox { id: outSubtitleFmt; model: root.subtitleFormats }
+                                                Label { text: "Режим:"; color: Theme.muted }
+                                                AppComboBox { id: subtitleModeCombo; model: root.subtitleModeOptions }
+                                                Label { text: "Файл:"; color: Theme.muted }
+                                                GridLayout {
+                                                    Layout.fillWidth: true
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
+                                                    AppTextField { id: subtitlePathField; Layout.fillWidth: true }
+                                                    SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickSubtitle() }
+                                                }
+                                                Label { text: "Subtitle stream:"; color: Theme.muted }
+                                                AppSpinBox { id: subtitleStreamSpin; from: 0; to: 10; value: 0 }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "AI subtitle"
+
+                                            GridLayout {
+                                                columns: root.formColumns
+                                                columnSpacing: Theme.space2
+                                                rowSpacing: Theme.space1
+
+                                                Label { text: "Мова:"; color: Theme.muted }
+                                                AppTextField { id: subtitleLanguageField; text: "auto"; placeholderText: "auto / uk / en" }
+                                                Label { text: "Whisper model:"; color: Theme.muted }
+                                                AppComboBox { id: subtitleModelCombo; model: ["tiny", "base", "small", "medium"] }
+                                                Label { text: "Engine:"; color: Theme.muted }
+                                                AppComboBox { id: subtitleEngineCombo; model: root.subtitleEngineOptions }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Підказка"
+
+                                            Label {
+                                                text: "Для `Авто субтитри` обери цю операцію у вкладці `Старт`. Для `Burn-in subtitle` спочатку задай subtitle-файл або обери subtitle stream."
+                                                color: Theme.muted
+                                                wrapMode: Text.WordWrap
+                                                font.pixelSize: 12
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Item {
+                                    implicitWidth: projectColumn.implicitWidth
+                                    implicitHeight: projectColumn.implicitHeight
+
+                                    ColumnLayout {
+                                        id: projectColumn
+                                        anchors.fill: parent
+                                        spacing: Theme.space2
+
+                                        Section {
+                                            title: "Вивід"
+
+                                            ColumnLayout {
+                                                spacing: Theme.space1
+
+                                                AppTextField {
+                                                    id: outputDirField
+                                                    text: backend ? backend.outputDir : ""
+                                                    onEditingFinished: if (backend) backend.outputDir = text
+                                                }
+
+                                                GridLayout {
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
+                                                    Layout.fillWidth: true
+
+                                                    SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickOutputDir() }
+                                                    GhostButton { text: "Відкрити"; onClicked: if (backend) backend.openOutputDir() }
+                                                }
+
+                                                Label {
+                                                    text: "Шаблон імені: {stem}, {ext}, {dir}, {index}, {date}, {time}, {op}"
+                                                    color: Theme.muted
+                                                    wrapMode: Text.WordWrap
+                                                    font.pixelSize: 11
+                                                }
+
+                                                AppComboBox {
+                                                    id: recentFoldersCombo
+                                                    model: backend ? backend.recentFoldersModel : []
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                GridLayout {
+                                                    columns: root.dualActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
+                                                    Layout.fillWidth: true
+
+                                                    GhostButton { text: "У вивід"; onClicked: if (backend) backend.useRecentFolder(recentFoldersCombo.currentIndex, "output") }
+                                                    GhostButton { text: "У watch"; onClicked: if (backend) backend.useRecentFolder(recentFoldersCombo.currentIndex, "watch") }
+                                                    GhostButton { text: "Оновити preview"; onClicked: if (backend) backend.refreshOutputPreview(collectSettings()) }
+                                                }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Preview назв"
+
+                                            ColumnLayout {
+                                                spacing: Theme.space2
+
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    radius: Theme.radiusSection
+                                                    color: Theme.sectionAlt
+                                                    border.width: 1
+                                                    border.color: Theme.border
+                                                    implicitHeight: 122
+
+                                                    GridLayout {
+                                                        anchors.fill: parent
+                                                        anchors.margins: Theme.sectionPadding
+                                                        columns: compact ? 1 : 3
+                                                        columnSpacing: Theme.space2
+                                                        rowSpacing: Theme.space1
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: Theme.space0
+                                                            Label { text: "Source"; color: Theme.subtleText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                                            Label { text: backend ? backend.selectedPreviewSource : "—"; color: Theme.text; font.pixelSize: 15; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                                        }
+
+                                                        Rectangle {
+                                                            Layout.alignment: Qt.AlignCenter
+                                                            width: compact ? 44 : 60
+                                                            height: 34
+                                                            radius: 17
+                                                            color: Theme.runningSoft
+                                                            border.width: 1
+                                                            border.color: root.statusBorderColor("running")
+                                                            Label { anchors.centerIn: parent; text: "→"; color: Theme.running; font.pixelSize: 18; font.weight: Font.Black }
+                                                        }
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: Theme.space0
+                                                            Label { text: "Output"; color: Theme.subtleText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                                            Label { text: backend ? backend.selectedPreviewOutput : "—"; color: Theme.accent2; font.pixelSize: 15; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                                        }
+                                                    }
+                                                }
+
+                                                AppTextArea {
+                                                    text: backend ? backend.outputPreviewText : ""
+                                                    readOnly: true
+                                                    textFormat: Text.PlainText
+                                                    wrapMode: TextEdit.NoWrap
+                                                    font.pixelSize: 12
+                                                    Layout.preferredHeight: 150
+                                                }
+                                            }
+                                        }
+
+                                        Section {
+                                            title: "Watch folder"
+
+                                            ColumnLayout {
+                                                spacing: Theme.space1
+
+                                                AppTextField {
+                                                    id: watchFolderField
+                                                    text: backend ? backend.watchFolder : ""
+                                                    onEditingFinished: if (backend) backend.watchFolder = text
+                                                }
+
+                                                GridLayout {
+                                                    columns: root.tripleActionColumns
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
+                                                    Layout.fillWidth: true
+
+                                                    SecondaryButton { text: "Обрати"; onClicked: if (backend) backend.pickWatchFolder() }
+                                                    PrimaryButton { text: backend && backend.watchRunning ? "Watching..." : "Старт"; enabled: backend ? !backend.watchRunning : false; onClicked: if (backend) backend.startWatching() }
+                                                    SecondaryButton { text: "Стоп"; enabled: backend ? backend.watchRunning : false; onClicked: if (backend) backend.stopWatching() }
+                                                }
+                                            }
+                                        }
 
                                         Section {
                                             title: "Пресети"
@@ -1171,11 +1757,7 @@ ApplicationWindow {
                                                 }
                                                 Label { text: "Назва нового:"; color: Theme.muted }
                                                 AppTextField { id: newPresetField }
-                                                PrimaryButton {
-                                                    text: "Зберегти"
-                                                    Layout.columnSpan: root.formColumns
-                                                    onClicked: if (backend) backend.savePreset(newPresetField.text, collectSettings())
-                                                }
+                                                PrimaryButton { text: "Зберегти"; Layout.columnSpan: root.formColumns; onClicked: if (backend) backend.savePreset(newPresetField.text, collectSettings()) }
                                             }
                                         }
 
@@ -1207,14 +1789,8 @@ ApplicationWindow {
                                                     Layout.fillWidth: true
                                                     columnSpacing: Theme.space1
                                                     rowSpacing: Theme.space1
-                                                    PrimaryButton {
-                                                        text: "Зберегти override"
-                                                        onClicked: if (backend) backend.saveTaskOverride(queueList.currentIndex, collectTaskOverride())
-                                                    }
-                                                    GhostButton {
-                                                        text: "Очистити override"
-                                                        onClicked: if (backend) backend.clearTaskOverride(queueList.currentIndex)
-                                                    }
+                                                    PrimaryButton { text: "Зберегти override"; onClicked: if (backend) backend.saveTaskOverride(queueList.currentIndex, collectTaskOverride()) }
+                                                    GhostButton { text: "Очистити override"; onClicked: if (backend) backend.clearTaskOverride(queueList.currentIndex) }
                                                 }
                                             }
                                         }
@@ -1228,110 +1804,40 @@ ApplicationWindow {
                                                 rowSpacing: Theme.space1
 
                                                 Label {
-                                                    text: "Зберегти/відновити всю чергу, overrides і активні налаштування в JSON."
+                                                    text: "Тут зберігається весь session-state: черга, overrides і поточні налаштування."
                                                     color: Theme.muted
                                                     wrapMode: Text.WordWrap
                                                     Layout.columnSpan: root.formColumns
                                                     Layout.fillWidth: true
                                                 }
 
-                                                PrimaryButton {
-                                                    text: "Експорт .json"
-                                                    Layout.columnSpan: root.formColumns
-                                                    onClicked: if (backend) backend.exportProject(collectSettings())
-                                                }
-
-                                                GhostButton {
-                                                    text: "Імпорт .json"
-                                                    Layout.columnSpan: root.formColumns
-                                                    onClicked: if (backend) backend.importProject()
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Item {
-                                    implicitWidth: enhanceColumn.implicitWidth
-                                    implicitHeight: enhanceColumn.implicitHeight
-
-                                    ColumnLayout {
-                                        id: enhanceColumn
-                                        anchors.fill: parent
-                                        spacing: Theme.space2
-
-                                        Section {
-                                            title: "Thumbnail / Contact sheet"
-
-                                            GridLayout {
-                                                columns: root.formColumns
-                                                columnSpacing: Theme.space2
-                                                rowSpacing: Theme.space1
-
-                                                Label { text: "Thumbnail time:"; color: Theme.muted }
-                                                AppTextField { id: thumbnailTimeField; placeholderText: "hh:mm:ss або сек" }
-                                                Label { text: "Sheet cols:"; color: Theme.muted }
-                                                AppSpinBox { id: sheetColsSpin; from: 1; to: 10; value: 4 }
-                                                Label { text: "Sheet rows:"; color: Theme.muted }
-                                                AppSpinBox { id: sheetRowsSpin; from: 1; to: 10; value: 4 }
-                                                Label { text: "Cell width:"; color: Theme.muted }
-                                                AppSpinBox { id: sheetWidthSpin; from: 80; to: 1200; value: 320 }
-                                                Label { text: "Interval sec:"; color: Theme.muted }
-                                                AppSpinBox { id: sheetIntervalSpin; from: 1; to: 600; value: 10 }
+                                                PrimaryButton { text: "Експорт .json"; Layout.columnSpan: root.formColumns; onClicked: if (backend) backend.exportProject(collectSettings()) }
+                                                GhostButton { text: "Імпорт .json"; Layout.columnSpan: root.formColumns; onClicked: if (backend) backend.importProject() }
                                             }
                                         }
 
                                         Section {
-                                            title: "Audio processing"
+                                            title: "Історія запусків"
 
-                                            GridLayout {
-                                                columns: root.formColumns
-                                                columnSpacing: Theme.space2
-                                                rowSpacing: Theme.space1
-
-                                                Label { text: "Нормалізація:"; color: Theme.muted }
-                                                AppComboBox { id: normalizeAudioCombo; model: root.normalizeOptions }
-                                                Label { text: "Peak limit dB:"; color: Theme.muted }
-                                                AppTextField { id: peakLimitField; placeholderText: "-1.0" }
-                                                AppCheckBox { id: trimSilenceCheck; text: "Обрізати тишу"; Layout.columnSpan: root.formColumns }
-                                                Label { text: "Поріг тиші dB:"; color: Theme.muted }
-                                                AppSpinBox { id: silenceThresholdSpin; from: -90; to: -10; value: -50 }
-                                                Label { text: "Тривалість тиші:"; color: Theme.muted }
-                                                AppTextField { id: silenceDurationField; text: "0.3"; placeholderText: "0.3" }
-                                                AppCheckBox { id: splitChaptersCheck; text: "Split by chapters"; Layout.columnSpan: root.formColumns }
-                                                Label { text: "Cover art:"; color: Theme.muted }
-                                                GridLayout {
-                                                    Layout.fillWidth: true
-                                                    columns: root.dualActionColumns
-                                                    columnSpacing: Theme.space1
-                                                    rowSpacing: Theme.space1
-                                                    AppTextField { id: coverArtField; Layout.fillWidth: true }
-                                                    SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickCoverArt() }
-                                                }
-                                            }
-                                        }
-
-                                        Section {
-                                            title: "Швидкі resize-пресети"
-
-                                            Flow {
-                                                Layout.fillWidth: true
+                                            ColumnLayout {
                                                 spacing: Theme.space1
 
-                                                Repeater {
-                                                    model: [
-                                                        ["720p", 1280, 720],
-                                                        ["1080p", 1920, 1080],
-                                                        ["1440p", 2560, 1440],
-                                                        ["4K", 3840, 2160]
-                                                    ]
-                                                    delegate: SecondaryButton {
-                                                        text: "До " + modelData[0]
-                                                        onClicked: {
-                                                            resizeWField.text = modelData[1]
-                                                            resizeHField.text = modelData[2]
-                                                        }
-                                                    }
+                                                AppTextArea {
+                                                    text: backend ? backend.historyText : ""
+                                                    readOnly: true
+                                                    textFormat: Text.PlainText
+                                                    wrapMode: TextEdit.NoWrap
+                                                    font.pixelSize: 12
+                                                    Layout.preferredHeight: 140
+                                                }
+
+                                                GridLayout {
+                                                    columns: root.dualActionColumns
+                                                    Layout.fillWidth: true
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
+                                                    GhostButton { text: "Оновити preview"; onClicked: if (backend) backend.refreshOutputPreview(collectSettings()) }
+                                                    GhostButton { text: "Очистити історію"; onClicked: if (backend) backend.clearHistory() }
                                                 }
                                             }
                                         }
@@ -1339,11 +1845,11 @@ ApplicationWindow {
                                 }
 
                                 Item {
-                                    implicitWidth: metaColumn.implicitWidth
-                                    implicitHeight: metaColumn.implicitHeight
+                                    implicitWidth: systemColumn.implicitWidth
+                                    implicitHeight: systemColumn.implicitHeight
 
                                     ColumnLayout {
-                                        id: metaColumn
+                                        id: systemColumn
                                         anchors.fill: parent
                                         spacing: Theme.space2
 
@@ -1489,6 +1995,135 @@ ApplicationWindow {
                         Label { text: backend ? backend.fileProgressText : "Файл: --"; color: Theme.muted }
                         ProgressBar { from: 0; to: 1; value: backend ? backend.totalProgress : 0; Layout.fillWidth: true }
                         Label { text: backend ? backend.totalProgressText : "Всього: --"; color: Theme.muted }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        visible: backend ? backend.onboardingVisible : false
+        color: Qt.rgba(3 / 255, 10 / 255, 20 / 255, 0.78)
+        z: 20
+
+        MouseArea {
+            anchors.fill: parent
+        }
+
+        Card {
+            width: Math.min(root.width - Theme.space4 * 2, 860)
+            anchors.centerIn: parent
+
+            ColumnLayout {
+                spacing: Theme.space3
+
+                Label {
+                    text: "Перший запуск"
+                    color: Theme.accent2
+                    font.pixelSize: 12
+                    font.weight: Font.Black
+                    font.letterSpacing: 1.2
+                }
+
+                Label {
+                    text: "Швидкий onboarding по інтерфейсу"
+                    color: Theme.text
+                    font.pixelSize: 28
+                    font.weight: Font.Black
+                }
+
+                Label {
+                    text: "UI уже має drag-and-drop, platform presets, queue preview і history. Тут коротко показано, з чого починати."
+                    color: Theme.muted
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+
+                GridLayout {
+                    columns: root.compact ? 1 : 3
+                    columnSpacing: Theme.space2
+                    rowSpacing: Theme.space2
+                    Layout.fillWidth: true
+
+                    Repeater {
+                        model: [
+                            { step: "1", title: "Додай медіа", text: "Перетягни файли в hero-зону черги або натисни `Додати файли` / `Додати папку`." },
+                            { step: "2", title: "Обери сценарій", text: "У вкладці `Старт` обери тип задачі і, якщо треба, застосуй готовий preset для YouTube, TikTok, Reels, Stories, Telegram або WhatsApp." },
+                            { step: "3", title: "Налаштуй і перевір", text: "Деталі редагуй у вкладках `Відео`, `Фото`, `Аудіо`, `Субтитри`, а `Preview назв` і output folder перевір у вкладці `Проєкт`." }
+                        ]
+
+                        delegate: Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 152
+                            radius: Theme.radiusSection
+                            color: Theme.sectionAlt
+                            border.width: 1
+                            border.color: Theme.border
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: Theme.sectionPadding
+                                spacing: Theme.space1
+
+                                Rectangle {
+                                    width: 34
+                                    height: 34
+                                    radius: 17
+                                    color: Theme.accentSoft
+                                    border.width: 1
+                                    border.color: Theme.accent2
+
+                                    Label {
+                                        anchors.centerIn: parent
+                                        text: modelData.step
+                                        color: Theme.accent2
+                                        font.pixelSize: 14
+                                        font.weight: Font.Black
+                                    }
+                                }
+
+                                Label {
+                                    text: modelData.title
+                                    color: Theme.text
+                                    font.pixelSize: 16
+                                    font.weight: Font.Bold
+                                }
+
+                                Label {
+                                    text: modelData.text
+                                    color: Theme.muted
+                                    wrapMode: Text.WordWrap
+                                    Layout.fillWidth: true
+                                    font.pixelSize: 12
+                                }
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+
+                    Label {
+                        text: "Підказка: onboarding показується лише для першого запуску."
+                        color: Theme.subtleText
+                        font.pixelSize: 11
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                    }
+
+                    GhostButton {
+                        Layout.fillWidth: false
+                        text: "Закрити"
+                        onClicked: if (backend) backend.dismissOnboarding()
+                    }
+
+                    PrimaryButton {
+                        Layout.fillWidth: false
+                        text: "Почати"
+                        onClicked: if (backend) backend.dismissOnboarding()
                     }
                 }
             }

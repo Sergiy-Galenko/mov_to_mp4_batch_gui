@@ -15,12 +15,12 @@ CheckBox {
     indicator: Rectangle {
         x: 0
         y: Math.round((control.availableHeight - height) / 2)
-        width: 20
-        height: 20
+        width: Theme.checkboxSize
+        height: Theme.checkboxSize
         radius: 6
-        color: control.checked ? Theme.accent : Theme.input
+        color: control.checked ? Theme.accent : control.hovered ? Theme.inputHover : Theme.input
         border.width: 1
-        border.color: control.checked ? Theme.accent2 : (control.hovered ? Theme.borderStrong : Theme.border)
+        border.color: control.checked ? Theme.accent2 : (control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border)
 
         Rectangle {
             width: 9
@@ -30,6 +30,8 @@ CheckBox {
             color: "#FFFFFF"
             visible: control.checked
         }
+
+        Behavior on color { ColorAnimation { duration: 120 } }
     }
 
     contentItem: Label {

@@ -12,8 +12,8 @@ Rectangle {
     color: Theme.panel
     border.width: 1
     border.color: Theme.border
-    implicitWidth: contentLayout.implicitWidth + Theme.space3 * 2
-    implicitHeight: contentLayout.implicitHeight + Theme.space3 * 2
+    implicitWidth: contentLayout.implicitWidth + Theme.cardPadding * 2
+    implicitHeight: contentLayout.implicitHeight + Theme.cardPadding * 2
     Layout.fillWidth: true
 
     gradient: Gradient {
@@ -46,9 +46,9 @@ Rectangle {
         height: 4
         radius: 2
         anchors.left: parent.left
-        anchors.leftMargin: Theme.space3
+        anchors.leftMargin: Theme.cardPadding
         anchors.top: parent.top
-        anchors.topMargin: Theme.space3 - 10
+        anchors.topMargin: Theme.cardPadding - 10
         gradient: Gradient {
             GradientStop { position: 0.0; color: Theme.accent }
             GradientStop { position: 1.0; color: Theme.accent2 }
@@ -57,8 +57,8 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.space3
-        spacing: Theme.space2
+        anchors.margins: Theme.cardPadding
+        spacing: Theme.space3
 
         RowLayout {
             visible: title.length > 0

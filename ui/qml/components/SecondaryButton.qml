@@ -6,18 +6,19 @@ import App 1.0
 Button {
     id: control
     implicitHeight: Theme.buttonHeight
-    implicitWidth: Math.max(88, contentItem.implicitWidth + 20)
+    implicitWidth: Math.max(92, contentItem.implicitWidth + 24)
     Layout.fillWidth: true
     Layout.minimumWidth: 0
     hoverEnabled: true
     font.weight: Font.Medium
+    opacity: enabled ? 1 : 0.72
 
     background: Rectangle {
         radius: Theme.radiusInput
-        color: control.enabled ? (control.hovered ? Theme.panelAlt : Theme.panel) : Theme.disabledBg
+        color: control.enabled ? (control.down ? Theme.hover : control.hovered ? Theme.panelHover : Theme.panelAlt) : Theme.disabledBg
         border.width: 1
-        border.color: control.enabled ? (control.hovered ? Theme.borderStrong : Theme.border) : Theme.border
-        scale: control.down ? 0.99 : 1
+        border.color: control.enabled ? (control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border) : Theme.border
+        scale: control.down ? 0.986 : control.hovered ? 1.008 : 1
 
         Behavior on color { ColorAnimation { duration: 120 } }
         Behavior on scale { NumberAnimation { duration: 120 } }
@@ -29,7 +30,7 @@ Button {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         font.weight: Font.Medium
-        font.pixelSize: 12
+        font.pixelSize: 13
         elide: Text.ElideRight
         clip: true
     }

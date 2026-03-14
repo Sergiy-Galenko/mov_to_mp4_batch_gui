@@ -7,7 +7,7 @@ ComboBox {
     id: control
     font.pixelSize: 13
     implicitHeight: Theme.inputHeight
-    leftPadding: 12
+    leftPadding: 13
     rightPadding: 34
     Layout.fillWidth: true
     hoverEnabled: true
@@ -38,9 +38,11 @@ ComboBox {
 
     background: Rectangle {
         radius: Theme.radiusInput
-        color: control.enabled ? Theme.input : Theme.disabledBg
+        color: control.enabled ? (control.hovered ? Theme.inputHover : Theme.input) : Theme.disabledBg
         border.width: 1
-        border.color: control.activeFocus || control.hovered ? Theme.borderStrong : Theme.border
+        border.color: control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border
+
+        Behavior on color { ColorAnimation { duration: 120 } }
     }
 
     delegate: ItemDelegate {

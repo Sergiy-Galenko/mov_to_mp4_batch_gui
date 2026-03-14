@@ -9,10 +9,11 @@ SpinBox {
 
     font.pixelSize: 13
     implicitHeight: Theme.inputHeight
-    leftPadding: 12
+    leftPadding: 13
     rightPadding: stepperWidth + 12
     editable: true
     Layout.fillWidth: true
+    hoverEnabled: true
 
     contentItem: TextInput {
         id: input
@@ -45,7 +46,7 @@ SpinBox {
         width: control.stepperWidth
         height: Math.floor((control.availableHeight - 8) / 2)
         radius: 9
-        color: control.up.pressed ? Theme.hover : Theme.panelAlt
+        color: control.up.pressed ? Theme.hover : control.up.hovered ? Theme.panelHover : Theme.panelAlt
         border.width: 1
         border.color: control.up.hovered ? Theme.borderStrong : Theme.border
 
@@ -64,7 +65,7 @@ SpinBox {
         width: control.stepperWidth
         height: Math.floor((control.availableHeight - 8) / 2)
         radius: 9
-        color: control.down.pressed ? Theme.hover : Theme.panelAlt
+        color: control.down.pressed ? Theme.hover : control.down.hovered ? Theme.panelHover : Theme.panelAlt
         border.width: 1
         border.color: control.down.hovered ? Theme.borderStrong : Theme.border
 
@@ -79,8 +80,10 @@ SpinBox {
 
     background: Rectangle {
         radius: Theme.radiusInput
-        color: control.enabled ? Theme.input : Theme.disabledBg
+        color: control.enabled ? (control.hovered ? Theme.inputHover : Theme.input) : Theme.disabledBg
         border.width: 1
-        border.color: control.activeFocus ? Theme.accent : Theme.border
+        border.color: control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border
+
+        Behavior on color { ColorAnimation { duration: 120 } }
     }
 }
