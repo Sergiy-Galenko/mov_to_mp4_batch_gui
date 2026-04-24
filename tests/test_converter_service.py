@@ -65,7 +65,7 @@ class FakeTranscriber:
         return 0
 
 
-class TestableConverterService(ConverterService):
+class MockConverterService(ConverterService):
     def _run_ffmpeg(self, cmd, duration, total_done, total_duration, done_files, total_files, total_start):
         Path(cmd[-1]).write_text("ok", encoding="utf-8")
         return 0
@@ -84,7 +84,7 @@ class ConverterServiceTest(unittest.TestCase):
     def test_skip_existing_marks_task_as_skipped(self) -> None:
         fake = FakeFfmpegService()
         events: "queue.Queue[tuple]" = queue.Queue()
-        service = TestableConverterService(fake, events)
+        service = MockConverterService(fake, events)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -105,7 +105,7 @@ class ConverterServiceTest(unittest.TestCase):
     def test_audio_only_uses_audio_builder_and_marks_success(self) -> None:
         fake = FakeFfmpegService()
         events: "queue.Queue[tuple]" = queue.Queue()
-        service = TestableConverterService(fake, events)
+        service = MockConverterService(fake, events)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -125,7 +125,7 @@ class ConverterServiceTest(unittest.TestCase):
     def test_missing_file_marks_failed(self) -> None:
         fake = FakeFfmpegService()
         events: "queue.Queue[tuple]" = queue.Queue()
-        service = TestableConverterService(fake, events)
+        service = MockConverterService(fake, events)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir)
@@ -140,7 +140,7 @@ class ConverterServiceTest(unittest.TestCase):
         fake = FakeFfmpegService()
         transcriber = FakeTranscriber()
         events: "queue.Queue[tuple]" = queue.Queue()
-        service = TestableConverterService(fake, events)
+        service = MockConverterService(fake, events)
         service.transcriber = transcriber
 
         with tempfile.TemporaryDirectory() as tmpdir:

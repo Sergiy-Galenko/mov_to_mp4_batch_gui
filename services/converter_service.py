@@ -1,4 +1,5 @@
 import os
+import signal
 import subprocess
 import threading
 import time
@@ -22,11 +23,15 @@ def _estimate_eta(elapsed: float, progress: float) -> Optional[float]:
 
 
 class ConverterService:
+    SKIP_RC = -32001
+
     def __init__(self, ffmpeg: FfmpegService, event_queue: Queue, transcriber: Optional[TranscriptionService] = None):
         self.ffmpeg = ffmpeg
         self.queue = event_queue
         self.transcriber = transcriber or TranscriptionService()
         self.stop_event = threading.Event()
+        self.pause_event = threading.Event()
+        self.skip_event = threading.Event()
         self.thread: Optional[threading.Thread] = None
         self.current_proc: Optional[subprocess.Popen] = None
         self.media_info: Dict[Path, MediaInfo] = {}
@@ -35,6 +40,8 @@ class ConverterService:
         if self.thread and self.thread.is_alive():
             return
         self.stop_event.clear()
+        self.pause_event.clear()
+        self.skip_event.clear()
         self.thread = threading.Thread(target=self._run, args=(tasks, settings, out_dir), daemon=True)
         self.thread.start()
 
@@ -45,6 +52,82 @@ class ConverterService:
                 self.current_proc.terminate()
             except Exception:
                 pass
+
+    def pause(self) -> None:
+        self.pause_event.set()
+        self._set_process_suspended(True)
+
+    def resume(self) -> None:
+        self._set_process_suspended(False)
+        self.pause_event.clear()
+
+    def skip_current(self) -> None:
+        self.skip_event.set()
+        if self.current_proc and self.current_proc.poll() is None:
+            try:
+                self.current_proc.terminate()
+            except Exception:
+                pass
+
+    def _wait_if_paused(self) -> None:
+        emitted = False
+        while self.pause_event.is_set() and not self.stop_event.is_set() and not self.skip_event.is_set():
+            if not emitted:
+                self._emit("status", "Пауза. Очікую Resume...")
+                emitted = True
+            time.sleep(0.2)
+
+    def _set_process_suspended(self, suspend: bool) -> None:
+        proc = self.current_proc
+        if not proc or proc.poll() is not None:
+            return
+        if os.name == "nt":
+            self._set_windows_process_suspended(proc.pid, suspend)
+            return
+        try:
+            os.kill(proc.pid, signal.SIGSTOP if suspend else signal.SIGCONT)
+        except Exception:
+            pass
+
+    def _set_windows_process_suspended(self, pid: int, suspend: bool) -> None:
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class ThreadEntry32(ctypes.Structure):
+                _fields_ = [
+                    ("dwSize", wintypes.DWORD),
+                    ("cntUsage", wintypes.DWORD),
+                    ("th32ThreadID", wintypes.DWORD),
+                    ("th32OwnerProcessID", wintypes.DWORD),
+                    ("tpBasePri", wintypes.LONG),
+                    ("tpDeltaPri", wintypes.LONG),
+                    ("dwFlags", wintypes.DWORD),
+                ]
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            snapshot = kernel32.CreateToolhelp32Snapshot(0x00000004, 0)
+            if snapshot == wintypes.HANDLE(-1).value:
+                return
+            entry = ThreadEntry32()
+            entry.dwSize = ctypes.sizeof(ThreadEntry32)
+            has_thread = kernel32.Thread32First(snapshot, ctypes.byref(entry))
+            while has_thread:
+                if entry.th32OwnerProcessID == pid:
+                    thread = kernel32.OpenThread(0x0002, False, entry.th32ThreadID)
+                    if thread:
+                        try:
+                            if suspend:
+                                kernel32.SuspendThread(thread)
+                            else:
+                                while kernel32.ResumeThread(thread) > 1:
+                                    pass
+                        finally:
+                            kernel32.CloseHandle(thread)
+                has_thread = kernel32.Thread32Next(snapshot, ctypes.byref(entry))
+            kernel32.CloseHandle(snapshot)
+        except Exception:
+            pass
 
     def _emit(self, event: str, *payload) -> None:
         self.queue.put((event, *payload))
@@ -87,7 +170,13 @@ class ConverterService:
         if not command:
             return
         self._log("INFO", f"Hook {stage}: {command}")
-        result = subprocess.run(command, shell=True, env=env, capture_output=True, text=True)
+        try:
+            import shlex
+            cmd_list = command if os.name == 'nt' else shlex.split(command)
+            result = subprocess.run(cmd_list, shell=False, env=env, capture_output=True, text=True)
+        except Exception as e:
+            self._log('WARN', f'Hook {stage} failed: {e}')
+            return
         if result.returncode == 0:
             output = (result.stdout or "").strip()
             if output:
@@ -372,6 +461,10 @@ class ConverterService:
             if self.stop_event.is_set():
                 self._log("WARN", "Зупинено користувачем.")
                 break
+            self._wait_if_paused()
+            if self.stop_event.is_set():
+                self._log("WARN", "Зупинено користувачем.")
+                break
             if task.path in merged_video_paths:
                 continue
 
@@ -564,6 +657,14 @@ class ConverterService:
                 self._task_state(task.path, "failed", str(exc))
                 result_message = str(exc)
 
+            if self.skip_event.is_set():
+                self.skip_event.clear()
+                status = "skipped"
+                result_message = "Пропущено користувачем"
+                result_output = ""
+                self._log("WARN", f"Пропущено користувачем: {task.path.name}")
+                self._task_state(task.path, "skipped", result_message)
+
             done_files += 1
             if duration:
                 done_duration += duration
@@ -635,6 +736,13 @@ class ConverterService:
         speed = None
         if proc.stdout is not None:
             for line in proc.stdout:
+                self._wait_if_paused()
+                if self.skip_event.is_set():
+                    try:
+                        proc.terminate()
+                    except Exception:
+                        pass
+                    break
                 if self.stop_event.is_set():
                     try:
                         proc.terminate()
@@ -685,4 +793,6 @@ class ConverterService:
         rc = proc.wait()
         err_thread.join(timeout=0.2)
         self.current_proc = None
+        if self.skip_event.is_set():
+            return self.SKIP_RC
         return rc

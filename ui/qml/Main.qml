@@ -62,8 +62,12 @@ ApplicationWindow {
     property int statusColumns: layoutWidth < 560 ? 1 : layoutWidth < 900 ? 2 : layoutWidth < 1160 ? 3 : 5
     property bool compact: formColumns === 1
     property bool hasBackend: backend !== null
-    property var selectedQueue: []
+    property var selectedQueuePaths: []
     property int currentTab: 0
+    property bool advancedMode: false
+    property bool formValid: true
+    property var validationResult: ({ ok: true, errors: {}, warnings: [], summary: "Перевірка пройдена." })
+    property bool logErrorsOnly: false
     property string inheritLabel: "За замовчуванням"
     property bool queueEmpty: queueList.count === 0
     property var operationTabs: ["Старт", "Відео", "Фото", "Аудіо", "Субтитри", "Проєкт", "Система"]
@@ -71,19 +75,19 @@ ApplicationWindow {
         "Конвертація",
         "Лише аудіо",
         "Авто субтитри",
-        "Extract subtitle",
-        "Burn-in subtitle",
-        "Thumbnail",
-        "Contact sheet"
+        "Витяг субтитрів",
+        "Вшити субтитри",
+        "Мініатюра",
+        "Контакт-лист"
     ]
     property var operationQuickCards: [
         { name: "Конвертація", title: "Відео", meta: "Перекодування, resize, crop, watermark" },
         { name: "Лише аудіо", title: "Аудіо", meta: "Витяг доріжки, normalize, cover art" },
-        { name: "Авто субтитри", title: "AI субтитри", meta: "Whisper transcription у SRT/VTT" },
-        { name: "Extract subtitle", title: "Extract subtitle", meta: "Витяг вбудованої subtitle доріжки" },
-        { name: "Burn-in subtitle", title: "Burn-in subtitle", meta: "Вшити субтитри у відео" },
-        { name: "Thumbnail", title: "Thumbnail", meta: "Один кадр у JPG/PNG/WebP" },
-        { name: "Contact sheet", title: "Contact sheet", meta: "Лист із кількох кадрів" }
+        { name: "Авто субтитри", title: "AI субтитри", meta: "Whisper у SRT/VTT" },
+        { name: "Витяг субтитрів", title: "Витяг субтитрів", meta: "Вбудована доріжка у файл" },
+        { name: "Вшити субтитри", title: "Вшити субтитри", meta: "Субтитри безпосередньо у відео" },
+        { name: "Мініатюра", title: "Мініатюра", meta: "Один кадр у JPG/PNG/WebP" },
+        { name: "Контакт-лист", title: "Контакт-лист", meta: "Лист із кількох кадрів" }
     ]
     property var platformPresetCards: [
         { name: "YouTube • 1080p H.264", title: "YouTube", meta: "16:9 • MP4 • H.264", badge: "1080p" },
@@ -113,17 +117,74 @@ ApplicationWindow {
     property var subtitleModeOptions: ["none", "burn_in"]
     property var boolOverrideOptions: [inheritLabel, "Так", "Ні"]
 
-    function toggleQueueIndex(idx, checked) {
-        var pos = selectedQueue.indexOf(idx)
+    function operationKey() {
+        var op = operationCombo.currentText
+        if (op === "Лише аудіо")
+            return "audio"
+        if (op === "Авто субтитри" || op === "Витяг субтитрів" || op === "Вшити субтитри")
+            return "subtitle"
+        if (op === "Мініатюра" || op === "Контакт-лист")
+            return "photo"
+        return "video"
+    }
+
+    function showVideoSettings() {
+        return operationKey() === "video" || operationCombo.currentText === "Вшити субтитри"
+    }
+
+    function showPhotoSettings() {
+        return operationKey() === "photo" || operationCombo.currentText === "Конвертація"
+    }
+
+    function showAudioSettings() {
+        return operationKey() === "audio" || operationKey() === "video"
+    }
+
+    function showSubtitleSettings() {
+        return operationKey() === "subtitle" || operationCombo.currentText === "Вшити субтитри"
+    }
+
+    function isQueueSelected(path) {
+        return selectedQueuePaths.indexOf(path) !== -1
+    }
+
+    function toggleQueuePath(path, checked) {
+        var pos = selectedQueuePaths.indexOf(path)
         if (checked && pos === -1) {
-            selectedQueue.push(idx)
+            selectedQueuePaths.push(path)
         } else if (!checked && pos !== -1) {
-            selectedQueue.splice(pos, 1)
+            selectedQueuePaths.splice(pos, 1)
         }
+        selectedQueuePaths = selectedQueuePaths.slice()
     }
 
     function clearSelection() {
-        selectedQueue = []
+        selectedQueuePaths = []
+    }
+
+    function fieldError(name) {
+        if (!validationResult || !validationResult.errors)
+            return ""
+        return validationResult.errors[name] || ""
+    }
+
+    function validateForm() {
+        if (!backend)
+            return true
+        validationResult = backend.validateSettings(collectSettings())
+        formValid = !!validationResult.ok
+        return formValid
+    }
+
+    function scheduleSettingsSync() {
+        settingsSyncTimer.restart()
+    }
+
+    function startIfValid() {
+        if (!validateForm())
+            return
+        if (backend)
+            backend.startConversion(collectSettings())
     }
 
     function statusColor(status) {
@@ -260,6 +321,14 @@ ApplicationWindow {
     function setComboText(combo, value) {
         if (!combo || value === undefined || value === null)
             return
+        var aliases = {
+            "Extract subtitle": "Витяг субтитрів",
+            "Burn-in subtitle": "Вшити субтитри",
+            "Thumbnail": "Мініатюра",
+            "Contact sheet": "Контакт-лист"
+        }
+        if (aliases[value] !== undefined)
+            value = aliases[value]
         var idx = combo.find(value)
         if (idx >= 0)
             combo.currentIndex = idx
@@ -384,8 +453,7 @@ ApplicationWindow {
         target: backend ? backend : null
 
         function onLogAdded(level, msg) {
-            logArea.text += "[" + new Date().toLocaleTimeString() + "] " + level + ": " + msg + "\n"
-            logArea.cursorPosition = logArea.text.length
+            logList.positionViewAtEnd()
         }
 
         function onPresetLoaded(preset) {
@@ -417,6 +485,18 @@ ApplicationWindow {
         function onAudioReplacePicked(path) {
             replaceAudioPathField.text = path
         }
+
+        function onQueueStatsChanged() {
+            scheduleSettingsSync()
+        }
+
+        function onFfmpegPathChanged() {
+            scheduleSettingsSync()
+        }
+
+        function onOutputDirChanged() {
+            scheduleSettingsSync()
+        }
     }
 
     Component.onCompleted: {
@@ -424,8 +504,20 @@ ApplicationWindow {
             backend.refreshEncoders()
             backend.restoreSession()
             backend.refreshOutputPreview(collectSettings())
+            validateForm()
         }
         applyTaskOverride({})
+    }
+
+    Timer {
+        id: settingsSyncTimer
+        interval: 250
+        repeat: false
+        onTriggered: {
+            validateForm()
+            if (backend)
+                backend.refreshOutputPreview(collectSettings())
+        }
     }
 
     ScrollView {
@@ -476,7 +568,7 @@ ApplicationWindow {
                                 }
 
                                 Label {
-                                    text: "Черга, пресети під платформи, audio workflow, AI subtitle, preview і production-ready batch automation."
+                                    text: "Черга, пресети під платформи, аудіо-сценарії, AI-субтитри, preview і batch-автоматизація."
                                     color: Theme.muted
                                     wrapMode: Text.WordWrap
                                     font.pixelSize: 14
@@ -501,7 +593,7 @@ ApplicationWindow {
                                     spacing: Theme.space1
 
                                     Label {
-                                        text: "System status"
+                                        text: "Стан системи"
                                         color: Theme.muted
                                         font.pixelSize: 11
                                         font.weight: Font.DemiBold
@@ -602,7 +694,7 @@ ApplicationWindow {
                                     anchors.margins: Theme.sectionPadding
                                     spacing: Theme.space0
 
-                                    Label { text: "Watch"; color: Theme.muted; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                    Label { text: "Спостереження"; color: Theme.muted; font.pixelSize: 11; font.weight: Font.DemiBold }
                                     Label { text: backend && backend.watchRunning ? "ON" : "OFF"; color: backend && backend.watchRunning ? Theme.warning : Theme.text; font.pixelSize: 24; font.weight: Font.Black }
                                     Label { text: backend && backend.watchRunning ? "Папка моніториться" : "Неактивно"; color: Theme.subtleText; font.pixelSize: 11 }
                                 }
@@ -777,146 +869,212 @@ ApplicationWindow {
                                     clip: true
                                     spacing: Theme.space1
 
-                                    delegate: Rectangle {
-                                        id: queueCard
-                                        property bool hovered: queueHover.hovered
+                                    delegate: DropArea {
+                                        id: queueDrop
                                         width: ListView.view.width
-                                        height: 94
-                                        radius: Theme.radiusSection
-                                        color: ListView.isCurrentItem ? Theme.panelHover : hovered ? Theme.sectionAlt : Theme.section
-                                        border.width: 1
-                                        border.color: ListView.isCurrentItem ? Theme.focusRing : hovered ? Theme.borderStrong : Theme.border
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 12
-                                            spacing: Theme.space2
-
-                                            AppCheckBox {
-                                                checked: selectedQueue.indexOf(index) !== -1
-                                                onToggled: toggleQueueIndex(index, checked)
-                                            }
-
-                                            Rectangle {
-                                                width: 46
-                                                height: 46
-                                                radius: 14
-                                                color: Qt.rgba(mediaColor(model.mediaType).r, mediaColor(model.mediaType).g, mediaColor(model.mediaType).b, 0.14)
-                                                border.width: 1
-                                                border.color: Qt.rgba(mediaColor(model.mediaType).r, mediaColor(model.mediaType).g, mediaColor(model.mediaType).b, 0.40)
-                                                Layout.alignment: Qt.AlignTop
-
-                                                Label {
-                                                    anchors.centerIn: parent
-                                                    text: mediaGlyph(model.mediaType)
-                                                    color: mediaColor(model.mediaType)
-                                                    font.pixelSize: 12
-                                                    font.weight: Font.Black
-                                                }
-                                            }
-
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: Theme.space0
-
-                                                RowLayout {
-                                                    Layout.fillWidth: true
-                                                    spacing: Theme.space1
-
-                                                    Label {
-                                                        text: model.name
-                                                        color: Theme.text
-                                                        elide: Text.ElideRight
-                                                        Layout.fillWidth: true
-                                                        font.pixelSize: 13
-                                                        font.weight: Font.Bold
-                                                    }
-
-                                                    Rectangle {
-                                                        visible: model.hasOverride
-                                                        radius: Theme.radiusPill
-                                                        color: Theme.accentSoft
-                                                        border.width: 1
-                                                        border.color: Theme.accent2
-                                                        implicitWidth: overrideLabel.implicitWidth + 14
-                                                        implicitHeight: 24
-
-                                                        Label {
-                                                            id: overrideLabel
-                                                            anchors.centerIn: parent
-                                                            text: "OVERRIDE"
-                                                            color: Theme.accent2
-                                                            font.pixelSize: 10
-                                                            font.weight: Font.Black
-                                                            font.letterSpacing: 0.8
-                                                        }
-                                                    }
-                                                }
-
-                                                Label {
-                                                    Layout.fillWidth: true
-                                                    text: "Source: " + model.name
-                                                    color: Theme.subtleText
-                                                    elide: Text.ElideRight
-                                                    font.pixelSize: 11
-                                                }
-
-                                                Label {
-                                                    Layout.fillWidth: true
-                                                    text: "Output: " + (model.previewOutput && model.previewOutput.length > 0 ? model.previewOutput : "—")
-                                                    color: Theme.muted
-                                                    elide: Text.ElideRight
-                                                    font.pixelSize: 12
-                                                }
-
-                                                RowLayout {
-                                                    Layout.fillWidth: true
-                                                    spacing: Theme.space1
-
-                                                    Rectangle {
-                                                        radius: Theme.radiusPill
-                                                        color: root.statusSurfaceColor(model.status)
-                                                        border.width: 1
-                                                        border.color: root.statusBorderColor(model.status)
-                                                        implicitWidth: statusLabel.implicitWidth + 14
-                                                        implicitHeight: 24
-
-                                                        Label {
-                                                            id: statusLabel
-                                                            anchors.centerIn: parent
-                                                            text: model.status
-                                                            color: root.statusColor(model.status)
-                                                            font.pixelSize: 11
-                                                            font.weight: Font.Black
-                                                        }
-                                                    }
-
-                                                    Label {
-                                                        visible: model.attempts > 0
-                                                        text: "Спроба " + model.attempts
-                                                        color: Theme.subtleText
-                                                        font.pixelSize: 11
-                                                    }
-
-                                                    Label {
-                                                        visible: model.errorText.length > 0
-                                                        text: model.errorText
-                                                        color: Theme.danger
-                                                        elide: Text.ElideRight
-                                                        Layout.fillWidth: true
-                                                        font.pixelSize: 11
-                                                    }
-                                                }
-                                            }
+                                        height: queueCard.height
+                                        keys: ["queueItem"]
+                                        onEntered: {
+                                            if (drag.source && drag.source.itemPath !== model.path && backend)
+                                                backend.movePathToIndex(drag.source.itemPath, index)
                                         }
 
-                                        HoverHandler { id: queueHover }
+                                        Rectangle {
+                                            id: queueCard
+                                            property bool hovered: queueHover.hovered
+                                            property string itemPath: model.path
+                                            width: queueDrop.width
+                                            height: 132
+                                            radius: Theme.radiusSection
+                                            z: dragHandle.drag.active ? 10 : 0
+                                            color: ListView.isCurrentItem || root.isQueueSelected(model.path) ? Theme.panelHover : hovered ? Theme.sectionAlt : Theme.section
+                                            border.width: 1
+                                            border.color: ListView.isCurrentItem ? Theme.focusRing : hovered ? Theme.borderStrong : Theme.border
+                                            Drag.active: dragHandle.drag.active
+                                            Drag.keys: ["queueItem"]
+                                            Drag.hotSpot.x: width / 2
+                                            Drag.hotSpot.y: height / 2
 
-                                        TapHandler {
-                                            onTapped: {
-                                                queueList.currentIndex = index
-                                                if (backend)
-                                                    backend.selectQueueIndex(index)
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 12
+                                                spacing: Theme.space2
+
+                                                MouseArea {
+                                                    id: dragHandle
+                                                    width: 24
+                                                    Layout.fillHeight: true
+                                                    cursorShape: Qt.SizeAllCursor
+                                                    drag.target: queueCard
+                                                    onReleased: {
+                                                        queueCard.Drag.drop()
+                                                        queueCard.x = 0
+                                                        queueCard.y = 0
+                                                    }
+                                                    Label {
+                                                        anchors.centerIn: parent
+                                                        text: "⋮⋮"
+                                                        color: Theme.subtleText
+                                                        font.pixelSize: 18
+                                                        font.weight: Font.Bold
+                                                    }
+                                                }
+
+                                                AppCheckBox {
+                                                    checked: root.isQueueSelected(model.path)
+                                                    onToggled: root.toggleQueuePath(model.path, checked)
+                                                }
+
+                                                Rectangle {
+                                                    width: 64
+                                                    height: 64
+                                                    radius: 10
+                                                    color: Qt.rgba(mediaColor(model.mediaType).r, mediaColor(model.mediaType).g, mediaColor(model.mediaType).b, 0.14)
+                                                    border.width: 1
+                                                    border.color: Qt.rgba(mediaColor(model.mediaType).r, mediaColor(model.mediaType).g, mediaColor(model.mediaType).b, 0.40)
+                                                    clip: true
+                                                    Layout.alignment: Qt.AlignTop
+
+                                                    Image {
+                                                        anchors.fill: parent
+                                                        anchors.margins: 1
+                                                        visible: model.thumbnailSource.length > 0
+                                                        source: model.thumbnailSource
+                                                        fillMode: Image.PreserveAspectCrop
+                                                        cache: true
+                                                    }
+
+                                                    Label {
+                                                        anchors.centerIn: parent
+                                                        visible: model.thumbnailSource.length === 0
+                                                        text: mediaGlyph(model.mediaType)
+                                                        color: mediaColor(model.mediaType)
+                                                        font.pixelSize: 12
+                                                        font.weight: Font.Black
+                                                    }
+                                                }
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: Theme.space0
+
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: Theme.space1
+
+                                                        Label {
+                                                            text: model.name
+                                                            color: Theme.text
+                                                            elide: Text.ElideRight
+                                                            Layout.fillWidth: true
+                                                            font.pixelSize: 13
+                                                            font.weight: Font.Bold
+                                                        }
+
+                                                        Rectangle {
+                                                            visible: model.hasOverride
+                                                            radius: Theme.radiusPill
+                                                            color: Theme.accentSoft
+                                                            border.width: 1
+                                                            border.color: Theme.accent2
+                                                            implicitWidth: overrideLabel.implicitWidth + 14
+                                                            implicitHeight: 24
+
+                                                            Label {
+                                                                id: overrideLabel
+                                                                anchors.centerIn: parent
+                                                                text: "OVERRIDE"
+                                                                color: Theme.accent2
+                                                                font.pixelSize: 10
+                                                                font.weight: Font.Black
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Label {
+                                                        Layout.fillWidth: true
+                                                        text: model.path
+                                                        color: Theme.subtleText
+                                                        elide: Text.ElideMiddle
+                                                        font.pixelSize: 11
+                                                    }
+
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: Theme.space1
+                                                        Label { text: model.durationText; color: Theme.muted; font.pixelSize: 11 }
+                                                        Label { text: "•"; color: Theme.subtleText; font.pixelSize: 11 }
+                                                        Label { text: model.sizeText; color: Theme.muted; font.pixelSize: 11 }
+                                                        Label { text: "•"; color: Theme.subtleText; font.pixelSize: 11 }
+                                                        Label {
+                                                            text: model.previewOutput && model.previewOutput.length > 0 ? model.previewOutput : "Вивід ще не розраховано"
+                                                            color: Theme.muted
+                                                            elide: Text.ElideMiddle
+                                                            Layout.fillWidth: true
+                                                            font.pixelSize: 11
+                                                        }
+                                                    }
+
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: Theme.space1
+
+                                                        Rectangle {
+                                                            radius: Theme.radiusPill
+                                                            color: root.statusSurfaceColor(model.status)
+                                                            border.width: 1
+                                                            border.color: root.statusBorderColor(model.status)
+                                                            implicitWidth: statusLabel.implicitWidth + 14
+                                                            implicitHeight: 24
+
+                                                            Label {
+                                                                id: statusLabel
+                                                                anchors.centerIn: parent
+                                                                text: model.status
+                                                                color: root.statusColor(model.status)
+                                                                font.pixelSize: 11
+                                                                font.weight: Font.Black
+                                                            }
+                                                        }
+
+                                                        Label {
+                                                            visible: model.attempts > 0
+                                                            text: "Спроба " + model.attempts
+                                                            color: Theme.subtleText
+                                                            font.pixelSize: 11
+                                                        }
+
+                                                        Label {
+                                                            visible: model.errorText.length > 0
+                                                            text: model.errorText
+                                                            color: Theme.danger
+                                                            elide: Text.ElideRight
+                                                            Layout.fillWidth: true
+                                                            font.pixelSize: 11
+                                                        }
+                                                    }
+
+                                                    GridLayout {
+                                                        columns: root.compact ? 2 : 4
+                                                        columnSpacing: Theme.space1
+                                                        rowSpacing: Theme.space0
+                                                        Layout.fillWidth: true
+                                                        GhostButton { text: "Джерело"; onClicked: if (backend) backend.openSourcePath(model.path) }
+                                                        GhostButton { text: "Вивід"; onClicked: if (backend) backend.openOutputForPath(model.path) }
+                                                        GhostButton { text: "Повтор"; enabled: model.status === "failed"; onClicked: if (backend) backend.retryTaskPath(model.path) }
+                                                        GhostButton { text: "Видалити"; onClicked: { if (backend) backend.removeTaskPath(model.path); root.toggleQueuePath(model.path, false) } }
+                                                    }
+                                                }
+                                            }
+
+                                            HoverHandler { id: queueHover }
+
+                                            TapHandler {
+                                                onTapped: {
+                                                    queueList.currentIndex = index
+                                                    if (backend)
+                                                        backend.selectQueuePath(model.path)
+                                                }
                                             }
                                         }
                                     }
@@ -932,36 +1090,14 @@ ApplicationWindow {
                                 SecondaryButton { text: "Додати файли"; onClicked: if (backend) backend.addFiles() }
                                 SecondaryButton { text: "Додати папку"; onClicked: if (backend) backend.addFolder() }
                                 GhostButton { text: "Прибрати дублікати"; onClicked: if (backend) backend.deduplicateQueue() }
-                                GhostButton { text: "Hash дублікати"; onClicked: if (backend) backend.deduplicateQueueByHash() }
+                                GhostButton { text: "Hash-дублікати"; onClicked: if (backend) backend.deduplicateQueueByHash() }
                                 GhostButton { text: "Повторити помилки"; onClicked: if (backend) backend.retryFailed() }
-                                GhostButton {
-                                    text: "Вгору"
-                                    onClicked: {
-                                        if (backend) backend.moveSelectedUp(selectedQueue)
-                                    }
-                                }
-                                GhostButton {
-                                    text: "Вниз"
-                                    onClicked: {
-                                        if (backend) backend.moveSelectedDown(selectedQueue)
-                                    }
-                                }
-                                GhostButton {
-                                    text: "На верх"
-                                    onClicked: {
-                                        if (backend) backend.moveSelectedTop(selectedQueue)
-                                    }
-                                }
-                                GhostButton {
-                                    text: "На низ"
-                                    onClicked: {
-                                        if (backend) backend.moveSelectedBottom(selectedQueue)
-                                    }
-                                }
+                                GhostButton { text: "На верх"; onClicked: if (backend) backend.moveSelectedPathsTop(selectedQueuePaths) }
+                                GhostButton { text: "На низ"; onClicked: if (backend) backend.moveSelectedPathsBottom(selectedQueuePaths) }
                                 GhostButton {
                                     text: "Видалити"
                                     onClicked: {
-                                        if (backend) backend.removeSelected(selectedQueue)
+                                        if (backend) backend.removeSelectedPaths(selectedQueuePaths)
                                         clearSelection()
                                     }
                                 }
@@ -999,13 +1135,15 @@ ApplicationWindow {
                             spacing: Theme.space2
 
                             Label {
-                                text: "Запуск batch, проєкт і preview тепер знаходяться у вкладці `Проєкт`, щоб ліва колонка залишалась простою."
-                                color: Theme.muted
+                                text: validationResult ? validationResult.summary : "Перевірка не виконувалась."
+                                color: formValid ? Theme.muted : Theme.danger
                                 wrapMode: Text.WordWrap
                                 font.pixelSize: 11
                             }
 
-                            PrimaryButton { text: "Старт"; enabled: backend ? !backend.isRunning : false; onClicked: if (backend) backend.startConversion(collectSettings()) }
+                            PrimaryButton { text: "Старт"; enabled: backend ? (!backend.isRunning && formValid) : false; onClicked: startIfValid() }
+                            SecondaryButton { text: backend && backend.isPaused ? "Продовжити" : "Пауза"; enabled: backend ? backend.isRunning : false; onClicked: if (backend) { if (backend.isPaused) backend.resumeConversion(); else backend.pauseConversion() } }
+                            SecondaryButton { text: "Пропустити файл"; enabled: backend ? backend.isRunning : false; onClicked: if (backend) backend.skipCurrentFile() }
                             SecondaryButton { text: "Стоп"; enabled: backend ? backend.isRunning : false; onClicked: if (backend) backend.stopConversion() }
                             GhostButton { text: "Відкрити вкладку Проєкт"; onClicked: root.currentTab = 5 }
                         }
@@ -1085,12 +1223,13 @@ ApplicationWindow {
                                                                         root.currentTab = 1
                                                                     else if (modelData.name === "Лише аудіо")
                                                                         root.currentTab = 3
-                                                                    else if (modelData.name === "Thumbnail" || modelData.name === "Contact sheet")
+                                                                    else if (modelData.name === "Мініатюра" || modelData.name === "Контакт-лист")
                                                                         root.currentTab = 2
                                                                     else
                                                                         root.currentTab = 4
                                                                     if (backend)
                                                                         backend.refreshOutputPreview(collectSettings())
+                                                                    scheduleSettingsSync()
                                                                 }
                                                             }
                                                         }
@@ -1112,17 +1251,52 @@ ApplicationWindow {
                                                     font.pixelSize: 12
                                                 }
 
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: Theme.space1
+                                                    SecondaryButton {
+                                                        text: "Швидкий старт"
+                                                        opacity: advancedMode ? 0.72 : 1
+                                                        onClicked: {
+                                                            advancedMode = false
+                                                            scheduleSettingsSync()
+                                                        }
+                                                    }
+                                                    GhostButton {
+                                                        text: "Розширений"
+                                                        opacity: advancedMode ? 1 : 0.72
+                                                        onClicked: {
+                                                            advancedMode = true
+                                                            scheduleSettingsSync()
+                                                        }
+                                                    }
+                                                }
+
                                                 GridLayout {
                                                     columns: root.formColumns
                                                     columnSpacing: Theme.space2
                                                     rowSpacing: Theme.space1
 
                                                     Label { text: "Операція:"; color: Theme.muted }
-                                                    AppComboBox { id: operationCombo; model: root.operationOptions }
+                                                    AppComboBox {
+                                                        id: operationCombo
+                                                        model: root.operationOptions
+                                                        onCurrentTextChanged: {
+                                                            if (currentText === "Лише аудіо")
+                                                                root.currentTab = 3
+                                                            else if (currentText === "Мініатюра" || currentText === "Контакт-лист")
+                                                                root.currentTab = 2
+                                                            else if (currentText === "Авто субтитри" || currentText === "Витяг субтитрів" || currentText === "Вшити субтитри")
+                                                                root.currentTab = 4
+                                                            else
+                                                                root.currentTab = 1
+                                                            scheduleSettingsSync()
+                                                        }
+                                                    }
                                                     Label { text: "Шаблон імені:"; color: Theme.muted }
-                                                    AppTextField { id: outputTemplateField; text: "{stem}" }
+                                                    AppTextField { id: outputTemplateField; text: "{stem}"; onTextChanged: scheduleSettingsSync() }
                                                     Label { text: "Профіль платформи:"; color: Theme.muted }
-                                                    AppTextField { id: platformProfileField; placeholderText: "YouTube / TikTok / ..." }
+                                                    AppTextField { id: platformProfileField; placeholderText: "YouTube / TikTok / ..."; onTextChanged: scheduleSettingsSync() }
                                                 }
 
                                                 GridLayout {
@@ -1134,16 +1308,22 @@ ApplicationWindow {
                                                     Repeater {
                                                         model: [
                                                             { title: "Відео", meta: "Кодек, resize, crop, watermark", tab: 1, color: Theme.runningSoft, border: root.statusBorderColor("running") },
-                                                            { title: "Фото", meta: "Thumbnail, contact sheet, image export", tab: 2, color: Theme.sectionAlt, border: Theme.borderStrong },
-                                                            { title: "Аудіо", meta: "Track, normalize, peak, silence, cover", tab: 3, color: Theme.successSoft, border: root.statusBorderColor("success") },
-                                                            { title: "Субтитри", meta: "Burn-in, extract, AI subtitle", tab: 4, color: Theme.warningSoft, border: root.statusBorderColor("skipped") },
-                                                            { title: "Проєкт", meta: "Output folder, preview, history, presets", tab: 5, color: Theme.accentSoft, border: Theme.accent2 },
-                                                            { title: "Система", meta: "Metadata, hooks, службові налаштування", tab: 6, color: Theme.sectionAlt, border: Theme.border }
+                                                            { title: "Фото", meta: "Мініатюра, контакт-лист, експорт", tab: 2, color: Theme.sectionAlt, border: Theme.borderStrong },
+                                                            { title: "Аудіо", meta: "Доріжка, нормалізація, тиша, cover", tab: 3, color: Theme.successSoft, border: root.statusBorderColor("success") },
+                                                            { title: "Субтитри", meta: "Вшити, витягнути, AI-субтитри", tab: 4, color: Theme.warningSoft, border: root.statusBorderColor("skipped") },
+                                                            { title: "Проєкт", meta: "Папка виводу, preview, історія, пресети", tab: 5, color: Theme.accentSoft, border: Theme.accent2 },
+                                                            { title: "Система", meta: "Метадані, хуки, службові налаштування", tab: 6, color: Theme.sectionAlt, border: Theme.border }
                                                         ]
 
                                                         delegate: Rectangle {
+                                                            visible: modelData.tab === 5
+                                                                || (modelData.tab === 6 && root.advancedMode)
+                                                                || (modelData.tab === 1 && root.showVideoSettings())
+                                                                || (modelData.tab === 2 && root.showPhotoSettings())
+                                                                || (modelData.tab === 3 && root.showAudioSettings())
+                                                                || (modelData.tab === 4 && root.showSubtitleSettings())
                                                             Layout.fillWidth: true
-                                                            implicitHeight: 82
+                                                            implicitHeight: visible ? 82 : 0
                                                             radius: Theme.radiusSection
                                                             color: navMouse.pressed ? Theme.panelHover : navMouse.containsMouse ? modelData.color : Theme.section
                                                             border.width: 1
@@ -1257,7 +1437,7 @@ ApplicationWindow {
                                                 spacing: Theme.space1
                                                 AppCheckBox { id: overwriteCheck; text: "Перезаписувати існуючі файли" }
                                                 AppCheckBox { id: skipExistingCheck; text: "Пропускати вже існуючі" }
-                                                AppCheckBox { id: fastCopyCheck; text: "Fast copy, коли це можливо" }
+                                                AppCheckBox { id: fastCopyCheck; text: "Швидке копіювання, коли це можливо" }
                                             }
                                         }
                                     }
@@ -1290,7 +1470,7 @@ ApplicationWindow {
                                                 AppComboBox { id: portraitCombo; model: root.portraitOptions }
                                                 Label { text: "Кодек відео:"; color: Theme.muted }
                                                 AppComboBox { id: codecCombo; model: root.codecOptions }
-                                                Label { text: "GPU/CPU:"; color: Theme.muted }
+                                                Label { text: "Прискорення:"; color: Theme.muted }
                                                 AppComboBox { id: hwCombo; model: root.hwOptions }
                                                 Label { text: backend ? backend.encoderInfo : "Доступні: --"; color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.columnSpan: root.formColumns }
                                             }
@@ -1305,11 +1485,12 @@ ApplicationWindow {
                                                 rowSpacing: Theme.space1
 
                                                 Label { text: "Початок:"; color: Theme.muted }
-                                                AppTextField { id: trimStartField; placeholderText: "hh:mm:ss або сек" }
+                                                AppTextField { id: trimStartField; placeholderText: "hh:mm:ss або сек"; invalid: fieldError("trim_start").length > 0; onTextChanged: scheduleSettingsSync() }
                                                 Label { text: "Кінець:"; color: Theme.muted }
-                                                AppTextField { id: trimEndField; placeholderText: "hh:mm:ss або сек" }
+                                                AppTextField { id: trimEndField; placeholderText: "hh:mm:ss або сек"; invalid: fieldError("trim_end").length > 0; onTextChanged: scheduleSettingsSync() }
                                                 Label { text: "Швидкість:"; color: Theme.muted }
-                                                AppTextField { id: speedField; text: "1.0" }
+                                                AppTextField { id: speedField; text: "1.0"; invalid: fieldError("speed").length > 0; onTextChanged: scheduleSettingsSync() }
+                                                Label { text: fieldError("trim_start") || fieldError("trim_end") || fieldError("speed"); color: Theme.danger; visible: text.length > 0; Layout.columnSpan: root.formColumns; wrapMode: Text.WordWrap }
                                                 AppCheckBox { id: mergeCheck; text: "Merge всі відео"; Layout.columnSpan: root.formColumns }
                                                 Label { text: "Назва merge:"; color: Theme.muted }
                                                 AppTextField { id: mergeNameField; text: "merged" }
@@ -1325,17 +1506,18 @@ ApplicationWindow {
                                                 rowSpacing: Theme.space1
 
                                                 Label { text: "Resize W:"; color: Theme.muted }
-                                                AppTextField { id: resizeWField }
+                                                AppTextField { id: resizeWField; invalid: fieldError("resize_w").length > 0; onTextChanged: scheduleSettingsSync() }
                                                 Label { text: "Resize H:"; color: Theme.muted }
-                                                AppTextField { id: resizeHField }
+                                                AppTextField { id: resizeHField; invalid: fieldError("resize_h").length > 0; onTextChanged: scheduleSettingsSync() }
                                                 Label { text: "Crop W:"; color: Theme.muted }
-                                                AppTextField { id: cropWField }
+                                                AppTextField { id: cropWField; invalid: fieldError("crop_w").length > 0; onTextChanged: scheduleSettingsSync() }
                                                 Label { text: "Crop H:"; color: Theme.muted }
-                                                AppTextField { id: cropHField }
+                                                AppTextField { id: cropHField; invalid: fieldError("crop_h").length > 0; onTextChanged: scheduleSettingsSync() }
                                                 Label { text: "Crop X:"; color: Theme.muted }
-                                                AppTextField { id: cropXField }
+                                                AppTextField { id: cropXField; invalid: fieldError("crop_x").length > 0; onTextChanged: scheduleSettingsSync() }
                                                 Label { text: "Crop Y:"; color: Theme.muted }
-                                                AppTextField { id: cropYField }
+                                                AppTextField { id: cropYField; invalid: fieldError("crop_y").length > 0; onTextChanged: scheduleSettingsSync() }
+                                                Label { text: fieldError("resize_w") || fieldError("resize_h") || fieldError("crop_w") || fieldError("crop_h") || fieldError("crop_x") || fieldError("crop_y"); color: Theme.danger; visible: text.length > 0; Layout.columnSpan: root.formColumns; wrapMode: Text.WordWrap }
                                                 Label { text: "Поворот:"; color: Theme.muted }
                                                 AppComboBox { id: rotateCombo; model: root.rotateOptions }
                                             }
@@ -1343,34 +1525,36 @@ ApplicationWindow {
 
                                         Section {
                                             title: "Водяний знак і текст"
+                                            visible: root.advancedMode
 
                                             GridLayout {
                                                 columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
-                                                Label { text: "WM файл:"; color: Theme.muted }
+                                                Label { text: "Файл водяного знаку:"; color: Theme.muted }
                                                 GridLayout {
                                                     Layout.fillWidth: true
                                                     columns: root.dualActionColumns
                                                     columnSpacing: Theme.space1
                                                     rowSpacing: Theme.space1
-                                                    AppTextField { id: wmPathField; Layout.fillWidth: true }
+                                                    AppTextField { id: wmPathField; Layout.fillWidth: true; invalid: fieldError("wm_path").length > 0; onTextChanged: scheduleSettingsSync() }
                                                     SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickWatermark() }
                                                 }
-                                                Label { text: "WM позиція:"; color: Theme.muted }
+                                                Label { text: fieldError("wm_path"); color: Theme.danger; visible: text.length > 0; Layout.columnSpan: root.formColumns; wrapMode: Text.WordWrap }
+                                                Label { text: "Позиція водяного знаку:"; color: Theme.muted }
                                                 AppComboBox { id: wmPosCombo; model: root.positionOptions }
-                                                Label { text: "WM scale %:"; color: Theme.muted }
+                                                Label { text: "Масштаб, %:"; color: Theme.muted }
                                                 AppSpinBox { id: wmScaleSpin; from: 1; to: 200; value: 30 }
-                                                Label { text: "WM opacity %:"; color: Theme.muted }
+                                                Label { text: "Прозорість, %:"; color: Theme.muted }
                                                 AppSpinBox { id: wmOpacitySpin; from: 0; to: 100; value: 80 }
                                                 Label { text: "Текст:"; color: Theme.muted }
                                                 AppTextField { id: textWatermarkField }
-                                                Label { text: "Text позиція:"; color: Theme.muted }
+                                                Label { text: "Позиція тексту:"; color: Theme.muted }
                                                 AppComboBox { id: textPosCombo; model: root.positionOptions }
-                                                Label { text: "Text size:"; color: Theme.muted }
+                                                Label { text: "Розмір тексту:"; color: Theme.muted }
                                                 AppSpinBox { id: textSizeSpin; from: 8; to: 120; value: 24 }
-                                                Label { text: "Text color:"; color: Theme.muted }
+                                                Label { text: "Колір тексту:"; color: Theme.muted }
                                                 AppTextField { id: textColorField; text: "white" }
                                                 Label { text: "Font:"; color: Theme.muted }
                                                 GridLayout {
@@ -1378,9 +1562,10 @@ ApplicationWindow {
                                                     columns: root.dualActionColumns
                                                     columnSpacing: Theme.space1
                                                     rowSpacing: Theme.space1
-                                                    AppTextField { id: textFontField; Layout.fillWidth: true }
+                                                    AppTextField { id: textFontField; Layout.fillWidth: true; invalid: fieldError("text_font").length > 0; onTextChanged: scheduleSettingsSync() }
                                                     SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickFont() }
                                                 }
+                                                Label { text: fieldError("text_font"); color: Theme.danger; visible: text.length > 0; Layout.columnSpan: root.formColumns; wrapMode: Text.WordWrap }
                                                 AppCheckBox { id: textBoxCheck; text: "Фон тексту"; Layout.columnSpan: root.formColumns }
                                                 Label { text: "Box color:"; color: Theme.muted }
                                                 AppTextField { id: textBoxColorField; text: "black" }
@@ -1412,16 +1597,17 @@ ApplicationWindow {
                                                 AppComboBox { id: outImageFmt; model: root.imageFormats }
                                                 Label { text: "Якість фото:"; color: Theme.muted }
                                                 AppSpinBox { id: imgQualitySpin; from: 1; to: 100; value: 90 }
-                                                Label { text: "Thumbnail time:"; color: Theme.muted }
-                                                AppTextField { id: thumbnailTimeField; placeholderText: "hh:mm:ss або сек" }
-                                                Label { text: "Sheet cols:"; color: Theme.muted }
-                                                AppSpinBox { id: sheetColsSpin; from: 1; to: 10; value: 4 }
-                                                Label { text: "Sheet rows:"; color: Theme.muted }
-                                                AppSpinBox { id: sheetRowsSpin; from: 1; to: 10; value: 4 }
-                                                Label { text: "Cell width:"; color: Theme.muted }
-                                                AppSpinBox { id: sheetWidthSpin; from: 80; to: 1200; value: 320 }
-                                                Label { text: "Interval sec:"; color: Theme.muted }
-                                                AppSpinBox { id: sheetIntervalSpin; from: 1; to: 600; value: 10 }
+                                                Label { text: "Час кадру:"; color: Theme.muted; visible: operationCombo.currentText === "Мініатюра" }
+                                                AppTextField { id: thumbnailTimeField; placeholderText: "hh:mm:ss або сек"; invalid: fieldError("thumbnail_time").length > 0; visible: operationCombo.currentText === "Мініатюра"; onTextChanged: scheduleSettingsSync() }
+                                                Label { text: fieldError("thumbnail_time"); color: Theme.danger; visible: fieldError("thumbnail_time").length > 0; Layout.columnSpan: root.formColumns; wrapMode: Text.WordWrap }
+                                                Label { text: "Колонок:"; color: Theme.muted; visible: operationCombo.currentText === "Контакт-лист" }
+                                                AppSpinBox { id: sheetColsSpin; from: 1; to: 10; value: 4; visible: operationCombo.currentText === "Контакт-лист" }
+                                                Label { text: "Рядків:"; color: Theme.muted; visible: operationCombo.currentText === "Контакт-лист" }
+                                                AppSpinBox { id: sheetRowsSpin; from: 1; to: 10; value: 4; visible: operationCombo.currentText === "Контакт-лист" }
+                                                Label { text: "Ширина клітинки:"; color: Theme.muted; visible: operationCombo.currentText === "Контакт-лист" }
+                                                AppSpinBox { id: sheetWidthSpin; from: 80; to: 1200; value: 320; visible: operationCombo.currentText === "Контакт-лист" }
+                                                Label { text: "Інтервал, сек:"; color: Theme.muted; visible: operationCombo.currentText === "Контакт-лист" }
+                                                AppSpinBox { id: sheetIntervalSpin; from: 1; to: 600; value: 10; visible: operationCombo.currentText === "Контакт-лист" }
                                             }
                                         }
 
@@ -1454,7 +1640,7 @@ ApplicationWindow {
                                             title: "Підказка"
 
                                             Label {
-                                                text: "Для `Thumbnail` і `Contact sheet` спочатку обери відповідну операцію у вкладці `Старт`, а потім налаштуй параметри тут."
+                                                text: "Для `Мініатюра` і `Контакт-лист` спочатку обери відповідну операцію у вкладці `Старт`, а потім налаштуй параметри тут."
                                                 color: Theme.muted
                                                 wrapMode: Text.WordWrap
                                                 font.pixelSize: 12
@@ -1482,9 +1668,9 @@ ApplicationWindow {
 
                                                 Label { text: "Формат аудіо:"; color: Theme.muted }
                                                 AppComboBox { id: outAudioFmt; model: root.audioFormats }
-                                                Label { text: "Audio bitrate:"; color: Theme.muted }
-                                                AppTextField { id: audioBitrateField; text: "192k" }
-                                                Label { text: "Track для збереження:"; color: Theme.muted }
+                                                Label { text: "Бітрейт аудіо:"; color: Theme.muted }
+                                                AppTextField { id: audioBitrateField; text: "192k"; invalid: fieldError("audio_bitrate").length > 0; onTextChanged: scheduleSettingsSync() }
+                                                Label { text: "Доріжка для збереження:"; color: Theme.muted }
                                                 AppSpinBox { id: audioTrackSpin; from: 1; to: 8; value: 1 }
                                                 Label { text: "Замінити аудіо:"; color: Theme.muted }
                                                 GridLayout {
@@ -1492,18 +1678,20 @@ ApplicationWindow {
                                                     columns: root.dualActionColumns
                                                     columnSpacing: Theme.space1
                                                     rowSpacing: Theme.space1
-                                                    AppTextField { id: replaceAudioPathField; Layout.fillWidth: true }
+                                                    AppTextField { id: replaceAudioPathField; Layout.fillWidth: true; invalid: fieldError("replace_audio_path").length > 0; onTextChanged: scheduleSettingsSync() }
                                                     SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickAudioReplace() }
                                                 }
+                                                Label { text: fieldError("audio_bitrate") || fieldError("replace_audio_path"); color: Theme.danger; visible: text.length > 0; Layout.columnSpan: root.formColumns; wrapMode: Text.WordWrap }
                                                 Label { text: "Cover art:"; color: Theme.muted }
                                                 GridLayout {
                                                     Layout.fillWidth: true
                                                     columns: root.dualActionColumns
                                                     columnSpacing: Theme.space1
                                                     rowSpacing: Theme.space1
-                                                    AppTextField { id: coverArtField; Layout.fillWidth: true }
+                                                    AppTextField { id: coverArtField; Layout.fillWidth: true; invalid: fieldError("cover_art_path").length > 0; onTextChanged: scheduleSettingsSync() }
                                                     SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickCoverArt() }
                                                 }
+                                                Label { text: fieldError("cover_art_path"); color: Theme.danger; visible: text.length > 0; Layout.columnSpan: root.formColumns; wrapMode: Text.WordWrap }
                                             }
                                         }
 
@@ -1518,12 +1706,13 @@ ApplicationWindow {
                                                 Label { text: "Нормалізація:"; color: Theme.muted }
                                                 AppComboBox { id: normalizeAudioCombo; model: root.normalizeOptions }
                                                 Label { text: "Peak limit dB:"; color: Theme.muted }
-                                                AppTextField { id: peakLimitField; placeholderText: "-1.0" }
+                                                AppTextField { id: peakLimitField; placeholderText: "-1.0"; invalid: fieldError("audio_peak_limit_db").length > 0; onTextChanged: scheduleSettingsSync() }
                                                 AppCheckBox { id: trimSilenceCheck; text: "Обрізати тишу"; Layout.columnSpan: root.formColumns }
                                                 Label { text: "Поріг тиші dB:"; color: Theme.muted }
                                                 AppSpinBox { id: silenceThresholdSpin; from: -90; to: -10; value: -50 }
                                                 Label { text: "Тривалість тиші:"; color: Theme.muted }
-                                                AppTextField { id: silenceDurationField; text: "0.3"; placeholderText: "0.3" }
+                                                AppTextField { id: silenceDurationField; text: "0.3"; placeholderText: "0.3"; invalid: fieldError("silence_duration").length > 0; onTextChanged: scheduleSettingsSync() }
+                                                Label { text: fieldError("audio_peak_limit_db") || fieldError("silence_duration"); color: Theme.danger; visible: text.length > 0; Layout.columnSpan: root.formColumns; wrapMode: Text.WordWrap }
                                                 AppCheckBox { id: splitChaptersCheck; text: "Split by chapters"; Layout.columnSpan: root.formColumns }
                                             }
                                         }
@@ -1557,16 +1746,17 @@ ApplicationWindow {
                                                     columns: root.dualActionColumns
                                                     columnSpacing: Theme.space1
                                                     rowSpacing: Theme.space1
-                                                    AppTextField { id: subtitlePathField; Layout.fillWidth: true }
+                                                    AppTextField { id: subtitlePathField; Layout.fillWidth: true; invalid: fieldError("subtitle_path").length > 0; onTextChanged: scheduleSettingsSync() }
                                                     SecondaryButton { text: "Вибрати"; onClicked: if (backend) backend.pickSubtitle() }
                                                 }
+                                                Label { text: fieldError("subtitle_path"); color: Theme.danger; visible: text.length > 0; Layout.columnSpan: root.formColumns; wrapMode: Text.WordWrap }
                                                 Label { text: "Subtitle stream:"; color: Theme.muted }
                                                 AppSpinBox { id: subtitleStreamSpin; from: 0; to: 10; value: 0 }
                                             }
                                         }
 
                                         Section {
-                                            title: "AI subtitle"
+                                            title: "AI-субтитри"
 
                                             GridLayout {
                                                 columns: root.formColumns
@@ -1575,9 +1765,9 @@ ApplicationWindow {
 
                                                 Label { text: "Мова:"; color: Theme.muted }
                                                 AppTextField { id: subtitleLanguageField; text: "auto"; placeholderText: "auto / uk / en" }
-                                                Label { text: "Whisper model:"; color: Theme.muted }
+                                                Label { text: "Модель Whisper:"; color: Theme.muted }
                                                 AppComboBox { id: subtitleModelCombo; model: ["tiny", "base", "small", "medium"] }
-                                                Label { text: "Engine:"; color: Theme.muted }
+                                                Label { text: "Рушій:"; color: Theme.muted }
                                                 AppComboBox { id: subtitleEngineCombo; model: root.subtitleEngineOptions }
                                             }
                                         }
@@ -1586,7 +1776,7 @@ ApplicationWindow {
                                             title: "Підказка"
 
                                             Label {
-                                                text: "Для `Авто субтитри` обери цю операцію у вкладці `Старт`. Для `Burn-in subtitle` спочатку задай subtitle-файл або обери subtitle stream."
+                                                text: "Для `Авто субтитри` обери цю операцію у вкладці `Старт`. Для `Вшити субтитри` задай файл субтитрів або обери вбудовану доріжку."
                                                 color: Theme.muted
                                                 wrapMode: Text.WordWrap
                                                 font.pixelSize: 12
@@ -1613,8 +1803,10 @@ ApplicationWindow {
                                                 AppTextField {
                                                     id: outputDirField
                                                     text: backend ? backend.outputDir : ""
+                                                    invalid: fieldError("output_dir").length > 0
                                                     onEditingFinished: if (backend) backend.outputDir = text
                                                 }
+                                                Label { text: fieldError("output_dir"); color: Theme.danger; visible: text.length > 0; wrapMode: Text.WordWrap }
 
                                                 GridLayout {
                                                     columns: root.dualActionColumns
@@ -1653,7 +1845,7 @@ ApplicationWindow {
                                         }
 
                                         Section {
-                                            title: "Preview назв"
+                                            title: "Preview виводу"
 
                                             ColumnLayout {
                                                 spacing: Theme.space2
@@ -1676,7 +1868,7 @@ ApplicationWindow {
                                                         ColumnLayout {
                                                             Layout.fillWidth: true
                                                             spacing: Theme.space0
-                                                            Label { text: "Source"; color: Theme.subtleText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                                            Label { text: "Джерело"; color: Theme.subtleText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                                             Label { text: backend ? backend.selectedPreviewSource : "—"; color: Theme.text; font.pixelSize: 15; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
                                                         }
 
@@ -1694,7 +1886,7 @@ ApplicationWindow {
                                                         ColumnLayout {
                                                             Layout.fillWidth: true
                                                             spacing: Theme.space0
-                                                            Label { text: "Output"; color: Theme.subtleText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                                            Label { text: "Вивід"; color: Theme.subtleText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                                             Label { text: backend ? backend.selectedPreviewOutput : "—"; color: Theme.accent2; font.pixelSize: 15; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
                                                         }
                                                     }
@@ -1708,11 +1900,36 @@ ApplicationWindow {
                                                     font.pixelSize: 12
                                                     Layout.preferredHeight: 150
                                                 }
+
+                                                Label {
+                                                    text: "Dry-run FFmpeg"
+                                                    color: Theme.subtleText
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.DemiBold
+                                                }
+
+                                                AppTextArea {
+                                                    text: backend ? backend.selectedPreviewCommand : "—"
+                                                    readOnly: true
+                                                    textFormat: Text.PlainText
+                                                    wrapMode: TextEdit.WordWrap
+                                                    font.pixelSize: 12
+                                                    Layout.preferredHeight: 92
+                                                }
+
+                                                GridLayout {
+                                                    columns: root.dualActionColumns
+                                                    Layout.fillWidth: true
+                                                    columnSpacing: Theme.space1
+                                                    rowSpacing: Theme.space1
+                                                    SecondaryButton { text: "Копіювати команду"; onClicked: if (backend) backend.copyDryRunCommand(collectSettings()) }
+                                                    GhostButton { text: "Експорт скрипта"; onClicked: if (backend) backend.exportCommandScript(collectSettings()) }
+                                                }
                                             }
                                         }
 
                                         Section {
-                                            title: "Watch folder"
+                                            title: "Папка спостереження"
 
                                             ColumnLayout {
                                                 spacing: Theme.space1
@@ -1730,7 +1947,7 @@ ApplicationWindow {
                                                     Layout.fillWidth: true
 
                                                     SecondaryButton { text: "Обрати"; onClicked: if (backend) backend.pickWatchFolder() }
-                                                    PrimaryButton { text: backend && backend.watchRunning ? "Watching..." : "Старт"; enabled: backend ? !backend.watchRunning : false; onClicked: if (backend) backend.startWatching() }
+                                                    PrimaryButton { text: backend && backend.watchRunning ? "Спостереження..." : "Старт"; enabled: backend ? !backend.watchRunning : false; onClicked: if (backend) backend.startWatching() }
                                                     SecondaryButton { text: "Стоп"; enabled: backend ? backend.watchRunning : false; onClicked: if (backend) backend.stopWatching() }
                                                 }
                                             }
@@ -1762,7 +1979,7 @@ ApplicationWindow {
                                         }
 
                                         Section {
-                                            title: "Per-file override"
+                                            title: "Override файлів"
 
                                             GridLayout {
                                                 columns: root.formColumns
@@ -1771,7 +1988,7 @@ ApplicationWindow {
 
                                                 Label { text: "Операція:"; color: Theme.muted }
                                                 AppComboBox { id: overrideOperationCombo; model: [inheritLabel].concat(root.operationOptions) }
-                                                Label { text: "Template:"; color: Theme.muted }
+                                                Label { text: "Шаблон:"; color: Theme.muted }
                                                 AppTextField { id: overrideTemplateField; placeholderText: "{stem}" }
                                                 Label { text: "Відео:"; color: Theme.muted }
                                                 AppComboBox { id: overrideVideoFmt; model: [inheritLabel].concat(root.videoFormats) }
@@ -1781,7 +1998,7 @@ ApplicationWindow {
                                                 AppComboBox { id: overrideAudioFmt; model: [inheritLabel].concat(root.audioFormats) }
                                                 Label { text: "Субтитри:"; color: Theme.muted }
                                                 AppComboBox { id: overrideSubtitleFmt; model: [inheritLabel].concat(root.subtitleFormats) }
-                                                Label { text: "Skip existing:"; color: Theme.muted }
+                                                Label { text: "Пропускати існуючі:"; color: Theme.muted }
                                                 AppComboBox { id: overrideSkipCombo; model: root.boolOverrideOptions }
                                                 GridLayout {
                                                     Layout.columnSpan: root.formColumns
@@ -1789,8 +2006,9 @@ ApplicationWindow {
                                                     Layout.fillWidth: true
                                                     columnSpacing: Theme.space1
                                                     rowSpacing: Theme.space1
-                                                    PrimaryButton { text: "Зберегти override"; onClicked: if (backend) backend.saveTaskOverride(queueList.currentIndex, collectTaskOverride()) }
-                                                    GhostButton { text: "Очистити override"; onClicked: if (backend) backend.clearTaskOverride(queueList.currentIndex) }
+                                                    PrimaryButton { text: "Для поточного"; onClicked: if (backend && queueList.currentIndex >= 0) backend.saveTaskOverrideByPath(backend.selectedPreviewSource, collectTaskOverride()) }
+                                                    SecondaryButton { text: "Для вибраних"; enabled: selectedQueuePaths.length > 0; onClicked: if (backend) backend.saveBulkOverride(selectedQueuePaths, collectTaskOverride()) }
+                                                    GhostButton { text: "Очистити поточний"; onClicked: if (backend && queueList.currentIndex >= 0) backend.clearTaskOverrideByPath(backend.selectedPreviewSource) }
                                                 }
                                             }
                                         }
@@ -1804,7 +2022,7 @@ ApplicationWindow {
                                                 rowSpacing: Theme.space1
 
                                                 Label {
-                                                    text: "Тут зберігається весь session-state: черга, overrides і поточні налаштування."
+                                                    text: "Тут зберігається весь стан сесії: черга, overrides і поточні налаштування."
                                                     color: Theme.muted
                                                     wrapMode: Text.WordWrap
                                                     Layout.columnSpan: root.formColumns
@@ -1822,13 +2040,45 @@ ApplicationWindow {
                                             ColumnLayout {
                                                 spacing: Theme.space1
 
-                                                AppTextArea {
-                                                    text: backend ? backend.historyText : ""
-                                                    readOnly: true
-                                                    textFormat: Text.PlainText
-                                                    wrapMode: TextEdit.NoWrap
-                                                    font.pixelSize: 12
-                                                    Layout.preferredHeight: 140
+                                                ListView {
+                                                    id: historyList
+                                                    model: backend ? backend.historyModel : null
+                                                    clip: true
+                                                    spacing: Theme.space1
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 190
+
+                                                    delegate: Rectangle {
+                                                        width: ListView.view.width
+                                                        height: 82
+                                                        radius: Theme.radiusSection
+                                                        color: Theme.sectionAlt
+                                                        border.width: 1
+                                                        border.color: model.runStatus === "failed" ? Theme.danger : Theme.border
+
+                                                        RowLayout {
+                                                            anchors.fill: parent
+                                                            anchors.margins: Theme.space1
+                                                            spacing: Theme.space1
+
+                                                            ColumnLayout {
+                                                                Layout.fillWidth: true
+                                                                spacing: Theme.space0
+                                                                Label { text: model.startedText + " | " + model.operation; color: Theme.text; font.pixelSize: 12; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                                                Label { text: "Файлів: " + model.totalFiles + " | failed: " + model.failedFiles + " | skipped: " + model.skippedFiles; color: model.failedFiles > 0 ? Theme.danger : Theme.muted; font.pixelSize: 11 }
+                                                                Label { text: model.outputDir; color: Theme.subtleText; font.pixelSize: 11; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                                            }
+
+                                                            GridLayout {
+                                                                columns: root.compact ? 1 : 3
+                                                                columnSpacing: Theme.space0
+                                                                rowSpacing: Theme.space0
+                                                                GhostButton { text: "Повтор"; onClicked: if (backend) backend.rerunHistory(index) }
+                                                                GhostButton { text: "Налашт."; onClicked: if (backend) backend.loadHistorySettings(index) }
+                                                                GhostButton { text: "Вивід"; onClicked: if (backend) backend.openHistoryOutput(index) }
+                                                            }
+                                                        }
+                                                    }
                                                 }
 
                                                 GridLayout {
@@ -1864,37 +2114,37 @@ ApplicationWindow {
                                                     columns: root.formColumns
                                                     columnSpacing: Theme.space2
                                                     rowSpacing: Theme.space1
-                                                    Label { text: "Title:"; color: Theme.muted }
+                                                    Label { text: "Назва:"; color: Theme.muted }
                                                     AppTextField { id: metaTitleField }
-                                                    Label { text: "Author:"; color: Theme.muted }
+                                                    Label { text: "Автор:"; color: Theme.muted }
                                                     AppTextField { id: metaAuthorField }
-                                                    Label { text: "Album:"; color: Theme.muted }
+                                                    Label { text: "Альбом:"; color: Theme.muted }
                                                     AppTextField { id: metaAlbumField }
-                                                    Label { text: "Genre:"; color: Theme.muted }
+                                                    Label { text: "Жанр:"; color: Theme.muted }
                                                     AppTextField { id: metaGenreField }
-                                                    Label { text: "Year:"; color: Theme.muted }
+                                                    Label { text: "Рік:"; color: Theme.muted }
                                                     AppTextField { id: metaYearField }
-                                                    Label { text: "Track:"; color: Theme.muted }
+                                                    Label { text: "Доріжка:"; color: Theme.muted }
                                                     AppTextField { id: metaTrackField }
-                                                    Label { text: "Comment:"; color: Theme.muted }
+                                                    Label { text: "Коментар:"; color: Theme.muted }
                                                     AppTextField { id: metaCommentField }
-                                                    Label { text: "Copyright:"; color: Theme.muted }
+                                                    Label { text: "Авторські права:"; color: Theme.muted }
                                                     AppTextField { id: metaCopyrightField }
                                                 }
                                             }
                                         }
 
                                         Section {
-                                            title: "Hooks"
+                                            title: "Хуки"
 
                                             GridLayout {
                                                 columns: root.formColumns
                                                 columnSpacing: Theme.space2
                                                 rowSpacing: Theme.space1
 
-                                                Label { text: "Before hook:"; color: Theme.muted }
+                                                Label { text: "Хук до запуску:"; color: Theme.muted }
                                                 AppTextField { id: beforeHookField; placeholderText: "bash script.sh before" }
-                                                Label { text: "After hook:"; color: Theme.muted }
+                                                Label { text: "Хук після запуску:"; color: Theme.muted }
                                                 AppTextField { id: afterHookField; placeholderText: "bash script.sh after" }
                                             }
                                         }
@@ -1905,7 +2155,7 @@ ApplicationWindow {
                     }
 
                     Card {
-                        title: "Лог"
+                        title: "Журнал"
 
                         ColumnLayout {
                             spacing: Theme.space2
@@ -1936,7 +2186,7 @@ ApplicationWindow {
                                         }
 
                                         Label {
-                                            text: "FFmpeg, ffprobe і системні повідомлення з автопрокруткою до останнього запису."
+                                            text: "Структуровані повідомлення FFmpeg, ffprobe і системи."
                                             color: Theme.muted
                                             font.pixelSize: 11
                                             wrapMode: Text.WordWrap
@@ -1957,26 +2207,84 @@ ApplicationWindow {
 
                                         GhostButton {
                                             Layout.fillWidth: false
+                                            text: root.logErrorsOnly ? "Усі" : "Тільки помилки"
+                                            onClicked: root.logErrorsOnly = !root.logErrorsOnly
+                                        }
+
+                                        GhostButton {
+                                            Layout.fillWidth: false
                                             text: "Очистити"
-                                            onClicked: logArea.text = ""
+                                            onClicked: if (backend) backend.clearLog()
                                         }
 
                                         GhostButton {
                                             Layout.fillWidth: false
                                             text: "В кінець"
-                                            onClicked: logArea.cursorPosition = logArea.text.length
+                                            onClicked: logList.positionViewAtEnd()
                                         }
                                     }
                                 }
                             }
 
-                            AppTextArea {
-                                id: logArea
-                                readOnly: true
-                                textFormat: Text.PlainText
-                                wrapMode: TextEdit.NoWrap
-                                font.pixelSize: 12
+                            ListView {
+                                id: logList
+                                model: backend ? backend.logModel : null
+                                clip: true
+                                spacing: Theme.space1
+                                Layout.fillWidth: true
                                 Layout.preferredHeight: root.compact ? 220 : 260
+
+                                delegate: Rectangle {
+                                    width: ListView.view.width
+                                    height: visible ? Math.max(58, logMessage.implicitHeight + 24) : 0
+                                    visible: !root.logErrorsOnly || model.level === "ERROR" || model.level === "WARN"
+                                    radius: Theme.radiusSection
+                                    color: model.level === "ERROR" ? Theme.dangerSoft : model.level === "WARN" ? Theme.warningSoft : Theme.section
+                                    border.width: 1
+                                    border.color: model.level === "ERROR" ? Theme.danger : model.level === "WARN" ? Theme.warning : Theme.border
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: Theme.space1
+                                        spacing: Theme.space1
+
+                                        Label {
+                                            text: model.timeText
+                                            color: Theme.subtleText
+                                            font.pixelSize: 11
+                                            Layout.preferredWidth: 62
+                                        }
+
+                                        Label {
+                                            text: model.level
+                                            color: model.level === "ERROR" ? Theme.danger : model.level === "WARN" ? Theme.warning : Theme.muted
+                                            font.pixelSize: 11
+                                            font.weight: Font.Black
+                                            Layout.preferredWidth: 50
+                                        }
+
+                                        Label {
+                                            id: logMessage
+                                            text: model.message
+                                            color: Theme.text
+                                            wrapMode: Text.WordWrap
+                                            font.pixelSize: 12
+                                            Layout.fillWidth: true
+                                        }
+
+                                        GhostButton {
+                                            text: "Копія"
+                                            Layout.fillWidth: false
+                                            onClicked: if (backend) backend.copyLogLine(index)
+                                        }
+
+                                        GhostButton {
+                                            text: "Файл"
+                                            Layout.fillWidth: false
+                                            onClicked: if (backend) backend.openPathFromText(model.message)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -2050,7 +2358,7 @@ ApplicationWindow {
                         model: [
                             { step: "1", title: "Додай медіа", text: "Перетягни файли в hero-зону черги або натисни `Додати файли` / `Додати папку`." },
                             { step: "2", title: "Обери сценарій", text: "У вкладці `Старт` обери тип задачі і, якщо треба, застосуй готовий preset для YouTube, TikTok, Reels, Stories, Telegram або WhatsApp." },
-                            { step: "3", title: "Налаштуй і перевір", text: "Деталі редагуй у вкладках `Відео`, `Фото`, `Аудіо`, `Субтитри`, а `Preview назв` і output folder перевір у вкладці `Проєкт`." }
+                            { step: "3", title: "Налаштуй і перевір", text: "Деталі редагуй у вкладках `Відео`, `Фото`, `Аудіо`, `Субтитри`, а preview виводу і папку виводу перевір у вкладці `Проєкт`." }
                         ]
 
                         delegate: Rectangle {

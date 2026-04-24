@@ -1,5 +1,8 @@
+import hashlib
 import os
 import queue
+import shutil
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -31,139 +34,11 @@ from core.settings import merge_settings_maps, settings_map_to_model
 from services.converter_service import ConverterService
 from services.ffmpeg_service import FfmpegService
 from utils.files import build_output_path, file_sha256, is_subtitle, media_type
-from utils.formatting import format_bytes, format_time
+from utils.formatting import format_bytes, format_time, parse_float, parse_time_to_seconds
 from utils.state import load_json_file, load_json_state, save_json_file, save_json_state
 
 
-class QueueModel(QtCore.QAbstractListModel):
-    NameRole = QtCore.Qt.UserRole + 1
-    TypeRole = QtCore.Qt.UserRole + 2
-    PathRole = QtCore.Qt.UserRole + 3
-    DisplayRole = QtCore.Qt.UserRole + 4
-    StatusRole = QtCore.Qt.UserRole + 5
-    ErrorRole = QtCore.Qt.UserRole + 6
-    AttemptsRole = QtCore.Qt.UserRole + 7
-    HasOverrideRole = QtCore.Qt.UserRole + 8
-    OutputRole = QtCore.Qt.UserRole + 9
-    PreviewRole = QtCore.Qt.UserRole + 10
-
-    def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
-        super().__init__(parent)
-        self._items: List[TaskItem] = []
-
-    def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        if parent.isValid():
-            return 0
-        return len(self._items)
-
-    def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole):
-        if not index.isValid():
-            return None
-        item = self._items[index.row()]
-        if role == QtCore.Qt.DisplayRole or role == self.DisplayRole:
-            return f"{item.path.name}  [{item.media_type}]"
-        if role == self.NameRole:
-            return item.path.name
-        if role == self.TypeRole:
-            return item.media_type
-        if role == self.PathRole:
-            return str(item.path)
-        if role == self.StatusRole:
-            return item.status
-        if role == self.ErrorRole:
-            return item.last_error
-        if role == self.AttemptsRole:
-            return item.attempts
-        if role == self.HasOverrideRole:
-            return bool(item.overrides)
-        if role == self.OutputRole:
-            return item.last_output
-        if role == self.PreviewRole:
-            return item.preview_output
-        return None
-
-    def roleNames(self) -> Dict[int, bytes]:
-        return {
-            self.NameRole: b"name",
-            self.TypeRole: b"mediaType",
-            self.PathRole: b"path",
-            self.DisplayRole: b"display",
-            self.StatusRole: b"status",
-            self.ErrorRole: b"errorText",
-            self.AttemptsRole: b"attempts",
-            self.HasOverrideRole: b"hasOverride",
-            self.OutputRole: b"outputPath",
-            self.PreviewRole: b"previewOutput",
-        }
-
-    def items(self) -> List[TaskItem]:
-        return list(self._items)
-
-    def item_at(self, index: int) -> Optional[TaskItem]:
-        if index < 0 or index >= len(self._items):
-            return None
-        return self._items[index]
-
-    def add_items(self, items: List[TaskItem]) -> None:
-        if not items:
-            return
-        start = len(self._items)
-        end = start + len(items) - 1
-        self.beginInsertRows(QtCore.QModelIndex(), start, end)
-        self._items.extend(items)
-        self.endInsertRows()
-
-    def set_items(self, items: List[TaskItem]) -> None:
-        self.beginResetModel()
-        self._items = list(items)
-        self.endResetModel()
-
-    def update_item(self, index: int, item: TaskItem) -> None:
-        if index < 0 or index >= len(self._items):
-            return
-        self._items[index] = item
-        model_index = self.index(index, 0)
-        self.dataChanged.emit(model_index, model_index, list(self.roleNames().keys()))
-
-    def update_task_state(self, task_path: Path, status: str, message: str = "", output_path: str = "") -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
-            if status == "running":
-                item.attempts += 1
-            item.status = status
-            if status == "success":
-                item.last_error = ""
-            elif status in {"failed", "skipped"}:
-                item.last_error = message
-            if output_path:
-                item.last_output = output_path
-            self.update_item(idx, item)
-            return
-
-    def set_preview_output(self, task_path: Path, preview_output: str) -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
-            if item.preview_output == preview_output:
-                return
-            item.preview_output = preview_output
-            self.update_item(idx, item)
-            return
-
-    def paths_set(self) -> set[Path]:
-        return {item.path for item in self._items}
-
-    def clear_statuses(self, *, paths: Optional[set[Path]] = None) -> None:
-        for idx, item in enumerate(self._items):
-            if paths is not None and item.path not in paths:
-                continue
-            item.status = "queued"
-            item.last_error = ""
-            item.last_output = ""
-            self.update_item(idx, item)
-
-
+from ui.models import QueueModel, LogModel, HistoryModel
 class Backend(QtCore.QObject):
     logAdded = QtCore.Signal(str, str)
     statusChanged = QtCore.Signal()
@@ -176,6 +51,7 @@ class Backend(QtCore.QObject):
     outputDirChanged = QtCore.Signal()
     infoChanged = QtCore.Signal()
     isRunningChanged = QtCore.Signal()
+    isPausedChanged = QtCore.Signal()
     presetLoaded = QtCore.Signal(dict)
     recentFoldersChanged = QtCore.Signal()
     watchFolderChanged = QtCore.Signal()
@@ -199,16 +75,20 @@ class Backend(QtCore.QObject):
         self.converter = ConverterService(self.ffmpeg_service, self.event_queue)
 
         self.queue_model = QueueModel()
+        self.log_model = LogModel()
+        self.history_model = HistoryModel()
         self.media_info_cache: Dict[Path, MediaInfo] = {}
         self.presets: Dict[str, dict] = load_presets(PRESET_STORE)
         self.presets_model = QtCore.QStringListModel()
         self.recent_folders_model = QtCore.QStringListModel()
         self._log_lines: List[str] = []
         self._selected_index = -1
+        self._selected_path = ""
         self._last_settings_map: Dict[str, Any] = {}
         self._output_preview_text = "Preview ще не згенеровано."
         self._selected_preview_source = "—"
         self._selected_preview_output = "—"
+        self._selected_preview_command = "—"
         self._history_entries = load_json_file(HISTORY_STORE) or []
         if not isinstance(self._history_entries, list):
             self._history_entries = []
@@ -231,6 +111,7 @@ class Backend(QtCore.QObject):
         self._file_progress_text = "Файл: --"
         self._total_progress_text = "Всього: --"
         self._is_running = False
+        self._is_paused = False
 
         self._info_name = "—"
         self._info_duration = "--:--"
@@ -250,6 +131,7 @@ class Backend(QtCore.QObject):
 
         self._refresh_presets()
         self._refresh_recent_folders()
+        self.history_model.set_entries(self._history_entries)
 
         self._timer = QtCore.QTimer(self)
         self._timer.setInterval(120)
@@ -267,6 +149,14 @@ class Backend(QtCore.QObject):
     @QtCore.Property(QtCore.QObject, constant=True)
     def queueModel(self) -> QtCore.QObject:
         return self.queue_model
+
+    @QtCore.Property(QtCore.QObject, constant=True)
+    def logModel(self) -> QtCore.QObject:
+        return self.log_model
+
+    @QtCore.Property(QtCore.QObject, constant=True)
+    def historyModel(self) -> QtCore.QObject:
+        return self.history_model
 
     @QtCore.Property(QtCore.QObject, constant=True)
     def presetsModel(self) -> QtCore.QObject:
@@ -354,6 +244,10 @@ class Backend(QtCore.QObject):
     def isRunning(self) -> bool:
         return self._is_running
 
+    @QtCore.Property(bool, notify=isPausedChanged)
+    def isPaused(self) -> bool:
+        return self._is_paused
+
     @QtCore.Property(str, notify=infoChanged)
     def infoName(self) -> str:
         return self._info_name
@@ -397,6 +291,10 @@ class Backend(QtCore.QObject):
     @QtCore.Property(str, notify=outputPreviewChanged)
     def selectedPreviewOutput(self) -> str:
         return self._selected_preview_output
+
+    @QtCore.Property(str, notify=outputPreviewChanged)
+    def selectedPreviewCommand(self) -> str:
+        return self._selected_preview_command
 
     @QtCore.Property(str, notify=historyChanged)
     def historyText(self) -> str:
@@ -442,6 +340,9 @@ class Backend(QtCore.QObject):
             "attempts": item.attempts,
             "last_output": item.last_output,
             "preview_output": item.preview_output,
+            "duration_text": item.duration_text,
+            "size_text": item.size_text,
+            "thumbnail_path": item.thumbnail_path,
             "content_hash": item.content_hash,
             "overrides": dict(item.overrides),
         }
@@ -469,6 +370,9 @@ class Backend(QtCore.QObject):
                     attempts=int(raw.get("attempts") or 0),
                     last_output=str(raw.get("last_output") or ""),
                     preview_output=str(raw.get("preview_output") or ""),
+                    duration_text=str(raw.get("duration_text") or "—"),
+                    size_text=str(raw.get("size_text") or "—"),
+                    thumbnail_path=str(raw.get("thumbnail_path") or ""),
                     content_hash=str(raw.get("content_hash") or ""),
                     overrides=dict(raw.get("overrides") or {}),
                 )
@@ -496,6 +400,7 @@ class Backend(QtCore.QObject):
         self._history_entries.insert(0, entry)
         self._history_entries = self._history_entries[:30]
         save_json_file(HISTORY_STORE, self._history_entries)
+        self.history_model.set_entries(self._history_entries)
         self.historyChanged.emit()
 
     def _set_output_preview(self, value: str) -> None:
@@ -504,13 +409,19 @@ class Backend(QtCore.QObject):
         self._output_preview_text = value
         self.outputPreviewChanged.emit()
 
-    def _set_selected_preview(self, source: str, output_name: str) -> None:
+    def _set_selected_preview(self, source: str, output_name: str, command: str = "—") -> None:
         source_value = source or "—"
         output_value = output_name or "—"
-        if self._selected_preview_source == source_value and self._selected_preview_output == output_value:
+        command_value = command or "—"
+        if (
+            self._selected_preview_source == source_value
+            and self._selected_preview_output == output_value
+            and self._selected_preview_command == command_value
+        ):
             return
         self._selected_preview_source = source_value
         self._selected_preview_output = output_value
+        self._selected_preview_command = command_value
         self.outputPreviewChanged.emit()
 
     def _notify_queue_stats(self) -> None:
@@ -534,6 +445,7 @@ class Backend(QtCore.QObject):
 
     def _append_log(self, level: str, msg: str) -> None:
         self._log_lines.append(f"{level}: {msg}")
+        self.log_model.append(level, msg)
         self.logAdded.emit(level, msg)
 
     def _refresh_presets(self) -> None:
@@ -625,6 +537,57 @@ class Backend(QtCore.QObject):
             return
         QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(folder)))
 
+    def _open_path(self, path: Path) -> bool:
+        path = path.expanduser()
+        if not path.exists():
+            return False
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(path)))
+        return True
+
+    @QtCore.Slot(str)
+    def openSourcePath(self, path_text: str) -> None:
+        path = Path(str(path_text or "").strip()).expanduser()
+        if not self._open_path(path):
+            QtWidgets.QMessageBox.warning(None, "Джерело", "Файл джерела не знайдено.")
+
+    @QtCore.Slot(str)
+    def openOutputForPath(self, path_text: str) -> None:
+        task = self.queue_model.item_by_path(Path(str(path_text or "").strip()).expanduser())
+        if task is None:
+            return
+        output_text = (task.last_output or task.preview_output or "").split(";", 1)[0].strip()
+        if not output_text:
+            QtWidgets.QMessageBox.information(None, "Output", "Output для цього файлу ще не розраховано.")
+            return
+        output = Path(output_text).expanduser()
+        if output.exists():
+            self._open_path(output)
+            return
+        if output.parent.exists():
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(output.parent)))
+            return
+        QtWidgets.QMessageBox.warning(None, "Output", "Output-файл і його папку не знайдено.")
+
+    @QtCore.Slot(int)
+    def copyLogLine(self, index: int) -> None:
+        line = self.log_model.line_at(index)
+        if line:
+            QtWidgets.QApplication.clipboard().setText(line)
+
+    @QtCore.Slot()
+    def clearLog(self) -> None:
+        self._log_lines = []
+        self.log_model.clear()
+
+    @QtCore.Slot(str)
+    def openPathFromText(self, text: str) -> None:
+        source = str(text or "")
+        for item in self.queue_model.items():
+            if str(item.path) in source or item.path.name in source:
+                self.openSourcePath(str(item.path))
+                return
+        self._append_log("WARN", "Не вдалося знайти файл для цього повідомлення.")
+
     @QtCore.Slot()
     def addFiles(self) -> None:
         filt = (
@@ -640,6 +603,7 @@ class Backend(QtCore.QObject):
     @QtCore.Slot("QVariantList")
     def addDroppedUrls(self, urls: List[Any]) -> None:
         paths: List[Path] = []
+        folders: List[Path] = []
         for value in urls:
             if isinstance(value, QtCore.QUrl):
                 local_path = value.toLocalFile()
@@ -648,21 +612,31 @@ class Backend(QtCore.QObject):
             if local_path:
                 path = Path(local_path)
                 if path.is_dir():
-                    paths.extend([p for p in path.rglob("*") if p.is_file()])
+                    folders.append(path)
                 else:
                     paths.append(path)
         if paths:
             self._remember_folder(str(paths[0].parent))
             self._add_paths(paths)
+        for folder in folders:
+            self._append_log("INFO", f"Сканую папку у фоні: {folder}")
+            threading.Thread(target=self._collect_folder_async, args=(folder,), daemon=True).start()
 
     @QtCore.Slot()
     def addFolder(self) -> None:
         folder = QtWidgets.QFileDialog.getExistingDirectory(None, "Додати папку")
         if folder:
-            self._remember_folder(folder)
             base = Path(folder)
-            items = [p for p in base.rglob("*") if p.is_file()]
-            self._add_paths(items)
+            self._append_log("INFO", f"Сканую папку у фоні: {base}")
+            threading.Thread(target=self._collect_folder_async, args=(base,), daemon=True).start()
+
+    def _collect_folder_async(self, folder: Path) -> None:
+        try:
+            items = [p for p in folder.rglob("*") if p.is_file()]
+        except Exception as exc:
+            self.event_queue.put(("log", "ERROR", f"Не вдалося просканувати папку {folder}: {exc}"))
+            return
+        self.event_queue.put(("add_paths", items, str(folder)))
 
     def _add_paths(self, paths: List[Path]) -> None:
         existing = self.queue_model.paths_set()
@@ -679,6 +653,9 @@ class Backend(QtCore.QObject):
             added.append(TaskItem(path=resolved, media_type=mtype))
         if added:
             self.queue_model.add_items(added)
+            for item in added:
+                self.queue_model.set_file_size(item.path)
+                self._ensure_thumbnail_async(item.path, item.media_type)
             self._notify_queue_stats()
             self._append_log("OK", f"Додано файлів: {len(added)}")
             if self._last_settings_map:
@@ -710,9 +687,16 @@ class Backend(QtCore.QObject):
     @QtCore.Slot()
     def deduplicateQueueByHash(self) -> None:
         items = self.queue_model.items()
+        if not items:
+            return
+        self._append_log("INFO", "Hash-дедуплікація запущена у фоні.")
+        threading.Thread(target=self._deduplicate_hash_async, args=(items,), daemon=True).start()
+
+    def _deduplicate_hash_async(self, items: List[TaskItem]) -> None:
         seen: Dict[tuple[int, str], TaskItem] = {}
         unique: List[TaskItem] = []
         removed = 0
+        log_lines: List[str] = []
         for item in items:
             try:
                 size = item.path.stat().st_size
@@ -723,23 +707,18 @@ class Backend(QtCore.QObject):
                 try:
                     item.content_hash = file_sha256(item.path)
                 except Exception as exc:
-                    self._append_log("WARN", f"Не вдалося порахувати hash для {item.path.name}: {exc}")
+                    log_lines.append(f"Не вдалося порахувати hash для {item.path.name}: {exc}")
                     unique.append(item)
                     continue
             key = (size, item.content_hash)
             if item.content_hash and key in seen:
                 removed += 1
-                self._append_log("INFO", f"Hash duplicate: {item.path.name} == {seen[key].path.name}")
+                log_lines.append(f"Hash duplicate: {item.path.name} == {seen[key].path.name}")
                 continue
             if item.content_hash:
                 seen[key] = item
             unique.append(item)
-        self.queue_model.set_items(unique)
-        self._notify_queue_stats()
-        if self._last_settings_map:
-            self._refresh_output_preview(dict(self._last_settings_map))
-        self._save_state()
-        self._append_log("INFO", f"Видалено hash-дублікатів: {removed}")
+        self.event_queue.put(("dedupe_hash_done", unique, removed, log_lines))
 
     def _move_selected(self, indices: List[int], direction: str) -> None:
         if not indices:
@@ -765,10 +744,28 @@ class Backend(QtCore.QObject):
             rest = [item for idx, item in enumerate(items) if idx not in selected]
             items = rest + moved
         self.queue_model.set_items(items)
+        self._selected_index = self.queue_model.index_for_path(Path(self._selected_path)) if self._selected_path else -1
         self._notify_queue_stats()
         if self._last_settings_map:
             self._refresh_output_preview(dict(self._last_settings_map))
         self._save_state()
+
+    def _paths_from_payload(self, paths: List[Any]) -> set[Path]:
+        normalized: set[Path] = set()
+        for value in paths:
+            text = str(value or "").strip()
+            if not text:
+                continue
+            normalized.add(Path(text).expanduser())
+        return normalized
+
+    def _move_selected_paths(self, paths: List[Any], direction: str) -> None:
+        selected_paths = self._paths_from_payload(paths)
+        if not selected_paths:
+            return
+        items = self.queue_model.items()
+        selected = [idx for idx, item in enumerate(items) if item.path in selected_paths]
+        self._move_selected(selected, direction)
 
     @QtCore.Slot("QVariantList")
     def moveSelectedUp(self, indices: List[int]) -> None:
@@ -787,6 +784,42 @@ class Backend(QtCore.QObject):
         self._move_selected(indices, "bottom")
 
     @QtCore.Slot("QVariantList")
+    def moveSelectedPathsUp(self, paths: List[Any]) -> None:
+        self._move_selected_paths(paths, "up")
+
+    @QtCore.Slot("QVariantList")
+    def moveSelectedPathsDown(self, paths: List[Any]) -> None:
+        self._move_selected_paths(paths, "down")
+
+    @QtCore.Slot("QVariantList")
+    def moveSelectedPathsTop(self, paths: List[Any]) -> None:
+        self._move_selected_paths(paths, "top")
+
+    @QtCore.Slot("QVariantList")
+    def moveSelectedPathsBottom(self, paths: List[Any]) -> None:
+        self._move_selected_paths(paths, "bottom")
+
+    @QtCore.Slot(str, int)
+    def movePathToIndex(self, path_text: str, target_index: int) -> None:
+        source_path = Path(str(path_text or "").strip()).expanduser()
+        items = self.queue_model.items()
+        source_index = next((idx for idx, item in enumerate(items) if item.path == source_path), -1)
+        if source_index < 0:
+            return
+        target_index = max(0, min(int(target_index), len(items) - 1))
+        if source_index == target_index:
+            return
+        item = items.pop(source_index)
+        target_index = max(0, min(target_index, len(items)))
+        items.insert(target_index, item)
+        self.queue_model.set_items(items)
+        self._selected_index = self.queue_model.index_for_path(Path(self._selected_path)) if self._selected_path else -1
+        self._notify_queue_stats()
+        if self._last_settings_map:
+            self._refresh_output_preview(dict(self._last_settings_map))
+        self._save_state()
+
+    @QtCore.Slot("QVariantList")
     def removeSelected(self, indices: List[int]) -> None:
         if not indices:
             return
@@ -800,9 +833,34 @@ class Backend(QtCore.QObject):
         self._append_log("INFO", f"Видалено: {len(remove_set)}")
         self._clear_info()
 
+    @QtCore.Slot("QVariantList")
+    def removeSelectedPaths(self, paths: List[Any]) -> None:
+        remove_paths = self._paths_from_payload(paths)
+        if not remove_paths:
+            return
+        keep = [item for item in self.queue_model.items() if item.path not in remove_paths]
+        removed = len(self.queue_model.items()) - len(keep)
+        self.queue_model.set_items(keep)
+        self._selected_index = self.queue_model.index_for_path(Path(self._selected_path)) if self._selected_path else -1
+        if self._selected_index < 0:
+            self._selected_path = ""
+            self._clear_info()
+            self._set_selected_preview("—", "—")
+        self._notify_queue_stats()
+        if self._last_settings_map:
+            self._refresh_output_preview(dict(self._last_settings_map))
+        self._save_state()
+        self._append_log("INFO", f"Видалено: {removed}")
+
+    @QtCore.Slot(str)
+    def removeTaskPath(self, path_text: str) -> None:
+        self.removeSelectedPaths([path_text])
+
     @QtCore.Slot()
     def clearQueue(self) -> None:
         self.queue_model.set_items([])
+        self._selected_index = -1
+        self._selected_path = ""
         self._notify_queue_stats()
         self._set_output_preview("Черга порожня.")
         self._set_selected_preview("—", "—")
@@ -863,11 +921,15 @@ class Backend(QtCore.QObject):
         self._selected_index = index
         task = self.queue_model.item_at(index)
         if task is None:
+            self._selected_path = ""
             self._clear_info()
             self._set_selected_preview("—", "—")
             self.taskOverrideLoaded.emit({})
             return
-        self._set_selected_preview(task.path.name, task.preview_output or "—")
+        self._selected_path = str(task.path)
+        self._set_selected_preview(str(task.path), task.preview_output or "—")
+        if self._last_settings_map:
+            self._refresh_output_preview(dict(self._last_settings_map))
         self._info_name = task.path.name
         self._info_duration = "--:--"
         self._info_codec = "—"
@@ -883,11 +945,54 @@ class Backend(QtCore.QObject):
         if not self.ffmpeg_service.ffprobe_path:
             return
         threading.Thread(target=self._probe_media_async, args=(task.path,), daemon=True).start()
+        self._ensure_thumbnail_async(task.path, task.media_type)
+
+    @QtCore.Slot(str)
+    def selectQueuePath(self, path_text: str) -> None:
+        task_path = Path(str(path_text or "").strip()).expanduser()
+        self.selectQueueIndex(self.queue_model.index_for_path(task_path))
 
     def _probe_media_async(self, path: Path) -> None:
         info = self.ffmpeg_service.probe_media(path)
         if info:
             self.event_queue.put(("media_info", path, info))
+
+    def _ensure_thumbnail_async(self, path: Path, media_kind: str) -> None:
+        if media_kind == "image":
+            self.queue_model.set_thumbnail(path, str(path))
+            return
+        if media_kind != "video" or not self.ffmpeg_service.ffmpeg_path:
+            return
+        current = self.queue_model.item_by_path(path)
+        if current and current.thumbnail_path:
+            return
+        threading.Thread(target=self._create_video_thumbnail, args=(path,), daemon=True).start()
+
+    def _create_video_thumbnail(self, path: Path) -> None:
+        cache_dir = Path.home() / ".media_converter_gui_thumbnails"
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            digest = hashlib.sha1(str(path).encode("utf-8", errors="ignore")).hexdigest()[:16]
+            target = cache_dir / f"{digest}.jpg"
+            if not target.exists():
+                cmd = [
+                    self.ffmpeg_service.ffmpeg_path,
+                    "-y",
+                    "-ss",
+                    "1",
+                    "-i",
+                    str(path),
+                    "-frames:v",
+                    "1",
+                    "-vf",
+                    "scale=160:-1",
+                    str(target),
+                ]
+                subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+            if target.exists():
+                self.event_queue.put(("thumbnail", path, str(target)))
+        except Exception:
+            return
 
     def _update_info(self, info: MediaInfo) -> None:
         self._info_duration = format_time(info.duration)
@@ -1008,6 +1113,214 @@ class Backend(QtCore.QObject):
         if settings.replace_audio_path and not Path(settings.replace_audio_path).expanduser().exists():
             self._append_log("WARN", "Файл заміни аудіо не знайдено.")
 
+    def _validate_settings_map(
+        self,
+        raw: Dict[str, Any],
+        *,
+        include_queue: bool,
+        only_paths: Optional[set[Path]] = None,
+    ) -> Dict[str, Any]:
+        errors: Dict[str, str] = {}
+        warnings: List[str] = []
+
+        def add_error(field: str, message: str) -> None:
+            errors.setdefault(field, message)
+
+        def add_warning(message: str) -> None:
+            if message not in warnings:
+                warnings.append(message)
+
+        positive_int_fields = {
+            "resize_w": "Resize W",
+            "resize_h": "Resize H",
+            "crop_w": "Crop W",
+            "crop_h": "Crop H",
+            "sheet_cols": "Sheet Cols",
+            "sheet_rows": "Sheet Rows",
+            "sheet_width": "Sheet Width",
+            "sheet_interval": "Sheet Interval",
+        }
+        non_negative_int_fields = {
+            "crop_x": "Crop X",
+            "crop_y": "Crop Y",
+        }
+        for field, label in positive_int_fields.items():
+            value = str(raw.get(field, "")).strip()
+            if not value:
+                continue
+            if not value.isdigit() or int(value) <= 0:
+                add_error(field, f"{label}: очікується додатне число.")
+        for field, label in non_negative_int_fields.items():
+            value = str(raw.get(field, "")).strip()
+            if not value:
+                continue
+            if not value.isdigit():
+                add_error(field, f"{label}: очікується 0 або додатне число.")
+
+        for field, label in {"trim_start": "Початок", "trim_end": "Кінець", "thumbnail_time": "Thumbnail time"}.items():
+            value = str(raw.get(field, "")).strip()
+            if value and parse_time_to_seconds(value) is None:
+                add_error(field, f"{label}: формат має бути секундами або hh:mm:ss.")
+
+        speed_value = str(raw.get("speed", "")).strip()
+        if speed_value:
+            parsed_speed = parse_float(speed_value)
+            if parsed_speed is None or parsed_speed <= 0:
+                add_error("speed", "Швидкість має бути числом більше 0.")
+
+        for field, label in {
+            "audio_bitrate": "Audio bitrate",
+            "silence_duration": "Тривалість тиші",
+            "audio_peak_limit_db": "Peak limit",
+        }.items():
+            value = str(raw.get(field, "")).strip()
+            if field == "audio_bitrate":
+                if value and not any(ch.isdigit() for ch in value):
+                    add_error(field, f"{label}: вкажи значення на кшталт 192k.")
+                continue
+            if value and parse_float(value) is None:
+                add_error(field, f"{label}: очікується число.")
+
+        for field, label in {
+            "wm_path": "Водяний знак",
+            "cover_art_path": "Cover art",
+            "text_font": "Шрифт",
+            "subtitle_path": "Субтитри",
+            "replace_audio_path": "Аудіо для заміни",
+        }.items():
+            value = str(raw.get(field, "")).strip()
+            if value and not Path(value).expanduser().exists():
+                add_error(field, f"{label}: файл не знайдено.")
+
+        subtitle_path = str(raw.get("subtitle_path", "")).strip()
+        if subtitle_path and not is_subtitle(Path(subtitle_path).expanduser()):
+            add_error("subtitle_path", "Субтитри: формат не підтримується.")
+
+        output_dir = Path(self.outputDir).expanduser()
+        if not str(self.outputDir).strip():
+            add_error("output_dir", "Папка виводу не задана.")
+
+        if include_queue:
+            queue_items = [
+                item
+                for item in self.queue_model.items()
+                if only_paths is None or item.path in only_paths
+            ]
+            if not self.ffmpegPath:
+                add_error("ffmpeg", "FFmpeg не знайдено або не задано.")
+            else:
+                ffmpeg_text = str(self.ffmpegPath).strip()
+                if not Path(ffmpeg_text).expanduser().exists() and shutil.which(ffmpeg_text) is None:
+                    add_error("ffmpeg", "FFmpeg недоступний за вказаним шляхом.")
+                probe_path = find_ffprobe(ffmpeg_text)
+                if not probe_path:
+                    add_warning("FFprobe не знайдено; аналіз медіа, ETA і preflight будуть обмежені.")
+            if not queue_items:
+                add_error("queue", "Черга порожня.")
+            operation = settings_map_to_model(raw, defaults=ConversionSettings()).operation
+            if operation in {"audio_only", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet", "auto_subtitle"}:
+                image_items = [item.path.name for item in queue_items if item.media_type != "video"]
+                if image_items:
+                    add_error("queue", f"Операція працює тільки з відео. Несумісних файлів: {len(image_items)}.")
+            for item in queue_items:
+                if not item.path.exists():
+                    add_error("queue", f"Файл не знайдено: {item.path}")
+                    break
+            try:
+                resolved = settings_map_to_model(raw, defaults=ConversionSettings())
+                for idx, item in enumerate(queue_items, start=1):
+                    out_ext = self.ffmpeg_service.output_extension_for(item.media_type, resolved)
+                    desired = build_output_path(
+                        output_dir,
+                        item.path,
+                        out_ext,
+                        template=resolved.output_template,
+                        index=idx,
+                        operation=resolved.operation,
+                        media_type_name=item.media_type,
+                        overwrite=True,
+                        skip_existing=True,
+                    )
+                    if desired.exists():
+                        if resolved.overwrite:
+                            add_warning(f"{desired.name}: буде перезаписано.")
+                        elif resolved.skip_existing:
+                            add_warning(f"{desired.name}: буде пропущено.")
+                        else:
+                            add_warning(f"{desired.name}: є конфлікт імені, буде створено безпечну копію.")
+                        break
+            except Exception:
+                pass
+
+        out_video = str(raw.get("out_video_fmt", "")).strip().lower()
+        codec = str(raw.get("codec", "")).strip()
+        if out_video == "webm" and codec in {"H.264 (AVC)", "H.265 (HEVC)"}:
+            add_warning("WebM не сумісний з H.264/H.265; буде використано VP9 або AV1.")
+        if out_video in {"mp4", "mov", "avi"} and codec == "VP9 (WebM)":
+            add_warning("VP9 краще виводити у WebM; для MP4/MOV буде заміна на H.264.")
+
+        if include_queue and output_dir.exists():
+            try:
+                queue_items = [
+                    item
+                    for item in self.queue_model.items()
+                    if only_paths is None or item.path in only_paths
+                ]
+                source_size = sum(item.path.stat().st_size for item in queue_items if item.path.exists())
+                free = shutil.disk_usage(output_dir).free
+                if source_size and free < max(source_size * 0.15, 256 * 1024 * 1024):
+                    add_warning("Мало вільного місця у папці виводу для безпечного batch-запуску.")
+            except Exception:
+                pass
+
+        summary_bits = []
+        if errors:
+            summary_bits.append(f"Критичних помилок: {len(errors)}")
+        if warnings:
+            summary_bits.append(f"Попереджень: {len(warnings)}")
+        summary = " | ".join(summary_bits) if summary_bits else "Перевірка пройдена."
+        return {"ok": not errors, "errors": errors, "warnings": warnings, "summary": summary}
+
+    @QtCore.Slot("QVariantMap", result="QVariantMap")
+    def validateSettings(self, settings_map: Dict[str, Any]) -> Dict[str, Any]:
+        return self._validate_settings_map(dict(settings_map), include_queue=True)
+
+    def _format_command(self, cmd: List[Any]) -> str:
+        return subprocess.list2cmdline([str(part) for part in cmd])
+
+    def _build_dry_run_command(self, task: TaskItem, settings: ConversionSettings, output_path: Path) -> str:
+        if settings.operation == "auto_subtitle":
+            return f"whisper {self._format_command([task.path])} -> {output_path}"
+        if not self.ffmpeg_service.ffmpeg_path:
+            return "FFmpeg не задано"
+        try:
+            op = settings.operation
+            if op in {"convert", "subtitle_burn"}:
+                if task.media_type == "video":
+                    info = self.media_info_cache.get(task.path)
+                    cmd = self.ffmpeg_service.build_video_command(
+                        task.path,
+                        output_path,
+                        settings,
+                        info,
+                        False,
+                    )
+                else:
+                    cmd = self.ffmpeg_service.build_image_command(task.path, output_path, settings)
+            elif op == "audio_only":
+                cmd = self.ffmpeg_service.build_audio_command(task.path, output_path, settings)
+            elif op == "subtitle_extract":
+                cmd = self.ffmpeg_service.build_subtitle_extract_command(task.path, output_path, settings)
+            elif op == "thumbnail":
+                cmd = self.ffmpeg_service.build_thumbnail_command(task.path, output_path, settings)
+            elif op == "contact_sheet":
+                cmd = self.ffmpeg_service.build_contact_sheet_command(task.path, output_path, settings)
+            else:
+                return "Dry-run недоступний для цієї операції"
+            return self._format_command(cmd)
+        except Exception as exc:
+            return f"Не вдалося зібрати dry-run команду: {exc}"
+
     def _refresh_output_preview(self, settings_map: Dict[str, Any]) -> None:
         if not self.queue_model.items():
             self._set_output_preview("Черга порожня.")
@@ -1019,6 +1332,17 @@ class Backend(QtCore.QObject):
             merged_map = merge_settings_maps(settings_map, item.overrides)
             resolved = settings_map_to_model(merged_map, defaults=ConversionSettings())
             out_ext = self.ffmpeg_service.output_extension_for(item.media_type, resolved)
+            desired_path = build_output_path(
+                out_dir,
+                item.path,
+                out_ext,
+                template=resolved.output_template,
+                index=index,
+                operation=resolved.operation,
+                media_type_name=item.media_type,
+                overwrite=True,
+                skip_existing=True,
+            )
             preview_path = build_output_path(
                 out_dir,
                 item.path,
@@ -1030,12 +1354,21 @@ class Backend(QtCore.QObject):
                 overwrite=resolved.overwrite,
                 skip_existing=resolved.skip_existing,
             )
-            self.queue_model.set_preview_output(item.path, preview_path.name)
-            if self._selected_index >= 0:
-                current = self.queue_model.item_at(self._selected_index)
-                if current and current.path == item.path:
-                    self._set_selected_preview(item.path.name, preview_path.name)
-            lines.append(f"{item.path.name} -> {preview_path.name}")
+            conflict = ""
+            if desired_path.exists():
+                if resolved.overwrite:
+                    conflict = " | конфлікт: буде перезаписано"
+                elif resolved.skip_existing:
+                    conflict = " | конфлікт: буде пропущено"
+                elif desired_path != preview_path:
+                    conflict = f" | конфлікт: буде перейменовано в {preview_path.name}"
+            self.queue_model.set_preview_output(item.path, str(preview_path))
+            command = self._build_dry_run_command(item, resolved, preview_path)
+            current = self.queue_model.item_at(self._selected_index)
+            if (current and current.path == item.path) or (not current and index == 1):
+                self._set_selected_preview(str(item.path), str(preview_path), command)
+            codec_label = resolved.video_codec if resolved.operation in {"convert", "subtitle_burn"} else resolved.operation
+            lines.append(f"{index:02d}. {item.path} -> {preview_path} | {out_ext} | {codec_label}{conflict}")
         if len(lines) > 14:
             remaining = len(lines) - 14
             lines = lines[:14] + [f"... ще {remaining} файлів"]
@@ -1076,6 +1409,33 @@ class Backend(QtCore.QObject):
         save_json_file(Path(path), payload)
         self._append_log("OK", f"Проєкт збережено: {path}")
 
+    @QtCore.Slot("QVariantMap")
+    def exportCommandScript(self, settings_map: Dict[str, Any]) -> None:
+        self._refresh_output_preview(dict(settings_map))
+        command = self._selected_preview_command
+        if not command or command == "—":
+            QtWidgets.QMessageBox.information(None, "FFmpeg command", "Немає команди для експорту.")
+            return
+        suffix = ".bat" if os.name == "nt" else ".sh"
+        default_path = Path(self.outputDir).expanduser() / f"ffmpeg-command{suffix}"
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(None, "Експорт команди", str(default_path), f"Script (*{suffix});;All Files (*)")
+        if not path:
+            return
+        script_path = Path(path)
+        if os.name == "nt":
+            content = f"@echo off\r\n{command}\r\n"
+        else:
+            content = f"#!/usr/bin/env sh\n{command}\n"
+        script_path.write_text(content, encoding="utf-8")
+        self._append_log("OK", f"Команду експортовано: {script_path}")
+
+    @QtCore.Slot("QVariantMap")
+    def copyDryRunCommand(self, settings_map: Dict[str, Any]) -> None:
+        self._refresh_output_preview(dict(settings_map))
+        if self._selected_preview_command and self._selected_preview_command != "—":
+            QtWidgets.QApplication.clipboard().setText(self._selected_preview_command)
+            self._append_log("OK", "Dry-run команду скопійовано.")
+
     @QtCore.Slot()
     def importProject(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(None, "Імпортувати проєкт", "", "JSON (*.json)")
@@ -1103,13 +1463,63 @@ class Backend(QtCore.QObject):
     def clearHistory(self) -> None:
         self._history_entries = []
         save_json_file(HISTORY_STORE, self._history_entries)
+        self.history_model.set_entries(self._history_entries)
         self.historyChanged.emit()
         self._append_log("INFO", "Історію запусків очищено.")
 
-    def _build_run_tasks(self, settings_map: Dict[str, Any], *, failed_only: bool = False) -> List[TaskItem]:
+    @QtCore.Slot(int)
+    def openHistoryOutput(self, index: int) -> None:
+        entry = self.history_model.entry_at(index)
+        if not entry:
+            return
+        folder = Path(str(entry.get("output_dir") or "")).expanduser()
+        if folder.exists():
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(folder)))
+
+    @QtCore.Slot(int)
+    def loadHistorySettings(self, index: int) -> None:
+        entry = self.history_model.entry_at(index)
+        if not entry:
+            return
+        settings = dict(entry.get("settings") or {})
+        if not settings:
+            self._append_log("WARN", "У цьому запуску немає збережених налаштувань.")
+            return
+        self._last_settings_map = settings
+        self.presetLoaded.emit(settings)
+        self._refresh_output_preview(settings)
+        self._append_log("OK", "Налаштування запуску завантажено з історії.")
+
+    @QtCore.Slot(int)
+    def rerunHistory(self, index: int) -> None:
+        entry = self.history_model.entry_at(index)
+        if not entry:
+            return
+        settings = dict(entry.get("settings") or {})
+        if not settings:
+            self._append_log("WARN", "У цьому запуску немає налаштувань для повтору.")
+            return
+        paths: List[Path] = []
+        for result in entry.get("results", []):
+            path_text = str(result.get("path") or "").strip()
+            if path_text:
+                paths.append(Path(path_text))
+        self._add_paths(paths)
+        only_paths = {path.expanduser().resolve() for path in paths}
+        self._start_conversion(settings, only_paths=only_paths)
+
+    def _build_run_tasks(
+        self,
+        settings_map: Dict[str, Any],
+        *,
+        failed_only: bool = False,
+        only_paths: Optional[set[Path]] = None,
+    ) -> List[TaskItem]:
         tasks: List[TaskItem] = []
         for item in self.queue_model.items():
             if failed_only and item.status != "failed":
+                continue
+            if only_paths is not None and item.path not in only_paths:
                 continue
             merged_map = merge_settings_maps(settings_map, item.overrides)
             resolved = settings_map_to_model(merged_map)
@@ -1128,7 +1538,13 @@ class Backend(QtCore.QObject):
             )
         return tasks
 
-    def _start_conversion(self, settings_map: Dict[str, Any], *, failed_only: bool = False) -> None:
+    def _start_conversion(
+        self,
+        settings_map: Dict[str, Any],
+        *,
+        failed_only: bool = False,
+        only_paths: Optional[set[Path]] = None,
+    ) -> None:
         if self.converter.thread and self.converter.thread.is_alive():
             return
         entry_path = self.ffmpegPath
@@ -1138,7 +1554,16 @@ class Backend(QtCore.QObject):
         if not self.ffmpeg_service.ffmpeg_path:
             QtWidgets.QMessageBox.critical(None, "FFmpeg", "FFmpeg не знайдено. Вкажи шлях до ffmpeg.")
             return
-        run_tasks = self._build_run_tasks(settings_map, failed_only=failed_only)
+        preflight = self._validate_settings_map(settings_map, include_queue=True, only_paths=only_paths)
+        if not preflight.get("ok"):
+            details = "\n".join(str(msg) for msg in dict(preflight.get("errors") or {}).values())
+            QtWidgets.QMessageBox.critical(None, "Preflight", details or "Є критичні помилки.")
+            self._append_log("ERROR", f"Preflight заблокував старт: {preflight.get('summary')}")
+            return
+        for warning in preflight.get("warnings") or []:
+            self._append_log("WARN", f"Preflight: {warning}")
+
+        run_tasks = self._build_run_tasks(settings_map, failed_only=failed_only, only_paths=only_paths)
         if not run_tasks:
             QtWidgets.QMessageBox.information(None, "Черга", "Немає задач для запуску.")
             return
@@ -1184,10 +1609,50 @@ class Backend(QtCore.QObject):
         self._append_log("INFO", "Повторюю тільки помилкові задачі.")
         self._start_conversion(dict(self._last_settings_map), failed_only=True)
 
+    @QtCore.Slot(str)
+    def retryTaskPath(self, path_text: str) -> None:
+        if self._is_running:
+            return
+        if not self._last_settings_map:
+            self._append_log("WARN", "Немає налаштувань для retry одного файлу.")
+            return
+        task_path = Path(str(path_text or "").strip()).expanduser()
+        if self.queue_model.item_by_path(task_path) is None:
+            return
+        self.queue_model.clear_statuses(paths={task_path})
+        self._append_log("INFO", f"Повторюю файл: {task_path.name}")
+        self._start_conversion(dict(self._last_settings_map), only_paths={task_path})
+
     @QtCore.Slot()
     def stopConversion(self) -> None:
         self._set_status("Зупинка після поточного файлу...")
         self.converter.stop()
+
+    @QtCore.Slot()
+    def pauseConversion(self) -> None:
+        if not self._is_running:
+            return
+        self.converter.pause()
+        if not self._is_paused:
+            self._is_paused = True
+            self.isPausedChanged.emit()
+        self._set_status("Пауза...")
+
+    @QtCore.Slot()
+    def resumeConversion(self) -> None:
+        self.converter.resume()
+        if self._is_paused:
+            self._is_paused = False
+            self.isPausedChanged.emit()
+        if self._is_running:
+            self._set_status("Конвертація продовжується...")
+
+    @QtCore.Slot()
+    def skipCurrentFile(self) -> None:
+        if not self._is_running:
+            return
+        self.converter.skip_current()
+        self._set_status("Пропускаю поточний файл...")
 
     @QtCore.Slot(str)
     def loadPreset(self, name: str) -> None:
@@ -1236,6 +1701,32 @@ class Backend(QtCore.QObject):
         if self._selected_index == index:
             self.taskOverrideLoaded.emit(dict(task.overrides))
 
+    @QtCore.Slot(str, "QVariantMap")
+    def saveTaskOverrideByPath(self, path_text: str, override_map: Dict[str, Any]) -> None:
+        index = self.queue_model.index_for_path(Path(str(path_text or "").strip()).expanduser())
+        self.saveTaskOverride(index, override_map)
+
+    @QtCore.Slot("QVariantList", "QVariantMap")
+    def saveBulkOverride(self, paths: List[Any], override_map: Dict[str, Any]) -> None:
+        selected_paths = self._paths_from_payload(paths)
+        if not selected_paths:
+            return
+        changed = 0
+        for idx, task in enumerate(self.queue_model.items()):
+            if task.path not in selected_paths:
+                continue
+            task.overrides = dict(override_map)
+            self.queue_model.update_item(idx, task)
+            changed += 1
+        if changed:
+            if self._last_settings_map:
+                self._refresh_output_preview(dict(self._last_settings_map))
+            self._save_state()
+            self._append_log("OK", f"Bulk override застосовано: {changed}")
+            current = self.queue_model.item_at(self._selected_index)
+            if current:
+                self.taskOverrideLoaded.emit(dict(current.overrides))
+
     @QtCore.Slot(int)
     def clearTaskOverride(self, index: int) -> None:
         task = self.queue_model.item_at(index)
@@ -1249,6 +1740,11 @@ class Backend(QtCore.QObject):
         self._append_log("INFO", f"Оверрайд очищено: {task.path.name}")
         if self._selected_index == index:
             self.taskOverrideLoaded.emit({})
+
+    @QtCore.Slot(str)
+    def clearTaskOverrideByPath(self, path_text: str) -> None:
+        index = self.queue_model.index_for_path(Path(str(path_text or "").strip()).expanduser())
+        self.clearTaskOverride(index)
 
     def _poll_events(self) -> None:
         try:
@@ -1279,14 +1775,38 @@ class Backend(QtCore.QObject):
                     _, stopped = event
                     self._is_running = False
                     self.isRunningChanged.emit()
+                    if self._is_paused:
+                        self._is_paused = False
+                        self.isPausedChanged.emit()
                     self._set_status("Зупинено." if stopped else "Готово.")
                     self._save_state(pending_recovery=False)
                 elif etype == "media_info":
                     _, path, info = event
                     self.media_info_cache[path] = info
+                    self.queue_model.set_media_summary(path, info)
                     current = self.queue_model.item_at(self._selected_index)
                     if current and current.path == path:
                         self._update_info(info)
+                    if self._last_settings_map:
+                        self._refresh_output_preview(dict(self._last_settings_map))
+                elif etype == "thumbnail":
+                    _, path, thumbnail_path = event
+                    self.queue_model.set_thumbnail(path, thumbnail_path)
+                elif etype == "add_paths":
+                    _, paths, remember_folder = event
+                    if remember_folder:
+                        self._remember_folder(remember_folder)
+                    self._add_paths(paths)
+                elif etype == "dedupe_hash_done":
+                    _, unique, removed, log_lines = event
+                    self.queue_model.set_items(unique)
+                    self._notify_queue_stats()
+                    if self._last_settings_map:
+                        self._refresh_output_preview(dict(self._last_settings_map))
+                    self._save_state()
+                    for line in log_lines:
+                        self._append_log("INFO", line)
+                    self._append_log("INFO", f"Видалено hash-дублікатів: {removed}")
                 elif etype == "task_state":
                     _, path, status, message, output_path = event
                     self.queue_model.update_task_state(path, status, message, output_path)

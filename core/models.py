@@ -44,6 +44,9 @@ class TaskItem:
     attempts: int = 0
     last_output: str = ""
     preview_output: str = ""
+    duration_text: str = "—"
+    size_text: str = "—"
+    thumbnail_path: str = ""
     content_hash: str = ""
     overrides: Dict[str, Any] = field(default_factory=dict)
     resolved_settings: Optional["ConversionSettings"] = None

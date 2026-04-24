@@ -5,6 +5,7 @@ import App 1.0
 
 TextField {
     id: control
+    property bool invalid: false
     font.pixelSize: 13
     color: Theme.text
     padding: 13
@@ -19,7 +20,7 @@ TextField {
         radius: Theme.radiusInput
         color: control.enabled ? (control.hovered ? Theme.inputHover : Theme.input) : Theme.disabledBg
         border.width: 1
-        border.color: control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border
+        border.color: control.invalid ? Theme.danger : control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border
 
         Behavior on color { ColorAnimation { duration: 120 } }
 
