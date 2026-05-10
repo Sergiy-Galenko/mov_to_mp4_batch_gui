@@ -4,6 +4,7 @@ APP_TITLE = "Media Converter — Фото + Відео (FFmpeg)"
 
 VIDEO_EXTS = {".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv", ".wmv", ".mts", ".m2ts"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"}
+AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".opus", ".ogg", ".wma", ".aiff", ".aif", ".mka"}
 SUBTITLE_EXTS = {".srt", ".ass", ".ssa", ".vtt", ".webvtt"}
 
 OUT_VIDEO_FORMATS = ["mp4", "mkv", "webm", "mov", "avi", "gif"]

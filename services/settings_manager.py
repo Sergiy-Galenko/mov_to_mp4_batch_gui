@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from config.constants import DEFAULT_OUTPUT_DIR, RECENT_FOLDERS_LIMIT, STATE_STORE
+from utils.state import load_json_state, save_json_state
+
+
+class SettingsManager:
+    def __init__(self, path: Path = STATE_STORE) -> None:
+        self.path = path
+        self.state: Dict[str, Any] = load_json_state(path)
+
+    def reload(self) -> Dict[str, Any]:
+        self.state = load_json_state(self.path)
+        return dict(self.state)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.state.get(key, default)
+
+    def recent_folders(self) -> List[str]:
+        folders = self.state.get("recent_folders", [])
+        if not isinstance(folders, list):
+            return []
+        return [folder for folder in folders if isinstance(folder, str) and folder][:RECENT_FOLDERS_LIMIT]
+
+    def output_dir(self) -> str:
+        return str(self.state.get("output_dir") or DEFAULT_OUTPUT_DIR)
+
+    def ffmpeg_path(self, fallback: Optional[str]) -> str:
+        return str(self.state.get("ffmpeg_path") or fallback or "")
+
+    def watch_folder(self) -> str:
+        return str(self.state.get("watch_folder") or "")
+
+    def last_settings(self) -> Dict[str, Any]:
+        value = self.state.get("last_settings")
+        return dict(value) if isinstance(value, dict) else {}
+
+    def save(
+        self,
+        *,
+        recent_folders: List[str],
+        watch_folder: str,
+        output_dir: str,
+        ffmpeg_path: str,
+        last_settings: Dict[str, Any],
+        queue_items: List[Dict[str, Any]],
+        pending_recovery: bool,
+        onboarding_completed: bool = True,
+    ) -> None:
+        self.state = {
+            "recent_folders": recent_folders[:RECENT_FOLDERS_LIMIT],
+            "watch_folder": watch_folder,
+            "output_dir": output_dir,
+            "ffmpeg_path": ffmpeg_path,
+            "last_settings": dict(last_settings),
+            "queue_items": list(queue_items),
+            "pending_recovery": bool(pending_recovery),
+            "onboarding_completed": bool(onboarding_completed),
+        }
+        save_json_state(self.path, self.state)
+
+    def remember_folder(self, folders: List[str], folder: str) -> List[str]:
+        value = str(folder or "").strip()
+        if not value:
+            return folders[:RECENT_FOLDERS_LIMIT]
+        path = str(Path(value).expanduser())
+        result = [item for item in folders if item != path]
+        result.insert(0, path)
+        return result[:RECENT_FOLDERS_LIMIT]

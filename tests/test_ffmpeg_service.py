@@ -97,6 +97,13 @@ class FfmpegServiceTest(unittest.TestCase):
         self.assertIn("0:s:1?", subtitle_cmd)
         self.assertIn("srt", subtitle_cmd)
 
+        subtitle_file_cmd = self.service.build_subtitle_file_command(
+            Path("/tmp/input.srt"),
+            Path("/tmp/output.vtt"),
+            subtitle_settings,
+        )
+        self.assertIn("webvtt", subtitle_file_cmd)
+
         thumb_settings = ConversionSettings(operation="thumbnail", thumbnail_time=12.0)
         thumb_cmd = self.service.build_thumbnail_command(Path("/tmp/input.mp4"), Path("/tmp/output.jpg"), thumb_settings)
         self.assertIn("-frames:v", thumb_cmd)

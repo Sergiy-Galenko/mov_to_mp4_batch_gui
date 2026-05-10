@@ -217,9 +217,9 @@ class FfmpegService:
 
     def output_extension_for(self, media_type_name: str, settings: ConversionSettings) -> str:
         operation = settings.operation
-        if operation == "audio_only":
+        if operation == "audio_only" or media_type_name == "audio":
             return settings.out_audio_format
-        if operation in {"subtitle_extract", "auto_subtitle"}:
+        if operation in {"subtitle_extract", "auto_subtitle"} or media_type_name == "subtitle":
             return settings.out_subtitle_format
         if operation in {"thumbnail", "contact_sheet"}:
             return settings.out_image_format
@@ -841,6 +841,23 @@ class FfmpegService:
         codec = codec_map.get(outp.suffix.lower(), "srt")
         cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
         cmd += ["-map", f"0:s:{stream_idx}?", "-vn", "-an", "-c:s", codec]
+        cmd.append(str(outp))
+        return cmd
+
+    def build_subtitle_file_command(
+        self,
+        inp: Path,
+        outp: Path,
+        settings: ConversionSettings,
+    ) -> List[str]:
+        overwrite = "-y" if settings.overwrite else "-n"
+        codec_map = {
+            ".srt": "srt",
+            ".ass": "ass",
+            ".vtt": "webvtt",
+        }
+        codec = codec_map.get(outp.suffix.lower(), "srt")
+        cmd = [self.ffmpeg_path, overwrite, "-i", str(inp), "-c:s", codec]
         cmd.append(str(outp))
         return cmd
 

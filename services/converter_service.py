@@ -8,9 +8,10 @@ from pathlib import Path
 from queue import Queue
 from typing import Dict, List, Optional, Tuple
 
-from core.models import ConversionSettings, MediaInfo, TaskItem
+from core.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
 from services.ffmpeg_service import FfmpegService
 from services.transcription_service import TranscriptionService
+from services.validation_service import operation_supports_media
 from utils.files import build_output_path, safe_output_path, sanitize_file_stem
 from utils.formatting import format_bytes, format_time, parse_ffmpeg_time
 
@@ -219,9 +220,8 @@ class ConverterService:
         self._emit("run_summary", summary)
 
     def _validate_operation(self, task: TaskItem, settings: ConversionSettings) -> Tuple[bool, str]:
-        if settings.operation in {"audio_only", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet", "auto_subtitle"}:
-            if task.media_type != "video":
-                return False, "Операція підтримується лише для відео"
+        if not operation_supports_media(settings.operation, task.media_type):
+            return False, "Операція не підтримує тип цього файлу"
         return True, ""
 
     def _total_duration_for(self, tasks: List[TaskItem], defaults: ConversionSettings) -> float:
@@ -301,6 +301,7 @@ class ConverterService:
         self.media_info.clear()
         if self.ffmpeg.ffprobe_path:
             for task in tasks:
+                self._task_state(task.path, TaskStatus.ANALYZING)
                 info = self.ffmpeg.probe_media(task.path)
                 if info:
                     self.media_info[task.path] = info
@@ -329,8 +330,11 @@ class ConverterService:
                         self._log("INFO", f"{task.path.name}: {' | '.join(analysis_bits)}")
                     for warning in info.warnings:
                         self._log("WARN", f"{task.path.name}: {warning}")
+                self._task_state(task.path, TaskStatus.READY)
         else:
             self._log("WARN", "FFprobe не знайдено. Прогрес/ETA можуть бути неточні.")
+            for task in tasks:
+                self._task_state(task.path, TaskStatus.READY)
 
         total_duration = self._total_duration_for(tasks, settings)
         done_duration = 0.0
@@ -489,7 +493,7 @@ class ConverterService:
                 continue
 
             outp = self._resolve_output_path(task, settings_for_task, out_dir, index)
-            duration = self._task_duration(task) if task.media_type == "video" else None
+            duration = self._task_duration(task) if task.media_type in {"video", "audio"} else None
 
             if settings_for_task.skip_existing and outp.exists() and not settings_for_task.overwrite:
                 self._log("INFO", f"Пропускаю, файл вже існує: {outp.name}")
@@ -509,10 +513,10 @@ class ConverterService:
                 continue
 
             self._emit("status", f"Обробка: {task.path.name}")
-            self._task_state(task.path, "running")
+            self._task_state(task.path, TaskStatus.RUNNING)
             self._log("INFO", f"→ {task.path.name} ({task.media_type}) ==> {outp.name}")
 
-            status = "failed"
+            status = TaskStatus.FAILED
             result_message = ""
             result_output = ""
             try:
@@ -547,19 +551,31 @@ class ConverterService:
                             allow_fast,
                             log_cb=self._log,
                         )
-                    else:
+                    elif task.media_type == "image":
                         cmd = self.ffmpeg.build_image_command(task.path, outp, settings_for_task, log_cb=self._log)
+                    elif task.media_type == "audio":
+                        cmd = self.ffmpeg.build_audio_command(task.path, outp, settings_for_task, log_cb=self._log)
+                    elif task.media_type == "subtitle":
+                        cmd = self.ffmpeg.build_subtitle_file_command(task.path, outp, settings_for_task)
+                    else:
+                        raise ValueError(f"Невідомий тип файлу: {task.media_type}")
                     rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
-                    success = rc == 0 and outp.exists()
+                    if self.stop_event.is_set():
+                        status = TaskStatus.CANCELLED
+                        result_message = "Скасовано користувачем"
+                        self._task_state(task.path, TaskStatus.CANCELLED, result_message)
+                        success = False
+                    else:
+                        success = rc == 0 and outp.exists()
                     if success:
-                        status = "success"
+                        status = TaskStatus.SUCCESS
                         result_output = str(outp)
                         self._log("OK", f"Готово: {outp.name}")
-                        self._task_state(task.path, "success", "", str(outp))
-                    else:
+                        self._task_state(task.path, TaskStatus.SUCCESS, "", str(outp))
+                    elif status != TaskStatus.CANCELLED:
                         result_message = f"Помилка конвертації: {task.path.name} (код {rc})"
                         self._log("ERROR", result_message)
-                        self._task_state(task.path, "failed", result_message)
+                        self._task_state(task.path, TaskStatus.FAILED, result_message)
                 elif op == "audio_only":
                     if settings_for_task.split_chapters:
                         success, details = self._process_audio_chapters(

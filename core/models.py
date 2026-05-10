@@ -3,6 +3,31 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
+class TaskStatus:
+    QUEUED = "queued"
+    ANALYZING = "analyzing"
+    READY = "ready"
+    RUNNING = "running"
+    PAUSED = "paused"
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    CANCELLED = "cancelled"
+
+
+TASK_STATUSES = {
+    TaskStatus.QUEUED,
+    TaskStatus.ANALYZING,
+    TaskStatus.READY,
+    TaskStatus.RUNNING,
+    TaskStatus.PAUSED,
+    TaskStatus.SUCCESS,
+    TaskStatus.FAILED,
+    TaskStatus.SKIPPED,
+    TaskStatus.CANCELLED,
+}
+
+
 @dataclass
 class MediaChapter:
     index: int
@@ -50,6 +75,26 @@ class TaskItem:
     content_hash: str = ""
     overrides: Dict[str, Any] = field(default_factory=dict)
     resolved_settings: Optional["ConversionSettings"] = None
+
+
+@dataclass
+class PreviewItem:
+    source_path: Path
+    output_path: Path
+    operation: str
+    parameters: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    command: str = ""
+
+
+@dataclass
+class PreviewSummary:
+    items: List[PreviewItem] = field(default_factory=list)
+    text: str = ""
+    selected_source: str = "—"
+    selected_output: str = "—"
+    selected_command: str = "—"
+    warnings: List[str] = field(default_factory=list)
 
 
 @dataclass

@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from PySide6 import QtCore
 
-from core.models import MediaInfo, TaskItem
+from core.models import MediaInfo, TaskItem, TaskStatus
 from utils.formatting import format_bytes, format_time
 
 
@@ -137,12 +137,12 @@ class QueueModel(QtCore.QAbstractListModel):
         for idx, item in enumerate(self._items):
             if item.path != task_path:
                 continue
-            if status == "running":
+            if status == TaskStatus.RUNNING:
                 item.attempts += 1
             item.status = status
-            if status == "success":
+            if status == TaskStatus.SUCCESS:
                 item.last_error = ""
-            elif status in {"failed", "skipped"}:
+            elif status in {TaskStatus.FAILED, TaskStatus.SKIPPED, TaskStatus.CANCELLED}:
                 item.last_error = message
             if output_path:
                 item.last_output = output_path
@@ -203,7 +203,7 @@ class QueueModel(QtCore.QAbstractListModel):
         for idx, item in enumerate(self._items):
             if paths is not None and item.path not in paths:
                 continue
-            item.status = "queued"
+            item.status = TaskStatus.QUEUED
             item.last_error = ""
             item.last_output = ""
             self.update_item(idx, item)

@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from config.constants import IMAGE_EXTS, SUBTITLE_EXTS, VIDEO_EXTS
+from config.constants import AUDIO_EXTS, IMAGE_EXTS, SUBTITLE_EXTS, VIDEO_EXTS
 
 
 def is_video(path: Path) -> bool:
@@ -13,6 +13,10 @@ def is_video(path: Path) -> bool:
 
 def is_image(path: Path) -> bool:
     return path.suffix.lower() in IMAGE_EXTS
+
+
+def is_audio(path: Path) -> bool:
+    return path.suffix.lower() in AUDIO_EXTS
 
 
 def is_subtitle(path: Path) -> bool:
@@ -24,6 +28,10 @@ def media_type(path: Path) -> Optional[str]:
         return "video"
     if is_image(path):
         return "image"
+    if is_audio(path):
+        return "audio"
+    if is_subtitle(path):
+        return "subtitle"
     return None
 
 

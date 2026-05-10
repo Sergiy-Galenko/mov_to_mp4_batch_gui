@@ -20,7 +20,13 @@ class FakeFfmpegService:
             return "mp3"
         if settings.operation == "auto_subtitle":
             return "srt"
-        return "mp4" if media_type_name == "video" else "jpg"
+        if media_type_name == "video":
+            return "mp4"
+        if media_type_name == "audio":
+            return "mp3"
+        if media_type_name == "subtitle":
+            return "srt"
+        return "jpg"
 
     def build_audio_speed_filter(self, settings):
         return None
@@ -43,6 +49,9 @@ class FakeFfmpegService:
 
     def build_audio_command(self, inp, outp, settings, log_cb=None):
         self.audio_called = True
+        return ["ffmpeg", "-i", str(inp), str(outp)]
+
+    def build_subtitle_file_command(self, inp, outp, settings):
         return ["ffmpeg", "-i", str(inp), str(outp)]
 
     def build_subtitle_extract_command(self, inp, outp, settings):
@@ -155,6 +164,26 @@ class ConverterServiceTest(unittest.TestCase):
             service._run([task], settings, out_dir)
 
             self.assertTrue(transcriber.called)
+            task_events = [event for event in drain_events(events) if event[0] == "task_state"]
+            self.assertTrue(any(event[2] == "success" for event in task_events))
+
+    def test_convert_audio_source_uses_audio_builder(self) -> None:
+        fake = FakeFfmpegService()
+        events: "queue.Queue[tuple]" = queue.Queue()
+        service = MockConverterService(fake, events)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            inp = tmp / "input.wav"
+            out_dir = tmp / "out"
+            out_dir.mkdir()
+            inp.write_text("audio", encoding="utf-8")
+
+            task = TaskItem(path=inp, media_type="audio")
+            settings = ConversionSettings(operation="convert", out_audio_format="mp3")
+            service._run([task], settings, out_dir)
+
+            self.assertTrue(fake.audio_called)
             task_events = [event for event in drain_events(events) if event[0] == "task_state"]
             self.assertTrue(any(event[2] == "success" for event in task_events))
 
