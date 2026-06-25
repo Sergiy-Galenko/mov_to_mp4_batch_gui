@@ -2,55 +2,96 @@ pragma Singleton
 import QtQuick 2.15
 
 QtObject {
-    property color bg: "#111318"
-    property color bgDeep: "#0D0F13"
-    property color bgLift: "#151820"
-    property color bgGrid: "#1B1F28"
-    property color panel: "#171A21"
-    property color panelAlt: "#1D212A"
-    property color panelHover: "#242A35"
-    property color section: "#191D25"
-    property color sectionAlt: "#202631"
-    property color input: "#101318"
-    property color inputHover: "#171B22"
-    property color hover: "#252B36"
-    property color border: "#303642"
-    property color borderStrong: "#47505F"
-    property color focusRing: "#4D8DFF"
-    property color text: "#EFF2F7"
-    property color muted: "#AAB2C0"
-    property color subtleText: "#7F8897"
-    property color accent: "#4D8DFF"
-    property color accent2: "#35B778"
-    property color accentHover: "#6DA2FF"
-    property color accentSoft: "#1B2C4A"
-    property color success: "#35B778"
-    property color successSoft: "#173328"
-    property color warning: "#D9A441"
-    property color warningSoft: "#352915"
-    property color danger: "#E36A6A"
-    property color dangerSoft: "#3A1F23"
-    property color running: "#5AA9E6"
-    property color runningSoft: "#182E42"
-    property color disabledBg: "#20242C"
-    property color disabledText: "#737C8B"
+    readonly property color bgBase: "#0D0F11"
+    readonly property color bgSurface: "#151820"
+    readonly property color bgElevated: "#1E2330"
+    readonly property color bgBorder: "#2A3040"
+    readonly property color accentPrimary: "#3D8EFF"
+    readonly property color accentSuccess: "#22C55E"
+    readonly property color accentWarn: "#F59E0B"
+    readonly property color accentError: "#EF4444"
+    readonly property color accentPurple: "#8B5CF6"
+    readonly property color textPrimary: "#F0F4FF"
+    readonly property color textSecondary: "#8B95A8"
+    readonly property color textMuted: "#4A5568"
 
-    property int space0: 4
-    property int space1: 8
-    property int space2: 12
-    property int space3: 16
-    property int space4: 24
-    property int space5: 32
-    property int maxWidth: 1480
-    property int compactBreakpoint: 1120
-    property int radiusCard: 8
-    property int radiusSection: 8
-    property int radiusInput: 6
-    property int radiusPill: 999
-    property int buttonHeight: 36
-    property int inputHeight: 36
-    property int checkboxSize: 18
-    property int cardPadding: 14
-    property int sectionPadding: 12
-    property int shadowOpacity: 0
+    readonly property string displayFont: "IBM Plex Mono"
+    readonly property string monoFont: "JetBrains Mono"
+    readonly property string bodyFont: "Inter"
+    readonly property int fontMeta: 11
+    readonly property int fontSmall: 13
+    readonly property int fontBody: 15
+    readonly property int fontTitle: 18
+    readonly property int fontHeading: 24
+    readonly property int fontDisplay: 32
+
+    readonly property int space0: 4
+    readonly property int space1: 8
+    readonly property int space2: 12
+    readonly property int space3: 16
+    readonly property int space4: 24
+    readonly property int space5: 32
+    readonly property int maxWidth: 1480
+    readonly property int compactBreakpoint: 1120
+    readonly property int titlebarHeight: 40
+    readonly property int sidebarWidth: 220
+    readonly property int radiusButton: 6
+    readonly property int radiusPanel: 10
+    readonly property int radiusInput: 6
+    readonly property int radiusCard: 10
+    readonly property int radiusSection: 10
+    readonly property int radiusPill: 999
+    readonly property int buttonHeight: 34
+    readonly property int inputHeight: 34
+    readonly property int checkboxSize: 18
+    readonly property int cardPadding: 12
+    readonly property int sectionPadding: 12
+    readonly property real shadowOpacity: 0.22
+
+    // Compatibility aliases for existing components.
+    readonly property color bg: bgBase
+    readonly property color bgDeep: "#090B0D"
+    readonly property color bgLift: bgSurface
+    readonly property color bgGrid: "#11151C"
+    readonly property color panel: bgSurface
+    readonly property color panelAlt: bgElevated
+    readonly property color panelHover: "#242B3A"
+    readonly property color section: bgSurface
+    readonly property color sectionAlt: bgElevated
+    readonly property color input: "#101319"
+    readonly property color inputHover: "#171B24"
+    readonly property color hover: bgElevated
+    readonly property color border: bgBorder
+    readonly property color borderStrong: "#3A4358"
+    readonly property color focusRing: accentPrimary
+    readonly property color text: textPrimary
+    readonly property color muted: textSecondary
+    readonly property color subtleText: textMuted
+    readonly property color accent: accentPrimary
+    readonly property color accent2: accentSuccess
+    readonly property color accentHover: "#66A6FF"
+    readonly property color accentSoft: "#142641"
+    readonly property color success: accentSuccess
+    readonly property color successSoft: "#12331F"
+    readonly property color warning: accentWarn
+    readonly property color warningSoft: "#33230A"
+    readonly property color danger: accentError
+    readonly property color dangerSoft: "#351719"
+    readonly property color running: accentWarn
+    readonly property color runningSoft: "#33230A"
+    readonly property color purple: accentPurple
+    readonly property color disabledBg: "#1B202B"
+    readonly property color disabledText: textMuted
+
+    function statusColor(status) {
+        if (status === "success" || status === "done")
+            return accentSuccess
+        if (status === "failed")
+            return accentError
+        if (status === "skipped" || status === "running" || status === "processing" || status === "analyzing")
+            return accentWarn
+        if (status === "paused")
+            return accentPurple
+        return textSecondary
+    }
 }

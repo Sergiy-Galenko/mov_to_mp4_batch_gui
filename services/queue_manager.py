@@ -14,6 +14,7 @@ class QueueManager:
             "media_type": item.media_type,
             "status": item.status,
             "last_error": item.last_error,
+            "exit_code": item.exit_code,
             "attempts": item.attempts,
             "last_output": item.last_output,
             "preview_output": item.preview_output,
@@ -21,6 +22,10 @@ class QueueManager:
             "size_text": item.size_text,
             "thumbnail_path": item.thumbnail_path,
             "content_hash": item.content_hash,
+            "progress": item.progress,
+            "eta_text": item.eta_text,
+            "speed_text": item.speed_text,
+            "elapsed_seconds": item.elapsed_seconds,
             "overrides": dict(item.overrides),
         }
 
@@ -46,6 +51,7 @@ class QueueManager:
                     media_type=media_kind,
                     status=status,
                     last_error=str(raw.get("last_error") or ""),
+                    exit_code=raw.get("exit_code"),
                     attempts=int(raw.get("attempts") or 0),
                     last_output=str(raw.get("last_output") or ""),
                     preview_output=str(raw.get("preview_output") or ""),
@@ -53,6 +59,10 @@ class QueueManager:
                     size_text=str(raw.get("size_text") or "—"),
                     thumbnail_path=str(raw.get("thumbnail_path") or ""),
                     content_hash=str(raw.get("content_hash") or ""),
+                    progress=float(raw.get("progress") or 0.0),
+                    eta_text=str(raw.get("eta_text") or ""),
+                    speed_text=str(raw.get("speed_text") or ""),
+                    elapsed_seconds=float(raw.get("elapsed_seconds") or 0.0),
                     overrides=dict(raw.get("overrides") or {}),
                 )
             )

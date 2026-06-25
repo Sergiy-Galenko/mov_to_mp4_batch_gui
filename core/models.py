@@ -66,6 +66,7 @@ class TaskItem:
     media_type: str
     status: str = "queued"
     last_error: str = ""
+    exit_code: Optional[int] = None
     attempts: int = 0
     last_output: str = ""
     preview_output: str = ""
@@ -73,6 +74,11 @@ class TaskItem:
     size_text: str = "—"
     thumbnail_path: str = ""
     content_hash: str = ""
+    progress: float = 0.0
+    eta_text: str = ""
+    speed_text: str = ""
+    elapsed_seconds: float = 0.0
+    probe_data: Optional[MediaInfo] = None
     overrides: Dict[str, Any] = field(default_factory=dict)
     resolved_settings: Optional["ConversionSettings"] = None
 

@@ -1,3 +1,4 @@
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -23,6 +24,11 @@ class QueueModel(QtCore.QAbstractListModel):
     SizeRole = QtCore.Qt.UserRole + 12
     ThumbnailRole = QtCore.Qt.UserRole + 13
     IdRole = QtCore.Qt.UserRole + 14
+    ProgressRole = QtCore.Qt.UserRole + 15
+    EtaRole = QtCore.Qt.UserRole + 16
+    SpeedRole = QtCore.Qt.UserRole + 17
+    ElapsedRole = QtCore.Qt.UserRole + 18
+    ExitCodeRole = QtCore.Qt.UserRole + 19
 
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
@@ -70,6 +76,16 @@ class QueueModel(QtCore.QAbstractListModel):
             return ""
         if role == self.IdRole:
             return str(item.path)
+        if role == self.ProgressRole:
+            return float(item.progress)
+        if role == self.EtaRole:
+            return item.eta_text
+        if role == self.SpeedRole:
+            return item.speed_text
+        if role == self.ElapsedRole:
+            return float(item.elapsed_seconds)
+        if role == self.ExitCodeRole:
+            return item.exit_code if item.exit_code is not None else -1
         return None
 
     def roleNames(self) -> Dict[int, bytes]:
@@ -88,6 +104,11 @@ class QueueModel(QtCore.QAbstractListModel):
             self.SizeRole: b"sizeText",
             self.ThumbnailRole: b"thumbnailSource",
             self.IdRole: b"itemId",
+            self.ProgressRole: b"progress",
+            self.EtaRole: b"etaText",
+            self.SpeedRole: b"speedText",
+            self.ElapsedRole: b"elapsedSeconds",
+            self.ExitCodeRole: b"exitCode",
         }
 
     def items(self) -> List[TaskItem]:
@@ -139,13 +160,39 @@ class QueueModel(QtCore.QAbstractListModel):
                 continue
             if status == TaskStatus.RUNNING:
                 item.attempts += 1
+                item.progress = 0.0
+                item.eta_text = ""
+                item.speed_text = ""
+                item.exit_code = None
             item.status = status
             if status == TaskStatus.SUCCESS:
                 item.last_error = ""
+                item.exit_code = None
+                item.progress = 1.0
+                item.eta_text = "00:00"
             elif status in {TaskStatus.FAILED, TaskStatus.SKIPPED, TaskStatus.CANCELLED}:
                 item.last_error = message
+                match = re.search(r"(?:code|код)\s*(-?\d+)", message, flags=re.IGNORECASE)
+                if match:
+                    item.exit_code = int(match.group(1))
+                if status != TaskStatus.SKIPPED:
+                    item.progress = max(0.0, min(item.progress, 1.0))
+                item.eta_text = ""
             if output_path:
                 item.last_output = output_path
+            self.update_item(idx, item)
+            return
+
+    def set_task_progress(self, task_path: Path, progress: float, eta_text: str = "", speed_text: str = "") -> None:
+        for idx, item in enumerate(self._items):
+            if item.path != task_path:
+                continue
+            bounded = max(0.0, min(float(progress), 1.0))
+            if item.progress == bounded and item.eta_text == eta_text and item.speed_text == speed_text:
+                return
+            item.progress = bounded
+            item.eta_text = eta_text
+            item.speed_text = speed_text
             self.update_item(idx, item)
             return
 
@@ -165,6 +212,7 @@ class QueueModel(QtCore.QAbstractListModel):
                 continue
             duration_text = format_time(info.duration) if info.duration else "—"
             size_text = format_bytes(info.size_bytes)
+            item.probe_data = info
             if item.duration_text == duration_text and item.size_text == size_text:
                 return
             item.duration_text = duration_text
@@ -206,6 +254,9 @@ class QueueModel(QtCore.QAbstractListModel):
             item.status = TaskStatus.QUEUED
             item.last_error = ""
             item.last_output = ""
+            item.progress = 0.0
+            item.eta_text = ""
+            item.speed_text = ""
             self.update_item(idx, item)
 
 

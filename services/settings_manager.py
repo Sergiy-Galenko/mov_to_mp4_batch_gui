@@ -34,6 +34,10 @@ class SettingsManager:
     def watch_folder(self) -> str:
         return str(self.state.get("watch_folder") or "")
 
+    def ui_language(self) -> str:
+        value = str(self.state.get("ui_language") or "uk").strip().lower()
+        return value if value in {"uk", "en"} else "uk"
+
     def last_settings(self) -> Dict[str, Any]:
         value = self.state.get("last_settings")
         return dict(value) if isinstance(value, dict) else {}
@@ -45,6 +49,7 @@ class SettingsManager:
         watch_folder: str,
         output_dir: str,
         ffmpeg_path: str,
+        ui_language: str,
         last_settings: Dict[str, Any],
         queue_items: List[Dict[str, Any]],
         pending_recovery: bool,
@@ -55,6 +60,7 @@ class SettingsManager:
             "watch_folder": watch_folder,
             "output_dir": output_dir,
             "ffmpeg_path": ffmpeg_path,
+            "ui_language": ui_language if ui_language in {"uk", "en"} else "uk",
             "last_settings": dict(last_settings),
             "queue_items": list(queue_items),
             "pending_recovery": bool(pending_recovery),

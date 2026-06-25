@@ -1,1 +1,3 @@
-PySide6>=6.6
+# Runtime dependencies.
+# PySide6 6.8.1 is the first Qt for Python release with Python 3.13 support.
+PySide6>=6.8.1,<7

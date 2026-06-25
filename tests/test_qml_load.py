@@ -22,9 +22,11 @@ class QmlLoadTest(unittest.TestCase):
         project_root = Path(__file__).resolve().parents[1]
         qml_dir = project_root / "ui" / "qml"
         theme_qml = qml_dir / "Theme.qml"
+        i18n_qml = qml_dir / "I18n.qml"
         main_qml = qml_dir / "Main.qml"
 
         qmlRegisterSingletonType(QUrl.fromLocalFile(str(theme_qml)), "App", 1, 0, "Theme")
+        qmlRegisterSingletonType(QUrl.fromLocalFile(str(i18n_qml)), "App", 1, 0, "I18n")
 
         engine = QQmlApplicationEngine()
         backend = Backend()

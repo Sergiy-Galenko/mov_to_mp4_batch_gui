@@ -3,6 +3,7 @@ import signal
 import subprocess
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from queue import Queue
@@ -36,6 +37,8 @@ class ConverterService:
         self.thread: Optional[threading.Thread] = None
         self.current_proc: Optional[subprocess.Popen] = None
         self.media_info: Dict[Path, MediaInfo] = {}
+        self.prefetched_media_info: Dict[Path, MediaInfo] = {}
+        self.prefetch_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="converter-ffprobe")
 
     def start(self, tasks: List[TaskItem], settings: ConversionSettings, out_dir: Path) -> None:
         if self.thread and self.thread.is_alive():
@@ -45,6 +48,13 @@ class ConverterService:
         self.skip_event.clear()
         self.thread = threading.Thread(target=self._run, args=(tasks, settings, out_dir), daemon=True)
         self.thread.start()
+
+    def _has_gpu_encoder(self) -> bool:
+        caps = self.ffmpeg.encoder_caps or set()
+        return bool({"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_qsv", "hevc_qsv", "av1_qsv", "h264_amf", "hevc_amf", "av1_amf"} & caps)
+
+    def conversion_worker_limit(self) -> int:
+        return 2 if self._has_gpu_encoder() else 1
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -299,10 +309,13 @@ class ConverterService:
         run_results: List[Dict[str, str]] = []
 
         self.media_info.clear()
+        self.media_info.update(self.prefetched_media_info)
         if self.ffmpeg.ffprobe_path:
             for task in tasks:
                 self._task_state(task.path, TaskStatus.ANALYZING)
-                info = self.ffmpeg.probe_media(task.path)
+                info = self.media_info.get(task.path)
+                if info is None:
+                    info = self.ffmpeg.probe_media(task.path)
                 if info:
                     self.media_info[task.path] = info
                     self._log(
@@ -750,6 +763,8 @@ class ConverterService:
 
         out_time = 0.0
         speed = None
+        last_progress_emit = 0.0
+        pending_progress: Optional[Tuple[Optional[float], float, Optional[float], Optional[float], float, Optional[float], Optional[float]]] = None
         if proc.stdout is not None:
             for line in proc.stdout:
                 self._wait_if_paused()
@@ -804,8 +819,15 @@ class ConverterService:
                     overall_elapsed = time.time() - total_start
                     total_eta = _estimate_eta(overall_elapsed, total_pct) if total_pct else None
 
-                self._emit("progress", file_pct, out_time, duration, file_eta, total_pct, total_eta)
+                pending_progress = (file_pct, out_time, duration, file_eta, total_pct, total_eta, speed)
+                now = time.monotonic()
+                if now - last_progress_emit >= 0.25 or total_pct >= 1.0:
+                    self._emit("progress", *pending_progress)
+                    last_progress_emit = now
+                    pending_progress = None
 
+        if pending_progress is not None:
+            self._emit("progress", *pending_progress)
         rc = proc.wait()
         err_thread.join(timeout=0.2)
         self.current_proc = None

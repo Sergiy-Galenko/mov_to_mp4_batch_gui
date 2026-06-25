@@ -14,9 +14,11 @@ def main() -> None:
     base_dir = Path(__file__).resolve().parent
     qml_dir = base_dir / "ui" / "qml"
     theme_path = qml_dir / "Theme.qml"
+    i18n_path = qml_dir / "I18n.qml"
     main_qml = qml_dir / "Main.qml"
 
     QtQml.qmlRegisterSingletonType(QtCore.QUrl.fromLocalFile(str(theme_path)), "App", 1, 0, "Theme")
+    QtQml.qmlRegisterSingletonType(QtCore.QUrl.fromLocalFile(str(i18n_path)), "App", 1, 0, "I18n")
 
     engine = QtQml.QQmlApplicationEngine()
     backend = Backend()
