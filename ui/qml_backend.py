@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import queue
+import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -12,7 +13,9 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from config.constants import APP_TITLE, RECENT_FOLDERS_LIMIT
 from config.paths import find_ffmpeg, find_ffprobe
+from core.localization import normalize_language, translate
 from core.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
+from core.performance_profiles import prediction_factor
 from core.settings import merge_settings_maps, settings_map_to_model
 from services.conversion_runner import ConversionRunner
 from services.converter_service import ConverterService
@@ -60,6 +63,7 @@ class Backend(QtCore.QObject):
     speedHistoryChanged = QtCore.Signal(list)
     fileTimingsChanged = QtCore.Signal(list)
     codecDistributionChanged = QtCore.Signal(dict)
+    resourceHistoryChanged = QtCore.Signal(list)
     sessionStatsChanged = QtCore.Signal()
 
     def __init__(self) -> None:
@@ -121,9 +125,14 @@ class Backend(QtCore.QObject):
         self._active_task_path = ""
         self._run_started_monotonic = 0.0
         self._last_analytics_emit = 0.0
+        self._last_resource_emit = 0.0
         self._speed_history: List[Dict[str, float]] = []
         self._file_timings: List[Dict[str, Any]] = []
         self._codec_distribution: Dict[str, int] = {}
+        self._resource_history: List[Dict[str, float]] = []
+        self._cpu_load_text = "CPU --"
+        self._gpu_load_text = "GPU --"
+        self._ram_load_text = "RAM --"
         self._task_started_at: Dict[Path, float] = {}
         self._session_elapsed_text = "00:00"
         self._session_eta_text = "--:--"
@@ -236,14 +245,15 @@ class Backend(QtCore.QObject):
 
     @uiLanguage.setter
     def uiLanguage(self, value: str) -> None:
-        normalized = str(value or "uk").strip().lower()
-        if normalized not in {"uk", "en"}:
-            normalized = "uk"
+        normalized = normalize_language(str(value or "uk"))
         if self._ui_language == normalized:
             return
         self._ui_language = normalized
         self.uiLanguageChanged.emit()
         self._save_state()
+
+    def _tr(self, key: str, **kwargs: Any) -> str:
+        return translate(key, self._ui_language, **kwargs)
 
     @QtCore.Property(str, notify=encoderInfoChanged)
     def encoderInfo(self) -> str:
@@ -377,6 +387,22 @@ class Backend(QtCore.QObject):
     @QtCore.Property("QVariantMap", notify=codecDistributionChanged)
     def codecDistribution(self) -> Dict[str, int]:
         return dict(self._codec_distribution)
+
+    @QtCore.Property("QVariantList", notify=resourceHistoryChanged)
+    def resourceHistory(self) -> List[Dict[str, float]]:
+        return list(self._resource_history)
+
+    @QtCore.Property(str, notify=resourceHistoryChanged)
+    def cpuLoadText(self) -> str:
+        return self._cpu_load_text
+
+    @QtCore.Property(str, notify=resourceHistoryChanged)
+    def gpuLoadText(self) -> str:
+        return self._gpu_load_text
+
+    @QtCore.Property(str, notify=resourceHistoryChanged)
+    def ramLoadText(self) -> str:
+        return self._ram_load_text
 
     @QtCore.Property(str, notify=sessionStatsChanged)
     def sessionElapsedText(self) -> str:
@@ -522,14 +548,65 @@ class Backend(QtCore.QObject):
             return "VP9"
         return codec or "Unknown"
 
+    def _sample_resources(self) -> Dict[str, float]:
+        cpu = 0.0
+        ram = 0.0
+        gpu = 0.0
+        try:
+            import psutil  # type: ignore
+
+            cpu = float(psutil.cpu_percent(interval=None))
+            ram = float(psutil.virtual_memory().percent)
+        except Exception:
+            pass
+        try:
+            result = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=utilization.gpu",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=0.4,
+            )
+            if result.returncode == 0:
+                values = [float(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+                if values:
+                    gpu = max(values)
+        except Exception:
+            pass
+        return {"cpu": cpu, "gpu": gpu, "ram": ram}
+
+    def _append_resource_sample(self, now: float) -> None:
+        if not self._run_started_monotonic:
+            return
+        sample = self._sample_resources()
+        sample["time"] = now - self._run_started_monotonic
+        self._resource_history.append(sample)
+        self._resource_history = self._resource_history[-120:]
+        self._cpu_load_text = f"CPU {sample['cpu']:.0f}%"
+        self._gpu_load_text = f"GPU {sample['gpu']:.0f}%"
+        self._ram_load_text = f"RAM {sample['ram']:.0f}%"
+        self.resourceHistoryChanged.emit(list(self._resource_history))
+
     def _record_file_timing(self, path: Path, status: str) -> None:
         started = self._task_started_at.pop(path, None)
         if started is None:
             return
         duration = max(time.monotonic() - started, 0.0)
         name = path.name
+        item = self.queue_model.item_by_path(path)
         self._file_timings = [item for item in self._file_timings if item.get("name") != name]
-        self._file_timings.append({"name": name, "duration": duration, "status": status})
+        self._file_timings.append(
+            {
+                "name": name,
+                "duration": duration,
+                "status": status,
+                "compression": item.compression_ratio if item else 0.0,
+                "predictedSize": item.predicted_output_bytes if item else 0,
+            }
+        )
         self._file_timings.sort(key=lambda item: float(item.get("duration") or 0), reverse=True)
         self._file_timings = self._file_timings[:10]
         self.fileTimingsChanged.emit(list(self._file_timings))
@@ -540,7 +617,7 @@ class Backend(QtCore.QObject):
             self.ffmpeg_service.ffmpeg_path = self.ffmpegPath
         self.ffmpeg_service.ffprobe_path = find_ffprobe(self.ffmpeg_service.ffmpeg_path)
         if not self.ffmpeg_service.ffmpeg_path:
-            self._append_log("ERROR", "FFmpeg не знайдено. Вкажи ffmpeg або додай його у PATH.")
+            self._append_log("ERROR", self._tr("backend.ffmpeg_missing"))
             return
         self.ffmpeg_service.encoder_caps = self.ffmpeg_service.detect_encoders()
         caps = self.ffmpeg_service.encoder_caps
@@ -706,15 +783,15 @@ class Backend(QtCore.QObject):
                 self._ensure_thumbnail_async(item.path, item.media_type)
             self._notify_queue_stats()
             self._refresh_codec_distribution()
-            self._append_log("OK", f"Додано файлів: {len(added)}")
+            self._append_log("OK", self._tr("backend.added_files", count=len(added)))
             self._refresh_output_preview(dict(self._last_settings_map))
             self._save_state()
         if duplicates:
-            self._append_log("INFO", f"Пропущено дублікатів: {duplicates}")
+            self._append_log("INFO", self._tr("backend.duplicates_skipped", count=duplicates))
         if unsupported:
-            self._append_log("WARN", f"Непідтримуваних файлів пропущено: {unsupported}")
+            self._append_log("WARN", self._tr("backend.unsupported_skipped", count=unsupported))
         if not added and not duplicates and not unsupported:
-            self._append_log("WARN", "Не знайдено підтримуваних файлів.")
+            self._append_log("WARN", self._tr("backend.no_tasks"))
 
     @QtCore.Slot()
     def deduplicateQueue(self) -> None:
@@ -919,6 +996,11 @@ class Backend(QtCore.QObject):
     def selectQueuePath(self, path_text: str) -> None:
         self.selectQueueIndex(self.queue_model.index_for_path(Path(str(path_text or "").strip()).expanduser()))
 
+    @QtCore.Slot(int, result=str)
+    def queuePathAt(self, index: int) -> str:
+        task = self.queue_model.item_at(index)
+        return str(task.path) if task else ""
+
     def _probe_media_async(self, path: Path) -> None:
         info = self.media_analysis.probe(path)
         self.event_queue.put(("media_info", path, info))
@@ -1039,8 +1121,26 @@ class Backend(QtCore.QObject):
         )
         for item in summary.items:
             self.queue_model.set_preview_output(item.source_path, str(item.output_path))
+        self._refresh_size_predictions(settings_map)
         self._set_output_preview(summary.text)
         self._set_selected_preview(summary.selected_source, summary.selected_output, summary.selected_command)
+
+    def _refresh_size_predictions(self, settings_map: Dict[str, Any]) -> None:
+        for task in self.queue_model.items():
+            merged_map = merge_settings_maps(settings_map, task.overrides)
+            settings = settings_map_to_model(merged_map, defaults=ConversionSettings())
+            info = self.media_info_cache.get(task.path) or task.probe_data
+            input_bytes = int((info.size_bytes if info else None) or task.input_bytes or 0)
+            if not input_bytes:
+                try:
+                    input_bytes = task.path.stat().st_size
+                except Exception:
+                    input_bytes = 0
+            if settings.target_size_mb:
+                predicted = int(float(settings.target_size_mb) * 1024 * 1024)
+            else:
+                predicted = int(input_bytes * prediction_factor(settings.performance_profile)) if input_bytes else 0
+            self.queue_model.set_prediction(task.path, predicted)
 
     @QtCore.Slot("QVariantMap")
     def refreshOutputPreview(self, settings_map: Dict[str, Any]) -> None:
@@ -1213,21 +1313,21 @@ class Backend(QtCore.QObject):
         )
         if not preflight.get("ok"):
             details = "\n".join(str(msg) for msg in dict(preflight.get("errors") or {}).values())
-            QtWidgets.QMessageBox.critical(None, "Preflight", details or "Є критичні помилки.")
-            self._append_log("ERROR", f"Preflight заблокував старт: {preflight.get('summary')}")
+            QtWidgets.QMessageBox.critical(None, "Preflight", details or self._tr("backend.preflight_blocked", summary=""))
+            self._append_log("ERROR", self._tr("backend.preflight_blocked", summary=preflight.get("summary")))
             return
         for warning in preflight.get("warnings") or []:
             self._append_log("WARN", f"Preflight: {warning}")
 
         run_tasks = self._build_run_tasks(settings_map, failed_only=failed_only, only_paths=only_paths)
         if not run_tasks:
-            QtWidgets.QMessageBox.information(None, "Черга", "Немає задач для запуску.")
+            QtWidgets.QMessageBox.information(None, self._tr("queue"), self._tr("backend.no_tasks"))
             return
         out_dir = Path(self.outputDir).expanduser()
         try:
             out_dir.mkdir(parents=True, exist_ok=True)
         except Exception as exc:
-            QtWidgets.QMessageBox.critical(None, "Помилка", f"Не вдалося створити папку виводу:\n{exc}")
+            QtWidgets.QMessageBox.critical(None, self._tr("status.failed"), self._tr("backend.output_dir_error", error=exc))
             return
 
         paths = {task.path for task in run_tasks}
@@ -1240,10 +1340,13 @@ class Backend(QtCore.QObject):
         self._active_task_path = ""
         self._run_started_monotonic = time.monotonic()
         self._last_analytics_emit = 0.0
+        self._last_resource_emit = 0.0
         self._speed_history = []
         self._file_timings = []
+        self._resource_history = []
         self.speedHistoryChanged.emit([])
         self.fileTimingsChanged.emit([])
+        self.resourceHistoryChanged.emit([])
         self.converter.prefetched_media_info = dict(self.media_info_cache)
         self._session_elapsed_text = "00:00"
         self._session_eta_text = "--:--"
@@ -1257,7 +1360,7 @@ class Backend(QtCore.QObject):
         self.isRunningChanged.emit()
         self._is_paused = False
         self.isPausedChanged.emit()
-        self._set_status("Конвертація запущена...")
+        self._set_status(self._tr("backend.conversion_started"))
         self._save_state(pending_recovery=True)
         self.runner.start(run_tasks, base_settings, out_dir)
 
@@ -1458,6 +1561,39 @@ class Backend(QtCore.QObject):
                         )
                         self._speed_history = self._speed_history[-120:]
                         self.speedHistoryChanged.emit(list(self._speed_history))
+                    if self._run_started_monotonic and now - self._last_resource_emit >= 2.0:
+                        self._last_resource_emit = now
+                        self._append_resource_sample(now)
+                    self._refresh_session_stats(total_eta=total_eta)
+                elif etype == "task_progress":
+                    _, path, file_pct, file_eta, speed, total_pct, total_eta = event
+                    self.queue_model.set_task_progress(
+                        path,
+                        file_pct or 0.0,
+                        format_time(file_eta),
+                        f"{float(speed):.1f}x" if speed else "",
+                    )
+                    self._file_progress_text = (
+                        f"{Path(path).name}: {int((file_pct or 0.0) * 100):02d}% • ETA {format_time(file_eta)}"
+                    )
+                    self.fileProgressTextChanged.emit()
+                    self._total_progress_text = f"Всього: {int(total_pct * 100):02d}% • ETA {format_time(total_eta)}"
+                    self.totalProgressTextChanged.emit()
+                    self._set_progress(file_pct or 0.0, total_pct)
+                    now = time.monotonic()
+                    if speed and self._run_started_monotonic and now - self._last_analytics_emit >= 2.0:
+                        self._last_analytics_emit = now
+                        self._speed_history.append(
+                            {
+                                "time": now - self._run_started_monotonic,
+                                "speed": float(speed),
+                            }
+                        )
+                        self._speed_history = self._speed_history[-120:]
+                        self.speedHistoryChanged.emit(list(self._speed_history))
+                    if self._run_started_monotonic and now - self._last_resource_emit >= 2.0:
+                        self._last_resource_emit = now
+                        self._append_resource_sample(now)
                     self._refresh_session_stats(total_eta=total_eta)
                 elif etype == "set_total":
                     self._set_progress(0.0, 0.0)
@@ -1471,7 +1607,7 @@ class Backend(QtCore.QObject):
                         self.isPausedChanged.emit()
                     if stopped:
                         self._cancel_active_items()
-                    self._set_status("Зупинено." if stopped else "Готово.")
+                    self._set_status(self._tr("backend.stopped") if stopped else self._tr("backend.ready"))
                     self._refresh_session_stats(total_eta=0.0)
                     self._save_state(pending_recovery=False)
                 elif etype == "media_info":
@@ -1512,11 +1648,13 @@ class Backend(QtCore.QObject):
                     if status in {TaskStatus.RUNNING, TaskStatus.PAUSED}:
                         self._active_task_path = str(path)
                         self._task_started_at.setdefault(path, time.monotonic())
-                    elif status in {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.SKIPPED, TaskStatus.CANCELLED}:
+                    self.queue_model.update_task_state(path, status, message, output_path)
+                    if status == TaskStatus.SUCCESS and output_path:
+                        self.queue_model.set_output_stats(path, output_path)
+                    if status in {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.SKIPPED, TaskStatus.CANCELLED}:
                         self._record_file_timing(path, status)
                         if str(path) == self._active_task_path:
                             self._active_task_path = ""
-                    self.queue_model.update_task_state(path, status, message, output_path)
                     self._notify_queue_stats()
                     self._save_state()
                 elif etype == "run_summary":

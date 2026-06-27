@@ -1,13 +1,18 @@
-﻿import sys
+import sys
 from pathlib import Path
-
-from PySide6 import QtCore, QtQml, QtWidgets
-from PySide6.QtQuickControls2 import QQuickStyle
-
-from ui.qml_backend import Backend
 
 
 def main() -> None:
+    if "--cli" in sys.argv:
+        from cli import main as cli_main
+
+        sys.exit(cli_main(sys.argv[1:]))
+
+    from PySide6 import QtCore, QtQml, QtWidgets
+    from PySide6.QtQuickControls2 import QQuickStyle
+
+    from ui.qml_backend import Backend
+
     QQuickStyle.setStyle("Basic")
     app = QtWidgets.QApplication(sys.argv)
 

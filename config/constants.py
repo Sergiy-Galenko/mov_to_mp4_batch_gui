@@ -1,6 +1,6 @@
 from pathlib import Path
 
-APP_TITLE = "Media Converter — Фото + Відео (FFmpeg)"
+APP_TITLE = "Media Converter - Photo + Video (FFmpeg)"
 
 VIDEO_EXTS = {".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv", ".wmv", ".mts", ".m2ts"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"}
@@ -22,6 +22,13 @@ OPERATION_OPTIONS = [
     "Контакт-лист",
 ]
 OPERATION_MAP = {
+    "convert": "convert",
+    "audio_only": "audio_only",
+    "auto_subtitle": "auto_subtitle",
+    "subtitle_extract": "subtitle_extract",
+    "subtitle_burn": "subtitle_burn",
+    "thumbnail": "thumbnail",
+    "contact_sheet": "contact_sheet",
     "Конвертація": "convert",
     "Лише аудіо": "audio_only",
     "Авто субтитри": "auto_subtitle",
@@ -37,6 +44,7 @@ OPERATION_MAP = {
 
 PORTRAIT_PRESETS = {
     "Вимкнено": None,
+    "off": None,
     "9:16 (1080x1920) - crop": ("crop", 1080, 1920),
     "9:16 (1080x1920) - blur": ("blur", 1080, 1920),
     "9:16 (720x1280) - crop": ("crop", 720, 1280),
@@ -44,13 +52,15 @@ PORTRAIT_PRESETS = {
 }
 
 VIDEO_CODEC_OPTIONS = [
-    "Авто",
+    "auto",
     "H.264 (AVC)",
     "H.265 (HEVC)",
     "AV1",
     "VP9 (WebM)",
 ]
 VIDEO_CODEC_MAP = {
+    "auto": "auto",
+    "Auto": "auto",
     "Авто": "auto",
     "H.264 (AVC)": "h264",
     "H.265 (HEVC)": "h265",
@@ -59,14 +69,18 @@ VIDEO_CODEC_MAP = {
 }
 
 HW_ENCODER_OPTIONS = [
-    "Авто",
-    "Тільки CPU",
+    "auto",
+    "cpu",
     "NVIDIA (NVENC)",
     "Intel (QSV)",
     "AMD (AMF)",
 ]
 HW_ENCODER_MAP = {
+    "auto": "auto",
+    "Auto": "auto",
     "Авто": "auto",
+    "cpu": "cpu",
+    "CPU only": "cpu",
     "Тільки CPU": "cpu",
     "NVIDIA (NVENC)": "nvidia",
     "Intel (QSV)": "intel",

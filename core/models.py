@@ -74,6 +74,10 @@ class TaskItem:
     size_text: str = "—"
     thumbnail_path: str = ""
     content_hash: str = ""
+    input_bytes: int = 0
+    output_bytes: int = 0
+    predicted_output_bytes: int = 0
+    compression_ratio: float = 0.0
     progress: float = 0.0
     eta_text: str = ""
     speed_text: str = ""
@@ -121,6 +125,10 @@ class ConversionSettings:
     skip_existing: bool = False
     output_template: str = "{stem}"
     platform_profile: str = ""
+    performance_profile: str = "Balanced"
+    target_size_mb: Optional[float] = None
+    cpu_load_limit: int = 95
+    gpu_load_limit: int = 98
 
     trim_start: Optional[float] = None
     trim_end: Optional[float] = None
@@ -164,8 +172,8 @@ class ConversionSettings:
     text_box_opacity: int = 50
     text_font: str = ""
 
-    video_codec: str = "Авто"
-    hw_encoder: str = "Авто"
+    video_codec: str = "auto"
+    hw_encoder: str = "auto"
     replace_audio_path: str = ""
     normalize_audio: str = "none"
     audio_peak_limit_db: Optional[float] = None

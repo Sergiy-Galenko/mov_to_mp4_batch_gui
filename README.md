@@ -1,43 +1,33 @@
 # Media Converter
 
-Desktop GUI для пакетної обробки відео, аудіо, зображень і субтитрів через FFmpeg. Основний інтерфейс побудований на Python, PySide6 і QML. У репозиторії також є експериментальний Tauri/Web UI у `tauri_app/`, але основний робочий flow зараз знаходиться в Python/QML-версії.
-
-## Що нового
-
-- Новий UI/UX у стилі **Signal Dark**: темний pro-tool layout, компактний titlebar, ліва collapsible sidebar, щільна права панель налаштувань.
-- Черга на `ListView` з lazy rendering, `cacheBuffer`, drag/drop entry point, per-file status rows і кастомним shimmer progress bar.
-- Нові індикатори: `ShimmerBar`, `PulseDot`, `ArcSpinner`.
-- Нова вкладка analytics без важких chart-бібліотек: throughput line chart, per-file timing bars, codec donut chart на QML Canvas.
-- Session stats panel: done/failed/skipped, elapsed, ETA, average speed, input/output/saved bytes.
-- Platform presets у горизонтальному chip-row, включно з `X/Twitter`, `LinkedIn`, `Discord`.
-- Backend analytics signals для QML: `speedHistory`, `fileTimings`, `codecDistribution`.
-- FFprobe prefetch після додавання файлів, кеш metadata для запуску конвертації, throttling progress updates до приблизно 250 ms.
+Desktop GUI для пакетної обробки відео, аудіо, зображень і субтитрів через FFmpeg. Основний інтерфейс побудований на Python, PySide6 і QML. У репозиторії також є експериментальний Tauri/Web UI у `tauri_app/`, але головний робочий flow зараз у Python/QML.
 
 ## Можливості
 
-- Пакетна черга файлів і папок.
-- Drag-and-drop для відео, аудіо, зображень, субтитрів і папок.
-- Retry failed, skip active file, remove items, hash/path dedupe.
-- Per-file progress, ETA, speed і status details для помилок.
-- Preview майбутніх output paths перед запуском.
-- Конвертація відео, аудіо, зображень і субтитрів.
-- `Audio-only`, `Thumbnail`, `Contact sheet`.
-- `Subtitle burn-in`, `Subtitle extract`, `Auto subtitle` через Whisper.
-- Trim, merge, resize, crop, rotate, speed.
-- Watermark і text overlay.
-- GPU encoder detection: NVENC, QSV, AMF.
-- Codecs: H.264, H.265, AV1, VP9.
-- Fast copy, skip existing, output templates.
-- Watch folder, recent folders, import/export project JSON.
-- History, log export, crash/session recovery.
-- Before/after hooks для batch automation.
+- Signal Dark UI: темний pro-tool layout, sidebar, компактний header, session stats і Canvas analytics.
+- Черга на `ListView` з lazy rendering, thumbnails, per-file shimmer progress, failed details, retry/skip/remove.
+- Drag-and-drop файлів і папок, drag-reorder у черзі, multi-select, batch remove і batch override.
+- Локалізація через JSON: українська, англійська, польська, німецька.
+- Performance profiles: `Quality`, `Balanced`, `Fast`, `Small file`.
+- Target output size: режим “зробити файл до N MB” із підбором bitrate.
+- GPU-aware parallel conversion: до 2 одночасних незалежних FFmpeg задач для GPU encoder; CPU mode лишається 1 активна задача + ffprobe prefetch.
+- Analytics без QtCharts/matplotlib: throughput, per-file timings, codec donut, CPU/GPU/RAM graph.
+- Output size prediction, compression ratio per file, average encode speed timeline.
+- Platform presets: YouTube, TikTok, Instagram, Telegram, WhatsApp, X/Twitter, LinkedIn, Discord.
+- CLI mode для automation/hooks без запуску GUI.
 
 ## Вимоги
 
 - Python `3.13+`
 - FFmpeg
-- FFprobe бажано, бо без нього metadata, ETA і analytics будуть менш точними
+- FFprobe бажано для metadata, ETA, thumbnails і analytics
 - PySide6
+
+Встановлення залежностей:
+
+```bash
+python -m pip install -r requirements.txt
+```
 
 Перевірка FFmpeg:
 
@@ -46,195 +36,104 @@ ffmpeg -version
 ffprobe -version
 ```
 
-## Встановлення FFmpeg
-
-Windows:
-
-```powershell
-winget install -e --id Gyan.FFmpeg
-```
-
-або:
-
-```powershell
-choco install ffmpeg
-```
-
-macOS:
-
-```bash
-brew install ffmpeg
-```
-
-Ubuntu / Debian:
-
-```bash
-sudo apt update
-sudo apt install ffmpeg
-```
-
-Fedora:
-
-```bash
-sudo dnf install ffmpeg
-```
-
-Arch / Manjaro:
-
-```bash
-sudo pacman -S ffmpeg
-```
-
-## Встановлення і запуск
-
-Створи virtual environment:
-
-```bash
-python -m venv .venv
-```
-
-Активуй його.
-
-Windows PowerShell:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-macOS / Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-Встанови залежності:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-Запусти застосунок:
+## Запуск GUI
 
 ```bash
 python main.py
 ```
 
-## Швидкий старт
+Швидкий flow:
 
-1. Запусти `python main.py`.
-2. Перетягни файли або папку в drop zone.
-3. Обери preset або налаштуй формат, codec, CRF, resize, audio/subtitle options.
-4. Перевір preview output paths.
-5. Натисни `Start`.
-6. Стеж за queue progress, total progress, session stats і analytics.
+1. Перетягни файли або папку в drop zone.
+2. Обери preset або налаштуй формат, codec, profile, target size.
+3. Перевір preview output paths.
+4. Натисни `Start`.
+5. Стеж за queue progress, session stats і analytics.
 
-## Підтримувані формати
+## CLI Mode
 
-Вхідні відео:
+CLI запускається через `--cli` і не ініціалізує PySide/QML.
 
-`mov, mp4, mkv, webm, avi, m4v, flv, wmv, mts, m2ts`
+```bash
+python main.py --cli -i input.mov -o ./converted --profile Balanced
+```
 
-Вхідні зображення:
+Приклади:
 
-`jpg, jpeg, png, webp, bmp, tif, tiff, heic, heif`
+```bash
+python main.py --cli -i a.mov b.mov -o ./out --preset "Discord • Compact MP4"
+python main.py --cli -i input.mp4 -o ./out --profile "Small file" --target-size-mb 25
+python main.py --cli -i input.mov -o ./out --settings-json settings.json --language en
+```
 
-Вхідні аудіо:
+Корисні аргументи:
 
-`mp3, m4a, aac, wav, flac, opus, ogg, wma, aiff, aif, mka`
+- `--preset` - використати GUI preset із preset store.
+- `--settings-json` - JSON із GUI-compatible settings.
+- `--profile` - `Quality`, `Balanced`, `Fast`, `Small file`.
+- `--target-size-mb` - цільовий розмір вихідного файлу.
+- `--cpu-load-limit`, `--gpu-load-limit` - відкласти старт наступної задачі, якщо навантаження вище ліміту.
+- `--ffmpeg`, `--ffprobe` - явні шляхи до бінарників.
+- `--language` - `uk`, `en`, `pl`, `de`.
 
-Вхідні субтитри:
+## Локалізація
 
-`srt, ass, ssa, vtt, webvtt`
+Переклади лежать у:
 
-Вихід:
+```text
+ui/qml/translations/
+  uk.json
+  en.json
+  pl.json
+  de.json
+```
 
-- Відео: `mp4, mkv, webm, mov, avi, gif`
-- Зображення: `jpg, png, webp, bmp, tiff`
-- Аудіо: `mp3, m4a, aac, wav, flac, opus`
-- Субтитри: `srt, ass, vtt`
+`ui/qml/I18n.qml` завантажує JSON для QML. Python backend використовує ті самі словники через `core/localization.py`, тому ключові log/status/dialog messages також можуть перекладатися вибраною мовою.
 
-## Platform presets
+## Performance Profiles
 
-Вбудовані presets включають:
+Профілі задають автоматичні defaults для CRF, preset, codec і hardware encoder:
 
-- YouTube
-- TikTok
-- Instagram Reels
-- Instagram Stories
-- Telegram
-- WhatsApp
-- X/Twitter
-- LinkedIn
-- Discord
-- H.264 / H.265 / AV1 / VP9 targets
-- Fast Copy
-- Audio Only
-- Thumbnail
-- Contact Sheet
+- `Quality`: нижчий CRF, повільніший preset, вищий візуальний запас.
+- `Balanced`: дефолт для щоденного використання.
+- `Fast`: швидший encode.
+- `Small file`: H.265 і агресивніший розмір.
 
-Presets відображаються як горизонтальний scrollable chip-row у верхній частині workspace.
+Якщо задано `target_size_mb`, FFmpeg command builder рахує bitrate з duration і бажаного розміру. Для audio-only також підбирається bitrate, якщо відома duration.
 
 ## Analytics
 
-Analytics реалізовано на чистому QML Canvas, без QtCharts, matplotlib або сторонніх chart-бібліотек.
+QML Canvas панелі:
 
-Доступні панелі:
-
-- **Throughput**: історія speed samples під час сесії.
+- **Throughput**: encode speed timeline.
 - **Per-file**: топ-10 файлів за часом обробки.
-- **Codecs**: donut chart розподілу codec metadata з ffprobe.
+- **Codecs**: donut chart за вихідними/виявленими codec labels.
+- **Resources**: CPU/GPU/RAM timeline.
 
-Backend подає дані через QML properties і signals:
+Backend signals:
 
 ```python
 speedHistoryChanged = Signal(list)
 fileTimingsChanged = Signal(list)
 codecDistributionChanged = Signal(dict)
+resourceHistoryChanged = Signal(list)
 ```
 
-## Performance notes
+CPU/RAM беруться з `psutil`. GPU читається через `nvidia-smi`, якщо він доступний; якщо ні, графік лишається без GPU samples.
 
-- Черга рендериться через `ListView`, не через `Repeater`.
-- Queue delegate використовує кастомний `Rectangle` progress bar замість QuickControls2 `ProgressBar`.
-- Shimmer animation керується shared phase у `Main.qml`, щоб не запускати окрему нескінченну анімацію на кожен item.
-- Для черги понад 50 файлів увімкнено `highLoadMode`, який вимикає дорогі анімації.
+## Продуктивність
+
+- Queue рендериться через `ListView`, не `Repeater`.
+- Progress events throttled приблизно до 250 ms.
+- FFprobe prefetch запускається після додавання файлів.
 - Thumbnails завантажуються асинхронно.
-- FFprobe prefetch запускається після додавання файлів і кешує metadata для подальшого запуску.
-- Progress events throttled до приблизно 250 ms, щоб UI не отримував надлишкових updates.
-- Субпроцеси FFmpeg/FFprobe виконуються поза UI thread, а UI оновлюється через event queue і Qt signals.
-
-Поточний conversion pipeline зберігає послідовну семантику для pause/skip/merge/hooks. У коді є GPU-aware worker-limit hook і prefetch path, але повний parallel conversion scheduling ще має врахувати merge, hooks і active-process control.
-
-## Auto subtitle
-
-Для режиму `auto_subtitle` потрібен локальний Whisper.
-
-Python package:
-
-```bash
-python -m pip install openai-whisper
-```
-
-Або системний CLI `whisper`, якщо він уже встановлений.
-
-Whisper не входить у базовий `requirements.txt`.
-
-## Hooks
-
-Поля `Before hook` і `After hook` приймають shell-команди, які запускаються до та після batch-run.
-
-Передаються базові environment variables:
-
-- `MC_OUT_DIR`
-- `MC_TOTAL_FILES`
-- `MC_OPERATION`
-- `MC_STOPPED`
-- `MC_FAILED_COUNT`
+- `highLoadMode` вимикає дорогі анімації для великих черг.
+- GPU encoder дозволяє до 2 паралельних незалежних задач.
+- Merge, auto-subtitle, split-chapters і hook-heavy сценарії йдуть послідовним fallback шляхом.
 
 ## Тести
 
 ```bash
-python -m pip install -r requirements.txt -r requirements-dev.txt
 python -m pytest -q
 ```
 
@@ -246,7 +145,7 @@ python -m pytest -q
 
 ## Збірка
 
-PyInstaller spec уже включає всю директорію `ui/qml`, тому нові QML components потрапляють у build автоматично.
+PyInstaller spec включає `ui/qml`, тому QML components і JSON translations потрапляють у build разом із застосунком.
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-dev.txt
@@ -254,67 +153,8 @@ python scripts/find_ffmpeg.py
 python scripts/build_pyinstaller.py
 ```
 
-Артефакт буде у:
+Артефакт буде в:
 
 ```text
 dist/MediaConverter/
 ```
-
-FFmpeg можна додати в bundle через env vars:
-
-- `MEDIA_CONVERTER_FFMPEG`
-- `MEDIA_CONVERTER_FFPROBE`
-- `MEDIA_CONVERTER_BUNDLE_FFMPEG_DIR`
-- `MEDIA_CONVERTER_FFMPEG_DIR`
-
-## Структура проєкту
-
-```text
-mov_to_mp4_batch_gui/
-  main.py
-  media_converter.spec
-  config/
-  core/
-    models.py
-    presets.py
-    settings.py
-  services/
-    converter_service.py
-    ffmpeg_service.py
-    media_analysis_service.py
-    queue_manager.py
-  ui/
-    models.py
-    qml_backend.py
-    qml/
-      Main.qml
-      Theme.qml
-      components/
-        AnalyticsPanel.qml
-        ArcSpinner.qml
-        DropZone.qml
-        PresetsBar.qml
-        PulseDot.qml
-        QueueItem.qml
-        SessionStats.qml
-        ShimmerBar.qml
-        SidebarPanel.qml
-  tests/
-  scripts/
-  tauri_app/
-```
-
-## Tauri/Web UI
-
-`tauri_app/` залишається експериментальним web UI. Основний підтримуваний desktop workflow зараз у Python/PySide6/QML.
-
-## Примітки
-
-- Якщо FFmpeg не знайдено, вкажи шлях вручну в UI.
-- Для точного analysis, ETA, codec chart і warnings потрібен `ffprobe`.
-- Fast copy працює тільки коли немає несумісних фільтрів, trim або audio replacement.
-- Auto subtitle не працюватиме без локального Whisper.
-
-## Ліцензія
-
-MIT. Дивись [LICENSE](LICENSE).

@@ -29,6 +29,8 @@ ApplicationWindow {
     property bool formValid: true
     property string selectedPath: ""
     property int selectedIndex: -1
+    property var selectedPaths: []
+    property int lastSelectedIndex: -1
     property string selectedPreset: ""
     property real sharedShimmerPhase: 0
     property bool highLoadMode: backend ? backend.queueCount > 50 : false
@@ -38,8 +40,9 @@ ApplicationWindow {
     property var imageFormats: ["jpg", "png", "webp", "bmp", "tiff"]
     property var audioFormats: ["mp3", "m4a", "aac", "wav", "flac", "opus"]
     property var subtitleFormats: ["srt", "ass", "vtt"]
-    property var codecOptions: ["Авто", "H.264 (AVC)", "H.265 (HEVC)", "AV1", "VP9 (WebM)"]
-    property var hwOptions: ["Авто", "Тільки CPU", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"]
+    property var codecOptions: ["auto", "H.264 (AVC)", "H.265 (HEVC)", "AV1", "VP9 (WebM)"]
+    property var hwOptions: ["auto", "cpu", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"]
+    property var performanceProfiles: ["Quality", "Balanced", "Fast", "Small file"]
     property var rotateOptions: ["0", "90° вправо", "90° вліво", "180°"]
     property var portraitOptions: ["Вимкнено", "9:16 (1080x1920) - crop", "9:16 (1080x1920) - blur", "9:16 (720x1280) - crop", "9:16 (720x1280) - blur"]
     property var positionOptions: ["Верх-ліворуч", "Верх-праворуч", "Низ-ліворуч", "Низ-праворуч", "Центр"]
@@ -100,6 +103,40 @@ ApplicationWindow {
 
     function collectSettings() {
         return settingsPanel ? settingsPanel.collectSettings() : ({})
+    }
+
+    function isPathSelected(path) {
+        return selectedPaths.indexOf(path) >= 0
+    }
+
+    function selectQueuePath(path, index, modifiers) {
+        var next = selectedPaths.slice()
+        var ctrl = (modifiers & Qt.ControlModifier) !== 0
+        var shift = (modifiers & Qt.ShiftModifier) !== 0
+        if (shift && backend && lastSelectedIndex >= 0) {
+            next = []
+            var first = Math.min(lastSelectedIndex, index)
+            var last = Math.max(lastSelectedIndex, index)
+            for (var i = first; i <= last; ++i) {
+                var rangePath = backend.queuePathAt(i)
+                if (rangePath.length > 0)
+                    next.push(rangePath)
+            }
+        } else if (ctrl) {
+            var existing = next.indexOf(path)
+            if (existing >= 0)
+                next.splice(existing, 1)
+            else
+                next.push(path)
+        } else {
+            next = [path]
+        }
+        selectedPaths = next
+        selectedPath = path
+        selectedIndex = index
+        lastSelectedIndex = index
+        if (backend)
+            backend.selectQueuePath(path)
     }
 
     Timer {
@@ -187,8 +224,8 @@ ApplicationWindow {
                         font.family: Theme.monoFont
                         font.pixelSize: Theme.fontMeta
                     }
-                    StatusPill { text: "CPU --"; accent: Theme.textSecondary }
-                    StatusPill { text: "GPU --"; accent: Theme.accentPurple }
+                    StatusPill { text: backend ? backend.cpuLoadText : "CPU --"; accent: Theme.textSecondary }
+                    StatusPill { text: backend ? backend.gpuLoadText : "GPU --"; accent: Theme.accentPurple }
                     StatusPill { text: backend ? backend.encoderInfo : "FFmpeg --"; accent: Theme.accentPrimary; maxWidth: 260 }
                 }
 
@@ -271,6 +308,49 @@ ApplicationWindow {
                                             font.family: Theme.monoFont
                                             font.pixelSize: Theme.fontMeta
                                         }
+                                        Label {
+                                            visible: root.selectedPaths.length > 1
+                                            text: I18n.t("selected") + ": " + root.selectedPaths.length
+                                            color: Theme.accentPrimary
+                                            font.family: Theme.monoFont
+                                            font.pixelSize: Theme.fontMeta
+                                        }
+                                        Button {
+                                            text: I18n.t("move_top")
+                                            visible: root.selectedPaths.length > 1
+                                            onClicked: backend && backend.moveSelectedPathsTop(root.selectedPaths)
+                                        }
+                                        Button {
+                                            text: I18n.t("move_up")
+                                            visible: root.selectedPaths.length > 1
+                                            onClicked: backend && backend.moveSelectedPathsUp(root.selectedPaths)
+                                        }
+                                        Button {
+                                            text: I18n.t("move_down")
+                                            visible: root.selectedPaths.length > 1
+                                            onClicked: backend && backend.moveSelectedPathsDown(root.selectedPaths)
+                                        }
+                                        Button {
+                                            text: I18n.t("move_bottom")
+                                            visible: root.selectedPaths.length > 1
+                                            onClicked: backend && backend.moveSelectedPathsBottom(root.selectedPaths)
+                                        }
+                                        Button {
+                                            text: I18n.t("batch_remove")
+                                            visible: root.selectedPaths.length > 1
+                                            onClicked: {
+                                                if (backend)
+                                                    backend.removeSelectedPaths(root.selectedPaths)
+                                                root.selectedPaths = []
+                                                root.selectedPath = ""
+                                                root.selectedIndex = -1
+                                            }
+                                        }
+                                        Button {
+                                            text: I18n.t("batch_override")
+                                            visible: root.selectedPaths.length > 1
+                                            onClicked: root.activeSection = 4
+                                        }
                                         Button { text: I18n.t("add"); onClicked: backend && backend.addFiles() }
                                         Button { text: I18n.t("folder"); onClicked: backend && backend.addFolder() }
                                     }
@@ -316,16 +396,16 @@ ApplicationWindow {
                                                 progress: model.progress
                                                 etaText: model.etaText
                                                 speedText: model.speedText
+                                                predictedSizeText: model.predictedSizeText
+                                                compressionText: model.compressionText
                                                 exitCode: model.exitCode
                                                 hasOverride: model.hasOverride
-                                                selected: root.selectedPath === model.path
+                                                selected: root.isPathSelected(model.path)
                                                 highLoadMode: root.highLoadMode
                                                 shimmerPhase: root.sharedShimmerPhase
-                                                onSelectedRequested: function(path) {
-                                                    root.selectedPath = path
-                                                    root.selectedIndex = index
-                                                    if (backend)
-                                                        backend.selectQueuePath(path)
+                                                itemIndex: index
+                                                onSelectedRequested: function(path, modifiers) {
+                                                    root.selectQueuePath(path, index, modifiers)
                                                 }
                                                 onRetryRequested: function(path) { backend && backend.retryTaskPath(path) }
                                                 onSkipRequested: function(path) { backend && backend.skipCurrentFile() }
@@ -337,6 +417,10 @@ ApplicationWindow {
                                                     if (backend)
                                                         backend.selectQueuePath(path)
                                                 }
+                                                onMoveRequested: function(path, targetIndex) {
+                                                    if (backend)
+                                                        backend.movePathToIndex(path, targetIndex)
+                                                }
                                             }
                                         }
                                     }
@@ -347,6 +431,7 @@ ApplicationWindow {
                                 speedHistory: backend ? backend.speedHistory : []
                                 fileTimings: backend ? backend.fileTimings : []
                                 codecDistribution: backend ? backend.codecDistribution : ({})
+                                resourceHistory: backend ? backend.resourceHistory : []
                             }
                         }
 
@@ -405,6 +490,7 @@ ApplicationWindow {
                             speedHistory: backend ? backend.speedHistory : []
                             fileTimings: backend ? backend.fileTimings : []
                             codecDistribution: backend ? backend.codecDistribution : ({})
+                            resourceHistory: backend ? backend.resourceHistory : []
                         }
 
                         LogPanel {
@@ -541,6 +627,10 @@ ApplicationWindow {
             if (preset.audio_track_index !== undefined) audioTrackSpin.value = Number(preset.audio_track_index) + 1
             if (preset.crf !== undefined) crfSpin.value = Number(preset.crf)
             if (preset.preset) root.setComboText(presetCombo, preset.preset)
+            if (preset.performance_profile) root.setComboText(performanceProfileCombo, preset.performance_profile)
+            targetSizeField.text = preset.target_size_mb || ""
+            if (preset.cpu_load_limit !== undefined) cpuLimitSpin.value = Number(preset.cpu_load_limit)
+            if (preset.gpu_load_limit !== undefined) gpuLimitSpin.value = Number(preset.gpu_load_limit)
             if (preset.portrait) root.setComboText(portraitCombo, preset.portrait)
             if (preset.img_quality !== undefined) imgQualitySpin.value = Number(preset.img_quality)
             overwriteCheck.checked = !!preset.overwrite
@@ -619,6 +709,10 @@ ApplicationWindow {
                 audio_track_index: audioTrackSpin.value - 1,
                 crf: crfSpin.value,
                 preset: presetCombo.currentText,
+                performance_profile: performanceProfileCombo.currentText,
+                target_size_mb: targetSizeField.text,
+                cpu_load_limit: cpuLimitSpin.value,
+                gpu_load_limit: gpuLimitSpin.value,
                 portrait: portraitCombo.currentText,
                 img_quality: imgQualitySpin.value,
                 overwrite: overwriteCheck.checked,
@@ -707,7 +801,8 @@ ApplicationWindow {
         function syncLanguage() {
             if (!backend)
                 return
-            languageCombo.currentIndex = backend.uiLanguage === "en" ? 1 : 0
+            var idx = I18n.languageCodes.indexOf(backend.uiLanguage)
+            languageCombo.currentIndex = idx >= 0 ? idx : 0
         }
 
         function loadTaskOverride(data) {
@@ -722,12 +817,13 @@ ApplicationWindow {
             FieldLabel { text: I18n.t("language") }
             AppComboBox {
                 id: languageCombo
-                model: [I18n.t("ukrainian"), I18n.t("english")]
-                currentIndex: backend && backend.uiLanguage === "en" ? 1 : 0
+                model: [I18n.t("ukrainian"), I18n.t("english"), I18n.t("polish"), I18n.t("german")]
+                currentIndex: backend ? Math.max(0, I18n.languageCodes.indexOf(backend.uiLanguage)) : 0
                 onActivated: {
+                    var code = I18n.languageCodes[currentIndex] || "uk"
                     if (backend)
-                        backend.uiLanguage = currentIndex === 1 ? "en" : "uk"
-                    I18n.language = currentIndex === 1 ? "en" : "uk"
+                        backend.uiLanguage = code
+                    I18n.language = code
                 }
             }
             RowLayout {
@@ -778,6 +874,14 @@ ApplicationWindow {
                 AppComboBox { id: codecCombo; model: root.codecOptions; currentIndex: 0; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("hw") }
                 AppComboBox { id: hwCombo; model: root.hwOptions; currentIndex: 0; onActivated: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("performance_profile") }
+                AppComboBox { id: performanceProfileCombo; model: root.performanceProfiles; currentIndex: 1; onActivated: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("target_size_mb") }
+                AppTextField { id: targetSizeField; placeholderText: I18n.t("target_size_hint"); onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("cpu_load_limit") }
+                AppSpinBox { id: cpuLimitSpin; from: 1; to: 100; value: 95; onValueChanged: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("gpu_load_limit") }
+                AppSpinBox { id: gpuLimitSpin; from: 1; to: 100; value: 98; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: "CRF" }
                 AppSpinBox { id: crfSpin; from: 0; to: 51; value: 23; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("preset") }
@@ -993,6 +1097,15 @@ ApplicationWindow {
                     text: I18n.t("save")
                     enabled: root.selectedPath.length > 0
                     onClicked: backend && backend.saveTaskOverrideByPath(root.selectedPath, {
+                        output_template: overrideOutputTemplateField.text,
+                        crf: overrideCrfSpin.value,
+                        audio_bitrate: overrideAudioBitrateField.text
+                    })
+                }
+                Button {
+                    text: I18n.t("batch_override")
+                    enabled: root.selectedPaths.length > 1
+                    onClicked: backend && backend.saveBulkOverride(root.selectedPaths, {
                         output_template: overrideOutputTemplateField.text,
                         crf: overrideCrfSpin.value,
                         audio_bitrate: overrideAudioBitrateField.text

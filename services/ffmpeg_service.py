@@ -68,6 +68,20 @@ def _container_supports_codec(ext: str, vcodec: str) -> bool:
     return True
 
 
+def _bitrate_to_kbps(value: str, fallback: int = 192) -> int:
+    text = str(value or "").strip().lower()
+    if not text:
+        return fallback
+    try:
+        if text.endswith("k"):
+            return max(1, int(float(text[:-1])))
+        if text.endswith("m"):
+            return max(1, int(float(text[:-1]) * 1000))
+        return max(1, int(float(text) / 1000 if float(text) > 10000 else float(text)))
+    except ValueError:
+        return fallback
+
+
 class FfmpegService:
     def __init__(self, ffmpeg_path: Optional[str], ffprobe_path: Optional[str]):
         self.ffmpeg_path = ffmpeg_path
@@ -306,6 +320,21 @@ class FfmpegService:
         if encoder.endswith("_amf"):
             return ["-rc", "cqp", "-qp_i", str(crf), "-qp_p", str(crf), "-qp_b", str(crf)]
         return []
+
+    def target_video_bitrate_kbps(self, settings: ConversionSettings, info: Optional[MediaInfo]) -> Optional[int]:
+        if not settings.target_size_mb or not info or not info.duration or info.duration <= 0:
+            return None
+        total_kbits = float(settings.target_size_mb) * 8192.0
+        audio_kbps = _bitrate_to_kbps(settings.audio_bitrate, fallback=160)
+        mux_overhead = 0.94
+        video_kbps = int((total_kbits * mux_overhead / info.duration) - audio_kbps)
+        return max(video_kbps, 120)
+
+    def target_audio_bitrate_kbps(self, settings: ConversionSettings, duration: Optional[float]) -> Optional[int]:
+        if not settings.target_size_mb or not duration or duration <= 0:
+            return None
+        total_kbits = float(settings.target_size_mb) * 8192.0
+        return max(32, int(total_kbits * 0.96 / duration))
 
     def build_trim_args(self, settings: ConversionSettings, log_cb=None) -> List[str]:
         args: List[str] = []
@@ -756,7 +785,11 @@ class FfmpegService:
         cmd += ["-c:v", encoder]
         if not is_hw and encoder in {"libx264", "libx265"}:
             cmd += ["-preset", (settings.preset or "medium").strip()]
-        cmd += self.encoder_quality_args(encoder, settings.crf)
+        target_video_kbps = self.target_video_bitrate_kbps(settings, info)
+        if target_video_kbps:
+            cmd += ["-b:v", f"{target_video_kbps}k", "-maxrate", f"{int(target_video_kbps * 1.35)}k", "-bufsize", f"{int(target_video_kbps * 2)}k"]
+        else:
+            cmd += self.encoder_quality_args(encoder, settings.crf)
         if encoder in {
             "libx264",
             "libx265",
@@ -788,6 +821,7 @@ class FfmpegService:
         inp: Path,
         outp: Path,
         settings: ConversionSettings,
+        duration: Optional[float] = None,
         log_cb=None,
     ) -> List[str]:
         overwrite = "-y" if settings.overwrite else "-n"
@@ -816,7 +850,8 @@ class FfmpegService:
             cmd += ["-filter:a", audio_filter]
         cmd += ["-c:a", codec]
         if codec in {"libmp3lame", "aac", "libopus"}:
-            cmd += ["-b:a", settings.audio_bitrate or "192k"]
+            target_audio_kbps = self.target_audio_bitrate_kbps(settings, duration)
+            cmd += ["-b:a", f"{target_audio_kbps}k" if target_audio_kbps else settings.audio_bitrate or "192k"]
         if cover_art and out_ext in {".mp3", ".m4a", ".aac"}:
             cmd += ["-c:v", "mjpeg", "-disposition:v:0", "attached_pic"]
             if out_ext == ".mp3":

@@ -47,7 +47,7 @@ class FakeFfmpegService:
     def build_image_command(self, inp, outp, settings, log_cb=None):
         return ["ffmpeg", "-i", str(inp), str(outp)]
 
-    def build_audio_command(self, inp, outp, settings, log_cb=None):
+    def build_audio_command(self, inp, outp, settings, duration=None, log_cb=None):
         self.audio_called = True
         return ["ffmpeg", "-i", str(inp), str(outp)]
 

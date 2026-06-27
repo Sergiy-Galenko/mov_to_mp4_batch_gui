@@ -8,6 +8,7 @@ Rectangle {
     property var speedHistory: []
     property var fileTimings: []
     property var codecDistribution: ({})
+    property var resourceHistory: []
     property int activeTab: 0
 
     radius: Theme.radiusPanel
@@ -49,7 +50,7 @@ Rectangle {
             }
 
             Repeater {
-                model: ["throughput", "per_file", "codecs"]
+                model: ["throughput", "per_file", "codecs", "resources"]
                 delegate: Rectangle {
                     width: Math.max(82, tabLabel.implicitWidth + 18)
                     height: 28
@@ -336,9 +337,75 @@ Rectangle {
                     }
                 }
             }
+
+            Item {
+                Canvas {
+                    id: resourceCanvas
+                    anchors.fill: parent
+                    antialiasing: true
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        var padL = 42
+                        var padT = 16
+                        var padR = 18
+                        var padB = 28
+                        var w = width - padL - padR
+                        var h = height - padT - padB
+                        ctx.strokeStyle = Theme.bgBorder
+                        ctx.lineWidth = 1
+                        ctx.setLineDash([4, 5])
+                        for (var g = 0; g <= 4; ++g) {
+                            var gy = padT + h * g / 4
+                            ctx.beginPath()
+                            ctx.moveTo(padL, gy)
+                            ctx.lineTo(padL + w, gy)
+                            ctx.stroke()
+                        }
+                        ctx.setLineDash([])
+                        var data = root.resourceHistory || []
+                        ctx.fillStyle = Theme.textMuted
+                        ctx.font = Theme.fontMeta + "px " + Theme.monoFont
+                        if (data.length < 2) {
+                            ctx.fillText(I18n.t("waiting_resources"), padL, padT + h / 2)
+                            return
+                        }
+                        var maxT = Math.max(1, Number(data[data.length - 1].time || 1))
+                        function px(point) { return padL + (Number(point.time || 0) / maxT) * w }
+                        function py(value) { return padT + h - (Math.max(0, Math.min(100, Number(value || 0))) / 100) * h }
+                        function drawSeries(key, color) {
+                            ctx.beginPath()
+                            for (var i = 0; i < data.length; ++i) {
+                                var x = px(data[i])
+                                var y = py(data[i][key])
+                                if (i === 0) ctx.moveTo(x, y)
+                                else ctx.lineTo(x, y)
+                            }
+                            ctx.strokeStyle = color
+                            ctx.lineWidth = 2
+                            ctx.stroke()
+                        }
+                        drawSeries("cpu", Theme.accentPrimary)
+                        drawSeries("gpu", Theme.accentPurple)
+                        drawSeries("ram", Theme.accentWarn)
+                        var labels = [
+                            [I18n.t("cpu"), Theme.accentPrimary],
+                            [I18n.t("gpu"), Theme.accentPurple],
+                            [I18n.t("ram"), Theme.accentWarn]
+                        ]
+                        for (var l = 0; l < labels.length; ++l) {
+                            ctx.fillStyle = labels[l][1]
+                            ctx.fillRect(padL + l * 72, height - 16, 10, 10)
+                            ctx.fillStyle = Theme.textSecondary
+                            ctx.fillText(labels[l][0], padL + 14 + l * 72, height - 7)
+                        }
+                    }
+                }
+            }
         }
     }
 
     onSpeedHistoryChanged: throughputCanvas.requestPaint()
     onCodecDistributionChanged: donutCanvas.requestPaint()
+    onResourceHistoryChanged: resourceCanvas.requestPaint()
 }

@@ -26,6 +26,10 @@ class QueueManager:
             "eta_text": item.eta_text,
             "speed_text": item.speed_text,
             "elapsed_seconds": item.elapsed_seconds,
+            "input_bytes": item.input_bytes,
+            "output_bytes": item.output_bytes,
+            "predicted_output_bytes": item.predicted_output_bytes,
+            "compression_ratio": item.compression_ratio,
             "overrides": dict(item.overrides),
         }
 
@@ -63,6 +67,10 @@ class QueueManager:
                     eta_text=str(raw.get("eta_text") or ""),
                     speed_text=str(raw.get("speed_text") or ""),
                     elapsed_seconds=float(raw.get("elapsed_seconds") or 0.0),
+                    input_bytes=int(raw.get("input_bytes") or 0),
+                    output_bytes=int(raw.get("output_bytes") or 0),
+                    predicted_output_bytes=int(raw.get("predicted_output_bytes") or 0),
+                    compression_ratio=float(raw.get("compression_ratio") or 0.0),
                     overrides=dict(raw.get("overrides") or {}),
                 )
             )

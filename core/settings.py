@@ -1,6 +1,7 @@
 from typing import Any, Dict, Mapping, Optional
 
 from config.constants import (
+    HW_ENCODER_MAP,
     HW_ENCODER_OPTIONS,
     OPERATION_MAP,
     OUT_AUDIO_FORMATS,
@@ -10,8 +11,10 @@ from config.constants import (
     POSITION_OPTIONS,
     ROTATE_OPTIONS,
     VIDEO_CODEC_OPTIONS,
+    VIDEO_CODEC_MAP,
 )
 from core.models import ConversionSettings
+from core.performance_profiles import apply_performance_profile, normalize_profile
 from utils.formatting import parse_float, parse_int, parse_time_to_seconds
 
 
@@ -53,6 +56,13 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.skip_existing = bool(settings_map.get("skip_existing", settings.skip_existing))
     settings.output_template = str(settings_map.get("output_template") or settings.output_template).strip() or "{stem}"
     settings.platform_profile = str(settings_map.get("platform_profile") or settings.platform_profile).strip()
+    settings.performance_profile = normalize_profile(str(settings_map.get("performance_profile") or settings.performance_profile))
+    target_size = parse_float(str(settings_map.get("target_size_mb", "")))
+    settings.target_size_mb = target_size if target_size and target_size > 0 else None
+    cpu_limit = parse_int(str(settings_map.get("cpu_load_limit", settings.cpu_load_limit)))
+    gpu_limit = parse_int(str(settings_map.get("gpu_load_limit", settings.gpu_load_limit)))
+    settings.cpu_load_limit = max(1, min(100, cpu_limit if cpu_limit is not None else settings.cpu_load_limit))
+    settings.gpu_load_limit = max(1, min(100, gpu_limit if gpu_limit is not None else settings.gpu_load_limit))
 
     settings.trim_start = parse_time_to_seconds(str(settings_map.get("trim_start", "")))
     settings.trim_end = parse_time_to_seconds(str(settings_map.get("trim_end", "")))
@@ -108,9 +118,15 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.text_font = str(settings_map.get("text_font", settings.text_font))
 
     codec = settings_map.get("codec") or settings.video_codec
+    if codec in VIDEO_CODEC_MAP and VIDEO_CODEC_MAP[codec] == "auto":
+        codec = "auto"
     if codec in VIDEO_CODEC_OPTIONS:
         settings.video_codec = codec
     hw = settings_map.get("hw") or settings.hw_encoder
+    if hw in HW_ENCODER_MAP and HW_ENCODER_MAP[hw] == "auto":
+        hw = "auto"
+    elif hw in HW_ENCODER_MAP and HW_ENCODER_MAP[hw] == "cpu":
+        hw = "cpu"
     if hw in HW_ENCODER_OPTIONS:
         settings.hw_encoder = hw
 
@@ -138,6 +154,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.meta_genre = str(settings_map.get("meta_genre", settings.meta_genre))
     settings.meta_year = str(settings_map.get("meta_year", settings.meta_year))
     settings.meta_track = str(settings_map.get("meta_track", settings.meta_track))
+    settings = apply_performance_profile(settings)
     return settings
 
 

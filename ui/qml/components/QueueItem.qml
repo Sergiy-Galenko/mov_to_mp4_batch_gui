@@ -17,13 +17,17 @@ Rectangle {
     property real progress: 0
     property string etaText: ""
     property string speedText: ""
+    property string predictedSizeText: ""
+    property string compressionText: ""
     property int exitCode: -1
     property bool hasOverride: false
     property bool selected: false
     property bool highLoadMode: false
     property real shimmerPhase: 0
+    property int itemIndex: -1
 
-    signal selectedRequested(string path)
+    signal selectedRequested(string path, int modifiers)
+    signal moveRequested(string path, int targetIndex)
     signal retryRequested(string path)
     signal skipRequested(string path)
     signal removeRequested(string path)
@@ -76,10 +80,31 @@ Rectangle {
     opacity: canonicalStatus() === "pending" ? 0.76 : 1
     clip: true
     layer.enabled: false
+    Drag.active: dragHandler.active
+    Drag.source: root
+    Drag.hotSpot.x: width / 2
+    Drag.hotSpot.y: height / 2
+    Drag.supportedActions: Qt.MoveAction
 
     Behavior on color {
         enabled: !highLoadMode
         ColorAnimation { duration: 120 }
+    }
+
+    DragHandler {
+        id: dragHandler
+        target: null
+        acceptedButtons: Qt.LeftButton
+    }
+
+    DropArea {
+        anchors.fill: parent
+        onDropped: function(drop) {
+            if (drop.source && drop.source.filePath && drop.source.filePath !== root.filePath) {
+                root.moveRequested(drop.source.filePath, root.itemIndex)
+                drop.acceptProposedAction()
+            }
+        }
     }
 
     Rectangle {
@@ -98,7 +123,7 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
-        onClicked: root.selectedRequested(root.filePath)
+        onClicked: root.selectedRequested(root.filePath, mouse.modifiers)
     }
 
     ColumnLayout {
@@ -248,6 +273,22 @@ Rectangle {
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
                 visible: canonicalStatus() === "processing"
+            }
+
+            Label {
+                text: root.predictedSizeText ? I18n.t("predicted_size") + " " + root.predictedSizeText : ""
+                color: Theme.textMuted
+                font.family: Theme.monoFont
+                font.pixelSize: Theme.fontMeta
+                visible: root.predictedSizeText.length > 0 && canonicalStatus() !== "processing"
+            }
+
+            Label {
+                text: root.compressionText ? I18n.t("compression") + " " + root.compressionText : ""
+                color: Theme.accentSuccess
+                font.family: Theme.monoFont
+                font.pixelSize: Theme.fontMeta
+                visible: root.compressionText.length > 0
             }
 
             Item { Layout.fillWidth: true }

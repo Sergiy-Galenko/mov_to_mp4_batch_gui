@@ -1,4 +1,4 @@
-import os
+﻿import os
 import signal
 import subprocess
 import threading
@@ -36,6 +36,8 @@ class ConverterService:
         self.skip_event = threading.Event()
         self.thread: Optional[threading.Thread] = None
         self.current_proc: Optional[subprocess.Popen] = None
+        self.child_services: List["ConverterService"] = []
+        self.progress_task_path: Optional[Path] = None
         self.media_info: Dict[Path, MediaInfo] = {}
         self.prefetched_media_info: Dict[Path, MediaInfo] = {}
         self.prefetch_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="converter-ffprobe")
@@ -50,7 +52,7 @@ class ConverterService:
         self.thread.start()
 
     def _has_gpu_encoder(self) -> bool:
-        caps = self.ffmpeg.encoder_caps or set()
+        caps = getattr(self.ffmpeg, "encoder_caps", set()) or set()
         return bool({"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_qsv", "hevc_qsv", "av1_qsv", "h264_amf", "hevc_amf", "av1_amf"} & caps)
 
     def conversion_worker_limit(self) -> int:
@@ -58,6 +60,8 @@ class ConverterService:
 
     def stop(self) -> None:
         self.stop_event.set()
+        for child in list(self.child_services):
+            child.stop()
         if self.current_proc and self.current_proc.poll() is None:
             try:
                 self.current_proc.terminate()
@@ -66,14 +70,20 @@ class ConverterService:
 
     def pause(self) -> None:
         self.pause_event.set()
+        for child in list(self.child_services):
+            child.pause()
         self._set_process_suspended(True)
 
     def resume(self) -> None:
+        for child in list(self.child_services):
+            child.resume()
         self._set_process_suspended(False)
         self.pause_event.clear()
 
     def skip_current(self) -> None:
         self.skip_event.set()
+        for child in list(self.child_services):
+            child.skip_current()
         if self.current_proc and self.current_proc.poll() is None:
             try:
                 self.current_proc.terminate()
@@ -84,7 +94,7 @@ class ConverterService:
         emitted = False
         while self.pause_event.is_set() and not self.stop_event.is_set() and not self.skip_event.is_set():
             if not emitted:
-                self._emit("status", "Пауза. Очікую Resume...")
+                self._emit("status", "РџР°СѓР·Р°. РћС‡С–РєСѓСЋ Resume...")
                 emitted = True
             time.sleep(0.2)
 
@@ -141,6 +151,9 @@ class ConverterService:
             pass
 
     def _emit(self, event: str, *payload) -> None:
+        if event == "progress" and self.progress_task_path is not None:
+            self.queue.put(("progress_for", self.progress_task_path, *payload))
+            return
         self.queue.put((event, *payload))
 
     def _log(self, level: str, msg: str) -> None:
@@ -194,7 +207,7 @@ class ConverterService:
                 self._log("INFO", output)
             return
         details = (result.stderr or result.stdout or "").strip()
-        self._log("WARN", f"Hook {stage} завершився з кодом {result.returncode}: {details or command}")
+        self._log("WARN", f"Hook {stage} Р·Р°РІРµСЂС€РёРІСЃСЏ Р· РєРѕРґРѕРј {result.returncode}: {details or command}")
 
     def _emit_run_summary(
         self,
@@ -225,13 +238,17 @@ class ConverterService:
                 "replace_audio_path": settings.replace_audio_path,
                 "split_chapters": settings.split_chapters,
                 "output_template": settings.output_template,
+                "performance_profile": settings.performance_profile,
+                "target_size_mb": settings.target_size_mb,
+                "cpu_load_limit": settings.cpu_load_limit,
+                "gpu_load_limit": settings.gpu_load_limit,
             },
         }
         self._emit("run_summary", summary)
 
     def _validate_operation(self, task: TaskItem, settings: ConversionSettings) -> Tuple[bool, str]:
         if not operation_supports_media(settings.operation, task.media_type):
-            return False, "Операція не підтримує тип цього файлу"
+            return False, "РћРїРµСЂР°С†С–СЏ РЅРµ РїС–РґС‚СЂРёРјСѓС” С‚РёРї С†СЊРѕРіРѕ С„Р°Р№Р»Сѓ"
         return True, ""
 
     def _total_duration_for(self, tasks: List[TaskItem], defaults: ConversionSettings) -> float:
@@ -241,6 +258,147 @@ class ConverterService:
             if settings.operation in {"convert", "audio_only", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet", "auto_subtitle"}:
                 total_duration += self._task_duration(task)
         return total_duration
+
+    def _can_run_parallel(self, tasks: List[TaskItem], defaults: ConversionSettings) -> bool:
+        if self.conversion_worker_limit() < 2 or len(tasks) < 2:
+            return False
+        for task in tasks:
+            settings = self._effective_settings(task, defaults)
+            if settings.merge or settings.split_chapters or settings.operation == "auto_subtitle":
+                return False
+            if settings.operation not in {"convert", "subtitle_burn", "audio_only", "subtitle_extract", "thumbnail", "contact_sheet"}:
+                return False
+        return True
+
+    def _current_cpu_load(self) -> float:
+        try:
+            import psutil  # type: ignore
+
+            return float(psutil.cpu_percent(interval=None))
+        except Exception:
+            return 0.0
+
+    def _current_gpu_load(self) -> float:
+        try:
+            result = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=utilization.gpu",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=0.4,
+            )
+            if result.returncode != 0:
+                return 0.0
+            values = [float(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+            return max(values) if values else 0.0
+        except Exception:
+            return 0.0
+
+    def _wait_for_resource_budget(self, settings: ConversionSettings) -> None:
+        logged = False
+        while not self.stop_event.is_set():
+            cpu = self._current_cpu_load()
+            gpu = self._current_gpu_load()
+            cpu_over = cpu >= max(1, min(100, settings.cpu_load_limit))
+            gpu_over = gpu > 0 and gpu >= max(1, min(100, settings.gpu_load_limit))
+            if not cpu_over and not gpu_over:
+                return
+            if not logged:
+                self._log(
+                    "WARN",
+                    f"Load limit reached; waiting before next task (CPU {cpu:.0f}%/{settings.cpu_load_limit}%, GPU {gpu:.0f}%/{settings.gpu_load_limit}%).",
+                )
+                logged = True
+            time.sleep(1.0)
+
+    def _run_parallel_tasks(
+        self,
+        tasks: List[TaskItem],
+        settings: ConversionSettings,
+        out_dir: Path,
+        total_files: int,
+        total_start: float,
+    ) -> List[Dict[str, str]]:
+        worker_count = min(self.conversion_worker_limit(), len(tasks))
+        self._log("INFO", f"Parallel conversion enabled: {worker_count} workers")
+        result_queue: "Queue[tuple]" = Queue()
+        run_results: List[Dict[str, str]] = []
+        completed_paths: set[Path] = set()
+        progress_by_path: Dict[Path, float] = {task.path: 0.0 for task in tasks}
+
+        def run_child(task: TaskItem) -> None:
+            child = ConverterService(self.ffmpeg, result_queue, self.transcriber)
+            child.prefetched_media_info = dict(self.media_info)
+            child.progress_task_path = task.path
+            child_settings = replace(settings, before_hook="", after_hook="", merge=False)
+            child_task = task
+            if task.resolved_settings is not None:
+                child_task = replace(
+                    task,
+                    resolved_settings=replace(task.resolved_settings, before_hook="", after_hook="", merge=False),
+                )
+            self.child_services.append(child)
+            try:
+                self._wait_for_resource_budget(child_task.resolved_settings or child_settings)
+                child._run([child_task], child_settings, out_dir)
+            finally:
+                try:
+                    self.child_services.remove(child)
+                except ValueError:
+                    pass
+
+        with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="converter-worker") as executor:
+            futures = [executor.submit(run_child, task) for task in tasks]
+            while futures:
+                self._wait_if_paused()
+                if self.stop_event.is_set():
+                    for child in list(self.child_services):
+                        child.stop()
+                while not result_queue.empty():
+                    event = result_queue.get()
+                    etype = event[0]
+                    if etype in {"log", "status", "task_state"}:
+                        self._emit(*event)
+                        if etype == "task_state":
+                            _, path, status, message, output_path = event
+                            if status in {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.SKIPPED, TaskStatus.CANCELLED}:
+                                completed_paths.add(path)
+                                progress_by_path[path] = 1.0
+                    elif etype == "progress_for":
+                        if len(event) >= 9:
+                            _, path, file_pct, out_time, duration, file_eta, _child_total, _child_eta, speed = event
+                        else:
+                            _, path, file_pct, out_time, duration, file_eta, _child_total, _child_eta = event
+                            speed = None
+                        if path is not None and file_pct is not None:
+                            progress_by_path[path] = max(progress_by_path.get(path, 0.0), float(file_pct))
+                            total_pct = sum(progress_by_path.values()) / max(total_files, 1)
+                            elapsed = time.time() - total_start
+                            total_eta = _estimate_eta(elapsed, total_pct) if total_pct else None
+                            self._emit("task_progress", path, file_pct, file_eta, speed, total_pct, total_eta)
+                    elif etype == "run_summary":
+                        _, summary = event
+                        if isinstance(summary, dict):
+                            run_results.extend(summary.get("results", []))
+                    elif etype in {"set_total", "done"}:
+                        continue
+                    else:
+                        self._emit(*event)
+
+                futures = [future for future in futures if not future.done()]
+                time.sleep(0.05)
+
+            while not result_queue.empty():
+                event = result_queue.get()
+                if event[0] == "run_summary" and isinstance(event[1], dict):
+                    run_results.extend(event[1].get("results", []))
+                elif event[0] not in {"set_total", "done"}:
+                    self._emit(*event)
+
+        return run_results
 
     def _process_audio_chapters(
         self,
@@ -256,7 +414,7 @@ class ConverterService:
     ) -> Tuple[bool, str]:
         info = self.media_info.get(task.path)
         if not info or not info.chapters:
-            return False, "У файлі немає глав для split by chapters"
+            return False, "РЈ С„Р°Р№Р»С– РЅРµРјР°С” РіР»Р°РІ РґР»СЏ split by chapters"
 
         base_output = self._resolve_output_path(task, settings, out_dir, index)
         chapter_outputs: List[str] = []
@@ -271,10 +429,10 @@ class ConverterService:
             )
             outp = self._chapter_output_path(base_output, chapter.index, chapter.title)
             if chapter_settings.skip_existing and outp.exists() and not chapter_settings.overwrite:
-                self._log("INFO", f"Пропускаю главу, файл вже існує: {outp.name}")
+                self._log("INFO", f"РџСЂРѕРїСѓСЃРєР°СЋ РіР»Р°РІСѓ, С„Р°Р№Р» РІР¶Рµ С–СЃРЅСѓС”: {outp.name}")
                 chapter_outputs.append(str(outp))
                 continue
-            cmd = self.ffmpeg.build_audio_command(task.path, outp, chapter_settings, log_cb=self._log)
+            cmd = self.ffmpeg.build_audio_command(task.path, outp, chapter_settings, duration=chapter_duration, log_cb=self._log)
             rc = self._run_ffmpeg(
                 cmd,
                 chapter_duration,
@@ -285,20 +443,20 @@ class ConverterService:
                 total_start,
             )
             if rc != 0 or not outp.exists():
-                return False, f"Помилка експорту глави {chapter.index}: код {rc}"
+                return False, f"РџРѕРјРёР»РєР° РµРєСЃРїРѕСЂС‚Сѓ РіР»Р°РІРё {chapter.index}: РєРѕРґ {rc}"
             chapter_outputs.append(str(outp))
             chapter_done += chapter_duration
-            self._log("OK", f"Глава {chapter.index}: {outp.name}")
+            self._log("OK", f"Р“Р»Р°РІР° {chapter.index}: {outp.name}")
         return True, "; ".join(chapter_outputs)
 
     def _run(self, tasks: List[TaskItem], settings: ConversionSettings, out_dir: Path) -> None:
         if not self.ffmpeg.ffmpeg_path:
-            self._log("ERROR", "FFmpeg не знайдено. Вкажи шлях до ffmpeg.")
+            self._log("ERROR", "FFmpeg РЅРµ Р·РЅР°Р№РґРµРЅРѕ. Р’РєР°Р¶Рё С€Р»СЏС… РґРѕ ffmpeg.")
             self._emit("done", True)
             return
 
         if not tasks:
-            self._log("WARN", "Черга порожня.")
+            self._log("WARN", "Р§РµСЂРіР° РїРѕСЂРѕР¶РЅСЏ.")
             self._emit("done", True)
             return
 
@@ -332,7 +490,7 @@ class ConverterService:
                     if info.color_space:
                         analysis_bits.append(info.color_space)
                     if info.rotation not in (None, 0):
-                        analysis_bits.append(f"rot {info.rotation}°")
+                        analysis_bits.append(f"rot {info.rotation}В°")
                     if info.audio_streams:
                         analysis_bits.append(f"a:{info.audio_streams}")
                     if info.subtitle_streams:
@@ -345,7 +503,7 @@ class ConverterService:
                         self._log("WARN", f"{task.path.name}: {warning}")
                 self._task_state(task.path, TaskStatus.READY)
         else:
-            self._log("WARN", "FFprobe не знайдено. Прогрес/ETA можуть бути неточні.")
+            self._log("WARN", "FFprobe РЅРµ Р·РЅР°Р№РґРµРЅРѕ. РџСЂРѕРіСЂРµСЃ/ETA РјРѕР¶СѓС‚СЊ Р±СѓС‚Рё РЅРµС‚РѕС‡РЅС–.")
             for task in tasks:
                 self._task_state(task.path, TaskStatus.READY)
 
@@ -366,9 +524,9 @@ class ConverterService:
         merge_candidates = [task for task in tasks if task.media_type == "video" and self._effective_settings(task, settings).operation == "convert"]
         merge_enabled = settings.merge and len(merge_candidates) >= 2
         if settings.merge and not merge_enabled:
-            self._log("WARN", "Merge доступний лише для щонайменше 2 відео в режимі конвертації.")
+            self._log("WARN", "Merge РґРѕСЃС‚СѓРїРЅРёР№ Р»РёС€Рµ РґР»СЏ С‰РѕРЅР°Р№РјРµРЅС€Рµ 2 РІС–РґРµРѕ РІ СЂРµР¶РёРјС– РєРѕРЅРІРµСЂС‚Р°С†С–С—.")
         if merge_enabled and settings.replace_audio_path.strip():
-            self._log("WARN", "Merge + replace audio не підтримується. Використовую аудіо з джерел.")
+            self._log("WARN", "Merge + replace audio РЅРµ РїС–РґС‚СЂРёРјСѓС”С‚СЊСЃСЏ. Р’РёРєРѕСЂРёСЃС‚РѕРІСѓСЋ Р°СѓРґС–Рѕ Р· РґР¶РµСЂРµР».")
 
         merged_video_paths = {task.path for task in merge_candidates} if merge_enabled else set()
 
@@ -384,15 +542,15 @@ class ConverterService:
 
             merge_duration = sum(self._task_duration(task) for task in merge_candidates)
             if settings.skip_existing and outp.exists() and not settings.overwrite:
-                self._log("INFO", f"Пропускаю merge, файл вже існує: {outp.name}")
+                self._log("INFO", f"РџСЂРѕРїСѓСЃРєР°СЋ merge, С„Р°Р№Р» РІР¶Рµ С–СЃРЅСѓС”: {outp.name}")
                 for task in merge_candidates:
-                    self._task_state(task.path, "skipped", "Вихідний файл вже існує", str(outp))
+                    self._task_state(task.path, "skipped", "Р’РёС…С–РґРЅРёР№ С„Р°Р№Р» РІР¶Рµ С–СЃРЅСѓС”", str(outp))
                     done_files += 1
                     done_duration += self._task_duration(task)
                 self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
             else:
-                self._emit("status", f"Обробка (merge): {outp.name}")
-                self._log("INFO", f"Merge відео: {len(merge_candidates)} файлів → {outp.name}")
+                self._emit("status", f"РћР±СЂРѕР±РєР° (merge): {outp.name}")
+                self._log("INFO", f"Merge РІС–РґРµРѕ: {len(merge_candidates)} С„Р°Р№Р»С–РІ в†’ {outp.name}")
                 for task in merge_candidates:
                     self._task_state(task.path, "running")
                 try:
@@ -414,7 +572,7 @@ class ConverterService:
                     )
                     allow_fast = settings.fast_copy and fast_copy_ok
                     if settings.fast_copy and not fast_copy_ok:
-                        self._log("WARN", f"Fast copy (merge) вимкнено: {reason}")
+                        self._log("WARN", f"Fast copy (merge) РІРёРјРєРЅРµРЅРѕ: {reason}")
                     cmd, list_path = self.ffmpeg.build_merge_command(
                         [task.path for task in merge_candidates],
                         outp,
@@ -439,9 +597,9 @@ class ConverterService:
                         except Exception:
                             pass
                     success = rc == 0 and outp.exists()
-                    message = "" if success else f"Помилка merge (код {rc})"
+                    message = "" if success else f"РџРѕРјРёР»РєР° merge (РєРѕРґ {rc})"
                     if success:
-                        self._log("OK", f"Готово (merge): {outp.name}")
+                        self._log("OK", f"Р“РѕС‚РѕРІРѕ (merge): {outp.name}")
                     else:
                         self._log("ERROR", message)
                     for task in merge_candidates:
@@ -457,10 +615,10 @@ class ConverterService:
                             }
                         )
                 except FileNotFoundError:
-                    self._log("ERROR", "FFmpeg не знайдено під час запуску.")
+                    self._log("ERROR", "FFmpeg РЅРµ Р·РЅР°Р№РґРµРЅРѕ РїС–Рґ С‡Р°СЃ Р·Р°РїСѓСЃРєСѓ.")
                     self.stop_event.set()
                 except Exception as exc:
-                    self._log("ERROR", f"Merge помилка: {exc}")
+                    self._log("ERROR", f"Merge РїРѕРјРёР»РєР°: {exc}")
                     for task in merge_candidates:
                         self._task_state(task.path, "failed", str(exc))
                         done_files += 1
@@ -474,238 +632,245 @@ class ConverterService:
                             }
                         )
 
-        for index, task in enumerate(tasks, start=1):
-            if self.stop_event.is_set():
-                self._log("WARN", "Зупинено користувачем.")
-                break
-            self._wait_if_paused()
-            if self.stop_event.is_set():
-                self._log("WARN", "Зупинено користувачем.")
-                break
-            if task.path in merged_video_paths:
-                continue
+        remaining_tasks = [task for task in tasks if task.path not in merged_video_paths]
+        parallel_results: Optional[List[Dict[str, str]]] = None
+        if not merge_enabled and self._can_run_parallel(remaining_tasks, settings):
+            parallel_results = self._run_parallel_tasks(remaining_tasks, settings, out_dir, total_files, total_start)
+            run_results.extend(parallel_results)
 
-            settings_for_task = self._effective_settings(task, settings)
-            valid, message = self._validate_operation(task, settings_for_task)
-            if not valid:
-                self._log("WARN", f"{task.path.name}: {message}")
-                self._task_state(task.path, "failed", message)
-                done_files += 1
-                run_results.append({"path": str(task.path), "status": "failed", "message": message, "output_path": ""})
-                self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
-                continue
+        if parallel_results is None:
+            for index, task in enumerate(tasks, start=1):
+                if self.stop_event.is_set():
+                    self._log("WARN", "Р—СѓРїРёРЅРµРЅРѕ РєРѕСЂРёСЃС‚СѓРІР°С‡РµРј.")
+                    break
+                self._wait_if_paused()
+                if self.stop_event.is_set():
+                    self._log("WARN", "Р—СѓРїРёРЅРµРЅРѕ РєРѕСЂРёСЃС‚СѓРІР°С‡РµРј.")
+                    break
+                if task.path in merged_video_paths:
+                    continue
 
-            if not task.path.exists():
-                self._log("ERROR", f"Файл не знайдено: {task.path}")
-                self._task_state(task.path, "failed", "Файл не знайдено")
-                done_files += 1
-                run_results.append(
-                    {"path": str(task.path), "status": "failed", "message": "Файл не знайдено", "output_path": ""}
-                )
-                self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
-                continue
+                settings_for_task = self._effective_settings(task, settings)
+                valid, message = self._validate_operation(task, settings_for_task)
+                if not valid:
+                    self._log("WARN", f"{task.path.name}: {message}")
+                    self._task_state(task.path, "failed", message)
+                    done_files += 1
+                    run_results.append({"path": str(task.path), "status": "failed", "message": message, "output_path": ""})
+                    self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
+                    continue
 
-            outp = self._resolve_output_path(task, settings_for_task, out_dir, index)
-            duration = self._task_duration(task) if task.media_type in {"video", "audio"} else None
+                if not task.path.exists():
+                    self._log("ERROR", f"Р¤Р°Р№Р» РЅРµ Р·РЅР°Р№РґРµРЅРѕ: {task.path}")
+                    self._task_state(task.path, "failed", "Р¤Р°Р№Р» РЅРµ Р·РЅР°Р№РґРµРЅРѕ")
+                    done_files += 1
+                    run_results.append(
+                        {"path": str(task.path), "status": "failed", "message": "Р¤Р°Р№Р» РЅРµ Р·РЅР°Р№РґРµРЅРѕ", "output_path": ""}
+                    )
+                    self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
+                    continue
 
-            if settings_for_task.skip_existing and outp.exists() and not settings_for_task.overwrite:
-                self._log("INFO", f"Пропускаю, файл вже існує: {outp.name}")
-                self._task_state(task.path, "skipped", "Вихідний файл вже існує", str(outp))
+                outp = self._resolve_output_path(task, settings_for_task, out_dir, index)
+                duration = self._task_duration(task) if task.media_type in {"video", "audio"} else None
+
+                if settings_for_task.skip_existing and outp.exists() and not settings_for_task.overwrite:
+                    self._log("INFO", f"РџСЂРѕРїСѓСЃРєР°СЋ, С„Р°Р№Р» РІР¶Рµ С–СЃРЅСѓС”: {outp.name}")
+                    self._task_state(task.path, "skipped", "Р’РёС…С–РґРЅРёР№ С„Р°Р№Р» РІР¶Рµ С–СЃРЅСѓС”", str(outp))
+                    done_files += 1
+                    if duration:
+                        done_duration += duration
+                    run_results.append(
+                        {
+                            "path": str(task.path),
+                            "status": "skipped",
+                            "message": "Р’РёС…С–РґРЅРёР№ С„Р°Р№Р» РІР¶Рµ С–СЃРЅСѓС”",
+                            "output_path": str(outp),
+                        }
+                    )
+                    self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
+                    continue
+
+                self._wait_for_resource_budget(settings_for_task)
+                self._emit("status", f"РћР±СЂРѕР±РєР°: {task.path.name}")
+                self._task_state(task.path, TaskStatus.RUNNING)
+                self._log("INFO", f"в†’ {task.path.name} ({task.media_type}) ==> {outp.name}")
+
+                status = TaskStatus.FAILED
+                result_message = ""
+                result_output = ""
+                try:
+                    op = settings_for_task.operation
+                    if op in {"convert", "subtitle_burn"}:
+                        if task.media_type == "video":
+                            info = self.media_info.get(task.path)
+                            filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
+                                task.path,
+                                settings_for_task,
+                                outp.suffix,
+                                log_cb=self._log,
+                            )
+                            audio_processing = self.ffmpeg.has_audio_processing(settings_for_task) or bool(
+                                settings_for_task.replace_audio_path.strip()
+                            )
+                            fast_copy_ok, reason = self.ffmpeg.fast_copy_allowed(
+                                task.path,
+                                outp.suffix,
+                                info,
+                                filters_used,
+                                audio_processing,
+                            )
+                            allow_fast = settings_for_task.fast_copy and fast_copy_ok
+                            if settings_for_task.fast_copy and not fast_copy_ok:
+                                self._log("WARN", f"Fast copy РІРёРјРєРЅРµРЅРѕ РґР»СЏ {task.path.name}: {reason}")
+                            cmd = self.ffmpeg.build_video_command(
+                                task.path,
+                                outp,
+                                settings_for_task,
+                                info,
+                                allow_fast,
+                                log_cb=self._log,
+                            )
+                        elif task.media_type == "image":
+                            cmd = self.ffmpeg.build_image_command(task.path, outp, settings_for_task, log_cb=self._log)
+                        elif task.media_type == "audio":
+                            cmd = self.ffmpeg.build_audio_command(task.path, outp, settings_for_task, duration=duration, log_cb=self._log)
+                        elif task.media_type == "subtitle":
+                            cmd = self.ffmpeg.build_subtitle_file_command(task.path, outp, settings_for_task)
+                        else:
+                            raise ValueError(f"РќРµРІС–РґРѕРјРёР№ С‚РёРї С„Р°Р№Р»Сѓ: {task.media_type}")
+                        rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
+                        if self.stop_event.is_set():
+                            status = TaskStatus.CANCELLED
+                            result_message = "РЎРєР°СЃРѕРІР°РЅРѕ РєРѕСЂРёСЃС‚СѓРІР°С‡РµРј"
+                            self._task_state(task.path, TaskStatus.CANCELLED, result_message)
+                            success = False
+                        else:
+                            success = rc == 0 and outp.exists()
+                        if success:
+                            status = TaskStatus.SUCCESS
+                            result_output = str(outp)
+                            self._log("OK", f"Р“РѕС‚РѕРІРѕ: {outp.name}")
+                            self._task_state(task.path, TaskStatus.SUCCESS, "", str(outp))
+                        elif status != TaskStatus.CANCELLED:
+                            result_message = f"РџРѕРјРёР»РєР° РєРѕРЅРІРµСЂС‚Р°С†С–С—: {task.path.name} (РєРѕРґ {rc})"
+                            self._log("ERROR", result_message)
+                            self._task_state(task.path, TaskStatus.FAILED, result_message)
+                    elif op == "audio_only":
+                        if settings_for_task.split_chapters:
+                            success, details = self._process_audio_chapters(
+                                task,
+                                settings_for_task,
+                                out_dir,
+                                index,
+                                done_duration,
+                                total_duration,
+                                done_files,
+                                total_files,
+                                total_start,
+                            )
+                            if success:
+                                status = "success"
+                                result_output = details
+                                self._task_state(task.path, "success", "", details)
+                            else:
+                                result_message = details
+                                self._log("ERROR", details)
+                                self._task_state(task.path, "failed", details)
+                        else:
+                            cmd = self.ffmpeg.build_audio_command(task.path, outp, settings_for_task, duration=duration, log_cb=self._log)
+                            rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
+                            success = rc == 0 and outp.exists()
+                            if success:
+                                status = "success"
+                                result_output = str(outp)
+                                self._log("OK", f"Р“РѕС‚РѕРІРѕ: {outp.name}")
+                                self._task_state(task.path, "success", "", str(outp))
+                            else:
+                                result_message = f"РџРѕРјРёР»РєР° РєРѕРЅРІРµСЂС‚Р°С†С–С—: {task.path.name} (РєРѕРґ {rc})"
+                                self._log("ERROR", result_message)
+                                self._task_state(task.path, "failed", result_message)
+                    elif op == "auto_subtitle":
+                        rc = self.transcriber.generate(task.path, outp, settings_for_task, log_cb=self._log)
+                        success = rc == 0 and outp.exists()
+                        if success:
+                            status = "success"
+                            result_output = str(outp)
+                            self._log("OK", f"РЎСѓР±С‚РёС‚СЂРё СЃС‚РІРѕСЂРµРЅРѕ: {outp.name}")
+                            self._task_state(task.path, "success", "", str(outp))
+                        else:
+                            result_message = f"РџРѕРјРёР»РєР° СЃС‚РІРѕСЂРµРЅРЅСЏ СЃСѓР±С‚РёС‚СЂС–РІ: {task.path.name} (РєРѕРґ {rc})"
+                            self._log("ERROR", result_message)
+                            self._task_state(task.path, "failed", result_message)
+                    elif op == "subtitle_extract":
+                        cmd = self.ffmpeg.build_subtitle_extract_command(task.path, outp, settings_for_task)
+                        rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
+                        success = rc == 0 and outp.exists()
+                        if success:
+                            status = "success"
+                            result_output = str(outp)
+                            self._log("OK", f"Р“РѕС‚РѕРІРѕ: {outp.name}")
+                            self._task_state(task.path, "success", "", str(outp))
+                        else:
+                            result_message = f"РџРѕРјРёР»РєР° РєРѕРЅРІРµСЂС‚Р°С†С–С—: {task.path.name} (РєРѕРґ {rc})"
+                            self._log("ERROR", result_message)
+                            self._task_state(task.path, "failed", result_message)
+                    elif op == "thumbnail":
+                        cmd = self.ffmpeg.build_thumbnail_command(task.path, outp, settings_for_task, log_cb=self._log)
+                        rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
+                        success = rc == 0 and outp.exists()
+                        if success:
+                            status = "success"
+                            result_output = str(outp)
+                            self._log("OK", f"Р“РѕС‚РѕРІРѕ: {outp.name}")
+                            self._task_state(task.path, "success", "", str(outp))
+                        else:
+                            result_message = f"РџРѕРјРёР»РєР° РєРѕРЅРІРµСЂС‚Р°С†С–С—: {task.path.name} (РєРѕРґ {rc})"
+                            self._log("ERROR", result_message)
+                            self._task_state(task.path, "failed", result_message)
+                    elif op == "contact_sheet":
+                        cmd = self.ffmpeg.build_contact_sheet_command(task.path, outp, settings_for_task)
+                        rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
+                        success = rc == 0 and outp.exists()
+                        if success:
+                            status = "success"
+                            result_output = str(outp)
+                            self._log("OK", f"Р“РѕС‚РѕРІРѕ: {outp.name}")
+                            self._task_state(task.path, "success", "", str(outp))
+                        else:
+                            result_message = f"РџРѕРјРёР»РєР° РєРѕРЅРІРµСЂС‚Р°С†С–С—: {task.path.name} (РєРѕРґ {rc})"
+                            self._log("ERROR", result_message)
+                            self._task_state(task.path, "failed", result_message)
+                    else:
+                        raise ValueError(f"РќРµРїС–РґС‚СЂРёРјСѓРІР°РЅР° РѕРїРµСЂР°С†С–СЏ: {op}")
+                except FileNotFoundError:
+                    self._log("ERROR", "FFmpeg РЅРµ Р·РЅР°Р№РґРµРЅРѕ РїС–Рґ С‡Р°СЃ Р·Р°РїСѓСЃРєСѓ. РџРµСЂРµРІС–СЂ С€Р»СЏС… РґРѕ ffmpeg.")
+                    self._task_state(task.path, "failed", "FFmpeg РЅРµ Р·РЅР°Р№РґРµРЅРѕ")
+                    result_message = "FFmpeg РЅРµ Р·РЅР°Р№РґРµРЅРѕ"
+                    break
+                except Exception as exc:
+                    self._log("ERROR", f"РќРµСЃРїРѕРґС–РІР°РЅР° РїРѕРјРёР»РєР°: {exc}")
+                    self._task_state(task.path, "failed", str(exc))
+                    result_message = str(exc)
+
+                if self.skip_event.is_set():
+                    self.skip_event.clear()
+                    status = "skipped"
+                    result_message = "РџСЂРѕРїСѓС‰РµРЅРѕ РєРѕСЂРёСЃС‚СѓРІР°С‡РµРј"
+                    result_output = ""
+                    self._log("WARN", f"РџСЂРѕРїСѓС‰РµРЅРѕ РєРѕСЂРёСЃС‚СѓРІР°С‡РµРј: {task.path.name}")
+                    self._task_state(task.path, "skipped", result_message)
+
                 done_files += 1
                 if duration:
                     done_duration += duration
                 run_results.append(
                     {
                         "path": str(task.path),
-                        "status": "skipped",
-                        "message": "Вихідний файл вже існує",
-                        "output_path": str(outp),
+                        "status": status,
+                        "message": result_message,
+                        "output_path": result_output,
                     }
                 )
-                self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
-                continue
-
-            self._emit("status", f"Обробка: {task.path.name}")
-            self._task_state(task.path, TaskStatus.RUNNING)
-            self._log("INFO", f"→ {task.path.name} ({task.media_type}) ==> {outp.name}")
-
-            status = TaskStatus.FAILED
-            result_message = ""
-            result_output = ""
-            try:
-                op = settings_for_task.operation
-                if op in {"convert", "subtitle_burn"}:
-                    if task.media_type == "video":
-                        info = self.media_info.get(task.path)
-                        filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
-                            task.path,
-                            settings_for_task,
-                            outp.suffix,
-                            log_cb=self._log,
-                        )
-                        audio_processing = self.ffmpeg.has_audio_processing(settings_for_task) or bool(
-                            settings_for_task.replace_audio_path.strip()
-                        )
-                        fast_copy_ok, reason = self.ffmpeg.fast_copy_allowed(
-                            task.path,
-                            outp.suffix,
-                            info,
-                            filters_used,
-                            audio_processing,
-                        )
-                        allow_fast = settings_for_task.fast_copy and fast_copy_ok
-                        if settings_for_task.fast_copy and not fast_copy_ok:
-                            self._log("WARN", f"Fast copy вимкнено для {task.path.name}: {reason}")
-                        cmd = self.ffmpeg.build_video_command(
-                            task.path,
-                            outp,
-                            settings_for_task,
-                            info,
-                            allow_fast,
-                            log_cb=self._log,
-                        )
-                    elif task.media_type == "image":
-                        cmd = self.ffmpeg.build_image_command(task.path, outp, settings_for_task, log_cb=self._log)
-                    elif task.media_type == "audio":
-                        cmd = self.ffmpeg.build_audio_command(task.path, outp, settings_for_task, log_cb=self._log)
-                    elif task.media_type == "subtitle":
-                        cmd = self.ffmpeg.build_subtitle_file_command(task.path, outp, settings_for_task)
-                    else:
-                        raise ValueError(f"Невідомий тип файлу: {task.media_type}")
-                    rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
-                    if self.stop_event.is_set():
-                        status = TaskStatus.CANCELLED
-                        result_message = "Скасовано користувачем"
-                        self._task_state(task.path, TaskStatus.CANCELLED, result_message)
-                        success = False
-                    else:
-                        success = rc == 0 and outp.exists()
-                    if success:
-                        status = TaskStatus.SUCCESS
-                        result_output = str(outp)
-                        self._log("OK", f"Готово: {outp.name}")
-                        self._task_state(task.path, TaskStatus.SUCCESS, "", str(outp))
-                    elif status != TaskStatus.CANCELLED:
-                        result_message = f"Помилка конвертації: {task.path.name} (код {rc})"
-                        self._log("ERROR", result_message)
-                        self._task_state(task.path, TaskStatus.FAILED, result_message)
-                elif op == "audio_only":
-                    if settings_for_task.split_chapters:
-                        success, details = self._process_audio_chapters(
-                            task,
-                            settings_for_task,
-                            out_dir,
-                            index,
-                            done_duration,
-                            total_duration,
-                            done_files,
-                            total_files,
-                            total_start,
-                        )
-                        if success:
-                            status = "success"
-                            result_output = details
-                            self._task_state(task.path, "success", "", details)
-                        else:
-                            result_message = details
-                            self._log("ERROR", details)
-                            self._task_state(task.path, "failed", details)
-                    else:
-                        cmd = self.ffmpeg.build_audio_command(task.path, outp, settings_for_task, log_cb=self._log)
-                        rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
-                        success = rc == 0 and outp.exists()
-                        if success:
-                            status = "success"
-                            result_output = str(outp)
-                            self._log("OK", f"Готово: {outp.name}")
-                            self._task_state(task.path, "success", "", str(outp))
-                        else:
-                            result_message = f"Помилка конвертації: {task.path.name} (код {rc})"
-                            self._log("ERROR", result_message)
-                            self._task_state(task.path, "failed", result_message)
-                elif op == "auto_subtitle":
-                    rc = self.transcriber.generate(task.path, outp, settings_for_task, log_cb=self._log)
-                    success = rc == 0 and outp.exists()
-                    if success:
-                        status = "success"
-                        result_output = str(outp)
-                        self._log("OK", f"Субтитри створено: {outp.name}")
-                        self._task_state(task.path, "success", "", str(outp))
-                    else:
-                        result_message = f"Помилка створення субтитрів: {task.path.name} (код {rc})"
-                        self._log("ERROR", result_message)
-                        self._task_state(task.path, "failed", result_message)
-                elif op == "subtitle_extract":
-                    cmd = self.ffmpeg.build_subtitle_extract_command(task.path, outp, settings_for_task)
-                    rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
-                    success = rc == 0 and outp.exists()
-                    if success:
-                        status = "success"
-                        result_output = str(outp)
-                        self._log("OK", f"Готово: {outp.name}")
-                        self._task_state(task.path, "success", "", str(outp))
-                    else:
-                        result_message = f"Помилка конвертації: {task.path.name} (код {rc})"
-                        self._log("ERROR", result_message)
-                        self._task_state(task.path, "failed", result_message)
-                elif op == "thumbnail":
-                    cmd = self.ffmpeg.build_thumbnail_command(task.path, outp, settings_for_task, log_cb=self._log)
-                    rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
-                    success = rc == 0 and outp.exists()
-                    if success:
-                        status = "success"
-                        result_output = str(outp)
-                        self._log("OK", f"Готово: {outp.name}")
-                        self._task_state(task.path, "success", "", str(outp))
-                    else:
-                        result_message = f"Помилка конвертації: {task.path.name} (код {rc})"
-                        self._log("ERROR", result_message)
-                        self._task_state(task.path, "failed", result_message)
-                elif op == "contact_sheet":
-                    cmd = self.ffmpeg.build_contact_sheet_command(task.path, outp, settings_for_task)
-                    rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
-                    success = rc == 0 and outp.exists()
-                    if success:
-                        status = "success"
-                        result_output = str(outp)
-                        self._log("OK", f"Готово: {outp.name}")
-                        self._task_state(task.path, "success", "", str(outp))
-                    else:
-                        result_message = f"Помилка конвертації: {task.path.name} (код {rc})"
-                        self._log("ERROR", result_message)
-                        self._task_state(task.path, "failed", result_message)
-                else:
-                    raise ValueError(f"Непідтримувана операція: {op}")
-            except FileNotFoundError:
-                self._log("ERROR", "FFmpeg не знайдено під час запуску. Перевір шлях до ffmpeg.")
-                self._task_state(task.path, "failed", "FFmpeg не знайдено")
-                result_message = "FFmpeg не знайдено"
-                break
-            except Exception as exc:
-                self._log("ERROR", f"Несподівана помилка: {exc}")
-                self._task_state(task.path, "failed", str(exc))
-                result_message = str(exc)
-
-            if self.skip_event.is_set():
-                self.skip_event.clear()
-                status = "skipped"
-                result_message = "Пропущено користувачем"
-                result_output = ""
-                self._log("WARN", f"Пропущено користувачем: {task.path.name}")
-                self._task_state(task.path, "skipped", result_message)
-
-            done_files += 1
-            if duration:
-                done_duration += duration
-            run_results.append(
-                {
-                    "path": str(task.path),
-                    "status": status,
-                    "message": result_message,
-                    "output_path": result_output,
-                }
-            )
-
         failed_count = sum(1 for item in run_results if item["status"] == "failed")
         hook_env.update(
             {

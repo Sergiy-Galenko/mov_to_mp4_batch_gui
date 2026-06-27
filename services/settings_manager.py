@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from config.constants import DEFAULT_OUTPUT_DIR, RECENT_FOLDERS_LIMIT, STATE_STORE
+from core.localization import normalize_language
 from utils.state import load_json_state, save_json_state
 
 
@@ -35,8 +36,7 @@ class SettingsManager:
         return str(self.state.get("watch_folder") or "")
 
     def ui_language(self) -> str:
-        value = str(self.state.get("ui_language") or "uk").strip().lower()
-        return value if value in {"uk", "en"} else "uk"
+        return normalize_language(str(self.state.get("ui_language") or "uk"))
 
     def last_settings(self) -> Dict[str, Any]:
         value = self.state.get("last_settings")
@@ -60,7 +60,7 @@ class SettingsManager:
             "watch_folder": watch_folder,
             "output_dir": output_dir,
             "ffmpeg_path": ffmpeg_path,
-            "ui_language": ui_language if ui_language in {"uk", "en"} else "uk",
+            "ui_language": normalize_language(ui_language),
             "last_settings": dict(last_settings),
             "queue_items": list(queue_items),
             "pending_recovery": bool(pending_recovery),

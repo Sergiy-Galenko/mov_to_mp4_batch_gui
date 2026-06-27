@@ -29,6 +29,8 @@ class QueueModel(QtCore.QAbstractListModel):
     SpeedRole = QtCore.Qt.UserRole + 17
     ElapsedRole = QtCore.Qt.UserRole + 18
     ExitCodeRole = QtCore.Qt.UserRole + 19
+    PredictedSizeRole = QtCore.Qt.UserRole + 20
+    CompressionRole = QtCore.Qt.UserRole + 21
 
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
@@ -86,6 +88,10 @@ class QueueModel(QtCore.QAbstractListModel):
             return float(item.elapsed_seconds)
         if role == self.ExitCodeRole:
             return item.exit_code if item.exit_code is not None else -1
+        if role == self.PredictedSizeRole:
+            return format_bytes(item.predicted_output_bytes) if item.predicted_output_bytes else ""
+        if role == self.CompressionRole:
+            return f"{item.compression_ratio:.2f}x" if item.compression_ratio > 0 else ""
         return None
 
     def roleNames(self) -> Dict[int, bytes]:
@@ -109,6 +115,8 @@ class QueueModel(QtCore.QAbstractListModel):
             self.SpeedRole: b"speedText",
             self.ElapsedRole: b"elapsedSeconds",
             self.ExitCodeRole: b"exitCode",
+            self.PredictedSizeRole: b"predictedSizeText",
+            self.CompressionRole: b"compressionText",
         }
 
     def items(self) -> List[TaskItem]:
@@ -213,10 +221,45 @@ class QueueModel(QtCore.QAbstractListModel):
             duration_text = format_time(info.duration) if info.duration else "—"
             size_text = format_bytes(info.size_bytes)
             item.probe_data = info
+            item.input_bytes = int(info.size_bytes or 0)
             if item.duration_text == duration_text and item.size_text == size_text:
                 return
             item.duration_text = duration_text
             item.size_text = size_text
+            self.update_item(idx, item)
+            return
+
+    def set_prediction(self, task_path: Path, predicted_bytes: int) -> None:
+        for idx, item in enumerate(self._items):
+            if item.path != task_path:
+                continue
+            predicted = max(0, int(predicted_bytes or 0))
+            if item.predicted_output_bytes == predicted:
+                return
+            item.predicted_output_bytes = predicted
+            self.update_item(idx, item)
+            return
+
+    def set_output_stats(self, task_path: Path, output_path_text: str) -> None:
+        for idx, item in enumerate(self._items):
+            if item.path != task_path:
+                continue
+            output_text = str(output_path_text or "").split(";", 1)[0].strip()
+            if not output_text:
+                return
+            try:
+                output_bytes = Path(output_text).expanduser().stat().st_size
+            except Exception:
+                return
+            input_bytes = item.input_bytes
+            if not input_bytes:
+                try:
+                    input_bytes = item.path.stat().st_size
+                except Exception:
+                    input_bytes = 0
+            item.output_bytes = output_bytes
+            item.input_bytes = input_bytes
+            item.compression_ratio = (input_bytes / output_bytes) if input_bytes and output_bytes else 0.0
             self.update_item(idx, item)
             return
 

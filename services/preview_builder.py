@@ -122,13 +122,25 @@ class PreviewBuilder:
                 elif task.media_type == "image":
                     cmd = self.ffmpeg.build_image_command(task.path, output_path, settings)
                 elif task.media_type == "audio":
-                    cmd = self.ffmpeg.build_audio_command(task.path, output_path, settings)
+                    info = info_cache.get(task.path)
+                    cmd = self.ffmpeg.build_audio_command(
+                        task.path,
+                        output_path,
+                        settings,
+                        duration=info.duration if info else None,
+                    )
                 elif task.media_type == "subtitle":
                     cmd = self.ffmpeg.build_subtitle_file_command(task.path, output_path, settings)
                 else:
                     return "Невідомий тип файлу"
             elif op == "audio_only":
-                cmd = self.ffmpeg.build_audio_command(task.path, output_path, settings)
+                info = info_cache.get(task.path)
+                cmd = self.ffmpeg.build_audio_command(
+                    task.path,
+                    output_path,
+                    settings,
+                    duration=info.duration if info else None,
+                )
             elif op == "subtitle_extract":
                 cmd = self.ffmpeg.build_subtitle_extract_command(task.path, output_path, settings)
             elif op == "thumbnail":
@@ -169,7 +181,8 @@ class PreviewBuilder:
             if media_type_name == "video":
                 params.append(settings.out_video_format)
                 params.append(settings.video_codec)
-                params.append(f"CRF {settings.crf}")
+                params.append(settings.performance_profile)
+                params.append(f"target {settings.target_size_mb:g} MB" if settings.target_size_mb else f"CRF {settings.crf}")
             elif media_type_name == "image":
                 params.append(settings.out_image_format)
                 params.append(f"якість {settings.img_quality}")
