@@ -2,6 +2,14 @@ from pathlib import Path
 
 APP_TITLE = "Media Converter - Photo + Video (FFmpeg)"
 
+# Timing constants used across services
+PROGRESS_THROTTLE_SEC = 0.25
+EVENT_POLL_INTERVAL_MS = 120
+WATCH_SCAN_INTERVAL_MS = 3000
+WATCH_DEBOUNCE_SEC = 2.0
+RESOURCE_SAMPLE_INTERVAL_SEC = 2.0
+ANALYTICS_EMIT_INTERVAL_SEC = 2.0
+
 VIDEO_EXTS = {".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv", ".wmv", ".mts", ".m2ts"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"}
 AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".opus", ".ogg", ".wma", ".aiff", ".aif", ".mka"}

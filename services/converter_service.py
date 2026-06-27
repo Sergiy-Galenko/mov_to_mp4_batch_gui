@@ -1,4 +1,4 @@
-﻿import os
+import os
 import signal
 import subprocess
 import threading
@@ -9,6 +9,7 @@ from pathlib import Path
 from queue import Queue
 from typing import Dict, List, Optional, Tuple
 
+from config.constants import PROGRESS_THROTTLE_SEC
 from core.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
 from services.ffmpeg_service import FfmpegService
 from services.transcription_service import TranscriptionService
@@ -986,7 +987,7 @@ class ConverterService:
 
                 pending_progress = (file_pct, out_time, duration, file_eta, total_pct, total_eta, speed)
                 now = time.monotonic()
-                if now - last_progress_emit >= 0.25 or total_pct >= 1.0:
+                if now - last_progress_emit >= PROGRESS_THROTTLE_SEC or total_pct >= 1.0:
                     self._emit("progress", *pending_progress)
                     last_progress_emit = now
                     pending_progress = None

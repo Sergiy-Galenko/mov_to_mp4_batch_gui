@@ -11,7 +11,14 @@ from typing import Any, Dict, List, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from config.constants import APP_TITLE, RECENT_FOLDERS_LIMIT
+from config.constants import (
+    ANALYTICS_EMIT_INTERVAL_SEC,
+    APP_TITLE,
+    EVENT_POLL_INTERVAL_MS,
+    RECENT_FOLDERS_LIMIT,
+    RESOURCE_SAMPLE_INTERVAL_SEC,
+    WATCH_SCAN_INTERVAL_MS,
+)
 from config.paths import find_ffmpeg, find_ffprobe
 from core.localization import normalize_language, translate
 from core.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
@@ -156,12 +163,12 @@ class Backend(QtCore.QObject):
         self._refresh_output_preview(dict(self._last_settings_map))
 
         self._timer = QtCore.QTimer(self)
-        self._timer.setInterval(120)
+        self._timer.setInterval(EVENT_POLL_INTERVAL_MS)
         self._timer.timeout.connect(self._poll_events)
         self._timer.start()
 
         self._watch_timer = QtCore.QTimer(self)
-        self._watch_timer.setInterval(3000)
+        self._watch_timer.setInterval(WATCH_SCAN_INTERVAL_MS)
         self._watch_timer.timeout.connect(self._scan_watch_folder)
 
     @QtCore.Property(str, constant=True)
@@ -1551,7 +1558,7 @@ class Backend(QtCore.QObject):
                             f"{float(speed):.1f}x" if speed else "",
                         )
                     now = time.monotonic()
-                    if speed and self._run_started_monotonic and now - self._last_analytics_emit >= 2.0:
+                    if speed and self._run_started_monotonic and now - self._last_analytics_emit >= ANALYTICS_EMIT_INTERVAL_SEC:
                         self._last_analytics_emit = now
                         self._speed_history.append(
                             {
@@ -1561,7 +1568,7 @@ class Backend(QtCore.QObject):
                         )
                         self._speed_history = self._speed_history[-120:]
                         self.speedHistoryChanged.emit(list(self._speed_history))
-                    if self._run_started_monotonic and now - self._last_resource_emit >= 2.0:
+                    if self._run_started_monotonic and now - self._last_resource_emit >= RESOURCE_SAMPLE_INTERVAL_SEC:
                         self._last_resource_emit = now
                         self._append_resource_sample(now)
                     self._refresh_session_stats(total_eta=total_eta)
@@ -1581,7 +1588,7 @@ class Backend(QtCore.QObject):
                     self.totalProgressTextChanged.emit()
                     self._set_progress(file_pct or 0.0, total_pct)
                     now = time.monotonic()
-                    if speed and self._run_started_monotonic and now - self._last_analytics_emit >= 2.0:
+                    if speed and self._run_started_monotonic and now - self._last_analytics_emit >= ANALYTICS_EMIT_INTERVAL_SEC:
                         self._last_analytics_emit = now
                         self._speed_history.append(
                             {
@@ -1591,7 +1598,7 @@ class Backend(QtCore.QObject):
                         )
                         self._speed_history = self._speed_history[-120:]
                         self.speedHistoryChanged.emit(list(self._speed_history))
-                    if self._run_started_monotonic and now - self._last_resource_emit >= 2.0:
+                    if self._run_started_monotonic and now - self._last_resource_emit >= RESOURCE_SAMPLE_INTERVAL_SEC:
                         self._last_resource_emit = now
                         self._append_resource_sample(now)
                     self._refresh_session_stats(total_eta=total_eta)
