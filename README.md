@@ -1,6 +1,6 @@
-# Media Converter
+﻿# Media Converter
 
-Desktop GUI для пакетної обробки відео, аудіо, зображень і субтитрів через FFmpeg. Основний інтерфейс побудований на Python, PySide6 і QML. У репозиторії також є експериментальний Tauri/Web UI у `tauri_app/`, але головний робочий flow зараз у Python/QML.
+Desktop GUI для пакетної обробки відео, аудіо, зображень і субтитрів через FFmpeg. Основний інтерфейс побудований на Python, PySide6 і QML.
 
 ## Можливості
 
@@ -81,14 +81,60 @@ python main.py --cli -i input.mov -o ./out --settings-json settings.json --langu
 Переклади лежать у:
 
 ```text
-ui/qml/translations/
+ui/i18n/
   uk.json
   en.json
   pl.json
   de.json
 ```
 
-`ui/qml/I18n.qml` завантажує JSON для QML. Python backend використовує ті самі словники через `core/localization.py`, тому ключові log/status/dialog messages також можуть перекладатися вибраною мовою.
+`ui/qml/App/I18n.qml` читає переклади через backend, а Python backend використовує ті самі словники через `app/localization.py`, тому ключові log/status/dialog messages також можуть перекладатися вибраною мовою.
+
+## Структура проєкту
+
+```text
+mov_to_mp4_batch_gui/
+  main.py                 <- точка входу
+  cli.py                  <- CLI режим для automation/hooks
+  requirements.txt
+  requirements-dev.txt
+  pytest.ini
+  app/                    <- конфіг, моделі, пресети, налаштування
+    constants.py
+    paths.py
+    localization.py
+    models.py
+    performance_profiles.py
+    presets.py
+    settings.py
+  services/               <- FFmpeg, конвертер, Whisper, історія, validation
+    converter_service.py
+    ffmpeg_service.py
+    transcription_service.py
+  ui/                     <- Python backend + QML
+    backend.py
+    i18n/
+    qml/
+      App/
+        qmldir
+        Theme.qml
+        I18n.qml
+      components/
+      Main.qml
+  utils/                  <- файли, форматування, стан
+    files.py
+    formatting.py
+    state.py
+  assets/                 <- іконки, зображення
+  tests/                  <- тести
+  scripts/                <- build-скрипти
+    find_ffmpeg.py
+    build_pyinstaller.py
+  build/                  <- PyInstaller spec
+    media_converter.spec
+  .github/
+    workflows/
+```
 
 ## Performance Profiles
 
@@ -140,12 +186,12 @@ python -m pytest -q
 Поточний очікуваний результат:
 
 ```text
-21 passed
+58 passed
 ```
 
 ## Збірка
 
-PyInstaller spec включає `ui/qml`, тому QML components і JSON translations потрапляють у build разом із застосунком.
+PyInstaller spec у `build/media_converter.spec` включає `ui/qml`, `ui/i18n` і `assets`, тому QML components і JSON translations потрапляють у build разом із застосунком.
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-dev.txt

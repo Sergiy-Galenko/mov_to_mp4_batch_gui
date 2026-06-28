@@ -177,6 +177,7 @@
   "status.failed": "failed",
   "status.skipped": "skipped",
   "status.cancelled": "cancelled",
+  "whisper_not_installed": "Whisper is not installed. Auto subtitles are unavailable.",
   "backend.ffmpeg_missing": "FFmpeg was not found. Set the ffmpeg path.",
   "backend.queue_empty": "The queue is empty.",
   "backend.added_files": "Added files: {count}",

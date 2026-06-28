@@ -45,6 +45,7 @@ Item {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         cacheBuffer: 180
+        reuseItems: true
 
         delegate: Rectangle {
             id: chip

@@ -6,7 +6,6 @@ QtObject {
 
     property string language: "uk"
     property int revision: 0
-    property var translations: ({})
 
     readonly property var languageCodes: ["uk", "en", "pl", "de"]
     readonly property var languageLabels: ({
@@ -33,8 +32,29 @@ QtObject {
         "status.failed": "failed"
     })
 
-    Component.onCompleted: loadLanguage(language)
-    onLanguageChanged: loadLanguage(language)
+    Component.onCompleted: syncFromBackend()
+
+    onLanguageChanged: {
+        var normalized = normalize(language)
+        if (language !== normalized) {
+            language = normalized
+            return
+        }
+        if (hasBackend() && backend.currentLanguage !== normalized)
+            backend.setLanguage(normalized)
+        revision += 1
+    }
+
+    property Connections backendConnection: Connections {
+        target: root.hasBackend() ? backend : null
+        function onLanguageChanged() {
+            root.syncFromBackend()
+        }
+    }
+
+    function hasBackend() {
+        return typeof backend !== "undefined" && backend !== null
+    }
 
     function normalize(code) {
         var normalized = String(code || "uk").toLowerCase()
@@ -46,31 +66,24 @@ QtObject {
         return languageLabels[normalized] || normalized
     }
 
-    function loadLanguage(code) {
-        var normalized = normalize(code)
-        if (language !== normalized) {
-            language = normalized
+    function setLanguage(code) {
+        language = normalize(code)
+    }
+
+    function syncFromBackend() {
+        if (!hasBackend())
             return
-        }
-
-        var next = ({})
-        var xhr = new XMLHttpRequest()
-        try {
-            xhr.open("GET", Qt.resolvedUrl("translations/" + normalized + ".json"), false)
-            xhr.send()
-            if (xhr.status === 0 || (xhr.status >= 200 && xhr.status < 300))
-                next = JSON.parse(xhr.responseText)
-        } catch (e) {
-            next = ({})
-        }
-
-        translations = next
-        revision += 1
+        var next = normalize(backend.currentLanguage || backend.uiLanguage)
+        if (language !== next)
+            language = next
+        else
+            revision += 1
     }
 
     function t(key) {
-        var lang = language
         var rev = revision
-        return translations[key] || fallback[key] || key
+        if (hasBackend())
+            return backend.tr(key)
+        return fallback[key] || key
     }
 }

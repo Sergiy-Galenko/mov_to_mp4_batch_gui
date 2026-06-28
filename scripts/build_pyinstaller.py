@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 import sys
@@ -7,10 +7,11 @@ from pathlib import Path
 import PyInstaller.__main__
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SPEC_FILE = PROJECT_ROOT / "build" / "media_converter.spec"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.paths import find_ffmpeg, find_ffprobe
+from app.paths import find_ffmpeg, find_ffprobe
 
 
 def main() -> int:
@@ -31,7 +32,7 @@ def main() -> int:
     PyInstaller.__main__.run(
         [
             "--noconfirm",
-            str(PROJECT_ROOT / "media_converter.spec"),
+            str(SPEC_FILE),
         ]
     )
     return 0

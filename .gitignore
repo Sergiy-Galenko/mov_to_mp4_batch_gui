@@ -1,21 +1,47 @@
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# PyInstaller output
+build/dist/
+build/build/
+*.spec.bak
+
+# Testing
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .coverage
 .coverage.*
-.DS_Store
-Thumbs.db
-.venv/
-venv/
-build/
-dist/
-*.egg-info/
-node_modules/
-*.log
-*.tmp
-state.json
+htmlcov/
+.tox/
+
+# IDE
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary
+*.tmp
+*.bak
+*.log

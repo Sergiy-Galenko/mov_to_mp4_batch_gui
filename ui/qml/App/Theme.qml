@@ -48,7 +48,6 @@ QtObject {
     readonly property int sectionPadding: 12
     readonly property real shadowOpacity: 0.22
 
-    // Compatibility aliases for existing components.
     readonly property color bg: bgBase
     readonly property color bgDeep: "#090B0D"
     readonly property color bgLift: bgSurface

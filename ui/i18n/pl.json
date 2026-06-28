@@ -177,6 +177,7 @@
   "status.failed": "błąd",
   "status.skipped": "pominięto",
   "status.cancelled": "anulowano",
+  "whisper_not_installed": "Whisper nie jest zainstalowany. Automatyczne napisy są niedostępne.",
   "backend.ffmpeg_missing": "Nie znaleziono FFmpeg. Ustaw ścieżkę ffmpeg.",
   "backend.queue_empty": "Kolejka jest pusta.",
   "backend.added_files": "Dodano pliki: {count}",

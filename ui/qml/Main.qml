@@ -34,6 +34,7 @@ ApplicationWindow {
     property string selectedPreset: ""
     property real sharedShimmerPhase: 0
     property bool highLoadMode: backend ? backend.queueCount > 50 : false
+    property int _langVersion: 0
 
     property var operationOptions: ["convert", "audio_only", "auto_subtitle", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet"]
     property var videoFormats: ["mp4", "mkv", "webm", "mov", "avi", "gif"]
@@ -153,8 +154,9 @@ ApplicationWindow {
     Connections {
         target: backend
         function onPresetLoaded(data) { applyPreset(data) }
+        function onLanguageChanged() { root._langVersion += 1 }
         function onUiLanguageChanged() {
-            I18n.language = backend.uiLanguage
+            I18n.setLanguage(backend.uiLanguage)
             settingsPanel.syncLanguage()
         }
         function onWatermarkPicked(path) { settingsPanel.setPickedPath("watermark", path) }
@@ -380,7 +382,8 @@ ApplicationWindow {
                                             model: backend ? backend.queueModel : null
                                             clip: true
                                             spacing: 8
-                                            cacheBuffer: 200
+                                            cacheBuffer: 400
+                                            reuseItems: true
                                             boundsBehavior: Flickable.StopAtBounds
 
                                             delegate: QueueItem {
@@ -600,6 +603,8 @@ ApplicationWindow {
             model: backend ? backend.logModel : null
             clip: true
             spacing: 4
+            cacheBuffer: 200
+            reuseItems: true
             delegate: Label {
                 width: ListView.view.width
                 text: model.line
@@ -801,8 +806,7 @@ ApplicationWindow {
         function syncLanguage() {
             if (!backend)
                 return
-            var idx = I18n.languageCodes.indexOf(backend.uiLanguage)
-            languageCombo.currentIndex = idx >= 0 ? idx : 0
+            languageCombo.syncFromBackend()
         }
 
         function loadTaskOverride(data) {
@@ -815,16 +819,8 @@ ApplicationWindow {
         Panel {
             title: I18n.t("run")
             FieldLabel { text: I18n.t("language") }
-            AppComboBox {
+            LanguageSwitcher {
                 id: languageCombo
-                model: [I18n.t("ukrainian"), I18n.t("english"), I18n.t("polish"), I18n.t("german")]
-                currentIndex: backend ? Math.max(0, I18n.languageCodes.indexOf(backend.uiLanguage)) : 0
-                onActivated: {
-                    var code = I18n.languageCodes[currentIndex] || "uk"
-                    if (backend)
-                        backend.uiLanguage = code
-                    I18n.language = code
-                }
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -988,10 +984,19 @@ ApplicationWindow {
                 AppSpinBox { id: subtitleStreamSpin; from: 0; to: 32; value: 0; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("language_field") }
                 AppTextField { id: subtitleLanguageField; text: "auto"; onEditingFinished: scheduleSettingsSync() }
-                FieldLabel { text: I18n.t("model") }
-                AppComboBox { id: subtitleModelCombo; model: ["tiny", "base", "small", "medium", "large"]; currentIndex: 1; onActivated: scheduleSettingsSync() }
-                FieldLabel { text: I18n.t("engine") }
-                AppComboBox { id: subtitleEngineCombo; model: ["auto", "whisper"]; currentIndex: 0; onActivated: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("model"); visible: backend ? backend.isWhisperAvailable : true }
+                AppComboBox { id: subtitleModelCombo; model: ["tiny", "base", "small", "medium", "large"]; currentIndex: 1; visible: backend ? backend.isWhisperAvailable : true; enabled: visible; onActivated: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("engine"); visible: backend ? backend.isWhisperAvailable : true }
+                AppComboBox { id: subtitleEngineCombo; model: ["auto", "whisper"]; currentIndex: 0; visible: backend ? backend.isWhisperAvailable : true; enabled: visible; onActivated: scheduleSettingsSync() }
+                Label {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: backend ? !backend.isWhisperAvailable : false
+                    text: I18n.t("whisper_not_installed")
+                    color: Theme.accentWarn
+                    font.pixelSize: Theme.fontMeta
+                    wrapMode: Text.WordWrap
+                }
             }
             RowLayout {
                 Layout.fillWidth: true

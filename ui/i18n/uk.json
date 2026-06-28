@@ -177,6 +177,7 @@
   "status.failed": "помилка",
   "status.skipped": "пропущено",
   "status.cancelled": "скасовано",
+  "whisper_not_installed": "Whisper не встановлено. Автосубтитри недоступні.",
   "backend.ffmpeg_missing": "FFmpeg не знайдено. Вкажи шлях до ffmpeg.",
   "backend.queue_empty": "Черга порожня.",
   "backend.added_files": "Додано файлів: {count}",

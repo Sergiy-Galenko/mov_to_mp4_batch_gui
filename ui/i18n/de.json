@@ -177,6 +177,7 @@
   "status.failed": "Fehler",
   "status.skipped": "übersprungen",
   "status.cancelled": "abgebrochen",
+  "whisper_not_installed": "Whisper ist nicht installiert. Automatische Untertitel sind nicht verfügbar.",
   "backend.ffmpeg_missing": "FFmpeg wurde nicht gefunden. Setze den ffmpeg-Pfad.",
   "backend.queue_empty": "Die Warteschlange ist leer.",
   "backend.added_files": "Dateien hinzugefügt: {count}",
