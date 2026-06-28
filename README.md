@@ -1,84 +1,98 @@
-﻿# Media Converter
+# Media Converter
 
-Desktop GUI для пакетної обробки відео, аудіо, зображень і субтитрів через FFmpeg. Основний інтерфейс побудований на Python, PySide6 і QML.
+Desktop batch media converter for video, audio, images, and subtitles. The app is built with Python, PySide6, QML, and FFmpeg.
 
-## Можливості
+## Features
 
-- Signal Dark UI: темний pro-tool layout, sidebar, компактний header, session stats і Canvas analytics.
-- Черга на `ListView` з lazy rendering, thumbnails, per-file shimmer progress, failed details, retry/skip/remove.
-- Drag-and-drop файлів і папок, drag-reorder у черзі, multi-select, batch remove і batch override.
-- Локалізація через JSON: українська, англійська, польська, німецька.
-- Performance profiles: `Quality`, `Balanced`, `Fast`, `Small file`.
-- Target output size: режим “зробити файл до N MB” із підбором bitrate.
-- GPU-aware parallel conversion: до 2 одночасних незалежних FFmpeg задач для GPU encoder; CPU mode лишається 1 активна задача + ffprobe prefetch.
-- Analytics без QtCharts/matplotlib: throughput, per-file timings, codec donut, CPU/GPU/RAM graph.
-- Output size prediction, compression ratio per file, average encode speed timeline.
-- Platform presets: YouTube, TikTok, Instagram, Telegram, WhatsApp, X/Twitter, LinkedIn, Discord.
-- CLI mode для automation/hooks без запуску GUI.
+- Dark desktop UI with a sidebar, queue screen, analytics screen, presets, FFmpeg tools, and settings.
+- Drag-and-drop files or folders into the queue.
+- Batch conversion for video, image, audio, and subtitle files.
+- Automatic media-type aware output formats: images use image formats, videos use video formats, audio uses audio formats, and subtitles use subtitle formats.
+- Right-click quick conversion: choose only the output format for one queued file and convert it immediately.
+- Queue controls for retry, skip, remove, reorder, multi-select, batch remove, and per-file overrides.
+- Presets for common formats and platform targets.
+- FFmpeg/FFprobe integration for metadata, thumbnails, progress, ETA, and previews.
+- Performance profiles: `Quality`, `Balanced`, `Fast`, and `Small file`.
+- Target output size mode with bitrate estimation.
+- GPU-aware parallel conversion when a supported hardware encoder is available.
+- Built-in analytics for speed, per-file timings, codec distribution, and system resources.
+- JSON-based localization for Ukrainian, English, Polish, and German.
+- CLI mode for automation without starting the GUI.
 
-## Вимоги
+## Requirements
 
 - Python `3.13+`
 - FFmpeg
-- FFprobe бажано для metadata, ETA, thumbnails і analytics
+- FFprobe, recommended for metadata, ETA, thumbnails, and analytics
 - PySide6
 
-Встановлення залежностей:
+Install dependencies:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-Перевірка FFmpeg:
+Check FFmpeg:
 
 ```bash
 ffmpeg -version
 ffprobe -version
 ```
 
-## Запуск GUI
+## Run The GUI
 
 ```bash
 python main.py
 ```
 
-Швидкий flow:
+Basic workflow:
 
-1. Перетягни файли або папку в drop zone.
-2. Обери preset або налаштуй формат, codec, profile, target size.
-3. Перевір preview output paths.
-4. Натисни `Start`.
-5. Стеж за queue progress, session stats і analytics.
+1. Drag files or a folder into the queue.
+2. Choose a preset or configure the output settings.
+3. Use `Convert all` on the Queue screen to start the whole queue.
+4. Right-click a queued file to open Quick convert for that one file.
+5. Watch progress, session stats, logs, and analytics.
+
+## Quick Convert
+
+Right-click any item in the queue to open a focused conversion panel. The panel shows only the selected file, its media type, and the matching output formats.
+
+- Image files show formats such as `jpg`, `png`, `webp`, `bmp`, and `tiff`.
+- Video files show formats such as `mp4`, `mkv`, `webm`, `mov`, `avi`, and `gif`.
+- Audio files show formats such as `mp3`, `m4a`, `aac`, `wav`, `flac`, and `opus`.
+- Subtitle files show formats such as `srt`, `ass`, and `vtt`.
+
+Use `Save format` to store the format as a per-file override, or `Convert this file` to save the override and run only that file.
 
 ## CLI Mode
 
-CLI запускається через `--cli` і не ініціалізує PySide/QML.
+CLI mode uses `--cli` and does not initialize PySide or QML.
 
 ```bash
 python main.py --cli -i input.mov -o ./converted --profile Balanced
 ```
 
-Приклади:
+Examples:
 
 ```bash
-python main.py --cli -i a.mov b.mov -o ./out --preset "Discord • Compact MP4"
+python main.py --cli -i a.mov b.mov -o ./out --preset "Discord - Compact MP4"
 python main.py --cli -i input.mp4 -o ./out --profile "Small file" --target-size-mb 25
 python main.py --cli -i input.mov -o ./out --settings-json settings.json --language en
 ```
 
-Корисні аргументи:
+Useful CLI arguments:
 
-- `--preset` - використати GUI preset із preset store.
-- `--settings-json` - JSON із GUI-compatible settings.
-- `--profile` - `Quality`, `Balanced`, `Fast`, `Small file`.
-- `--target-size-mb` - цільовий розмір вихідного файлу.
-- `--cpu-load-limit`, `--gpu-load-limit` - відкласти старт наступної задачі, якщо навантаження вище ліміту.
-- `--ffmpeg`, `--ffprobe` - явні шляхи до бінарників.
-- `--language` - `uk`, `en`, `pl`, `de`.
+- `--preset`: use a saved GUI preset.
+- `--settings-json`: load GUI-compatible settings from JSON.
+- `--profile`: choose `Quality`, `Balanced`, `Fast`, or `Small file`.
+- `--target-size-mb`: estimate bitrate for a target output size.
+- `--cpu-load-limit` and `--gpu-load-limit`: delay new tasks when system load is above the limit.
+- `--ffmpeg` and `--ffprobe`: set explicit binary paths.
+- `--language`: choose `uk`, `en`, `pl`, or `de`.
 
-## Локалізація
+## Localization
 
-Переклади лежать у:
+Translations are stored in:
 
 ```text
 ui/i18n/
@@ -88,110 +102,70 @@ ui/i18n/
   de.json
 ```
 
-`ui/qml/App/I18n.qml` читає переклади через backend, а Python backend використовує ті самі словники через `app/localization.py`, тому ключові log/status/dialog messages також можуть перекладатися вибраною мовою.
+`ui/qml/App/I18n.qml` reads translations through the backend. Python services use the same dictionaries through `app/localization.py`, so key logs, status messages, and dialogs can follow the selected UI language.
 
-## Структура проєкту
+## Project Structure
 
 ```text
 mov_to_mp4_batch_gui/
-  main.py                 <- точка входу
-  cli.py                  <- CLI режим для automation/hooks
+  main.py                 # GUI entry point
+  cli.py                  # CLI mode for automation
   requirements.txt
   requirements-dev.txt
   pytest.ini
-  app/                    <- конфіг, моделі, пресети, налаштування
-    constants.py
-    paths.py
-    localization.py
-    models.py
-    performance_profiles.py
-    presets.py
-    settings.py
-  services/               <- FFmpeg, конвертер, Whisper, історія, validation
-    converter_service.py
-    ffmpeg_service.py
-    transcription_service.py
-  ui/                     <- Python backend + QML
+  app/                    # config, models, presets, settings
+  services/               # FFmpeg, conversion, transcription, validation
+  ui/                     # Python backend and QML UI
     backend.py
     i18n/
     qml/
       App/
-        qmldir
-        Theme.qml
-        I18n.qml
       components/
       Main.qml
-  utils/                  <- файли, форматування, стан
-    files.py
-    formatting.py
-    state.py
-  assets/                 <- іконки, зображення
-  tests/                  <- тести
-  scripts/                <- build-скрипти
-    find_ffmpeg.py
-    build_pyinstaller.py
-  build/                  <- PyInstaller spec
-    media_converter.spec
-  .github/
-    workflows/
+  utils/                  # file helpers, formatting, persisted state
+  assets/                 # icons and images
+  tests/                  # automated tests
+  scripts/                # helper/build scripts
+  build/                  # PyInstaller spec
 ```
 
 ## Performance Profiles
 
-Профілі задають автоматичні defaults для CRF, preset, codec і hardware encoder:
+Profiles set practical defaults for CRF, preset, codec, and hardware encoder behavior:
 
-- `Quality`: нижчий CRF, повільніший preset, вищий візуальний запас.
-- `Balanced`: дефолт для щоденного використання.
-- `Fast`: швидший encode.
-- `Small file`: H.265 і агресивніший розмір.
+- `Quality`: lower CRF and slower preset for better visual quality.
+- `Balanced`: default profile for everyday work.
+- `Fast`: faster encoding.
+- `Small file`: more aggressive size reduction.
 
-Якщо задано `target_size_mb`, FFmpeg command builder рахує bitrate з duration і бажаного розміру. Для audio-only також підбирається bitrate, якщо відома duration.
+When `target_size_mb` is set, the command builder estimates bitrate from duration and desired size. Audio-only output can also use estimated bitrate when duration is known.
 
 ## Analytics
 
-QML Canvas панелі:
+The QML analytics screen includes:
 
-- **Throughput**: encode speed timeline.
-- **Per-file**: топ-10 файлів за часом обробки.
-- **Codecs**: donut chart за вихідними/виявленими codec labels.
-- **Resources**: CPU/GPU/RAM timeline.
+- Throughput timeline.
+- Top completed files by processing time.
+- Codec distribution chart.
+- CPU, GPU, and RAM timeline.
 
-Backend signals:
+CPU and RAM metrics use `psutil`. GPU metrics use `nvidia-smi` when available.
 
-```python
-speedHistoryChanged = Signal(list)
-fileTimingsChanged = Signal(list)
-codecDistributionChanged = Signal(dict)
-resourceHistoryChanged = Signal(list)
-```
-
-CPU/RAM беруться з `psutil`. GPU читається через `nvidia-smi`, якщо він доступний; якщо ні, графік лишається без GPU samples.
-
-## Продуктивність
-
-- Queue рендериться через `ListView`, не `Repeater`.
-- Progress events throttled приблизно до 250 ms.
-- FFprobe prefetch запускається після додавання файлів.
-- Thumbnails завантажуються асинхронно.
-- `highLoadMode` вимикає дорогі анімації для великих черг.
-- GPU encoder дозволяє до 2 паралельних незалежних задач.
-- Merge, auto-subtitle, split-chapters і hook-heavy сценарії йдуть послідовним fallback шляхом.
-
-## Тести
+## Tests
 
 ```bash
 python -m pytest -q
 ```
 
-Поточний очікуваний результат:
+Current expected result:
 
 ```text
-58 passed
+59 passed
 ```
 
-## Збірка
+## Build
 
-PyInstaller spec у `build/media_converter.spec` включає `ui/qml`, `ui/i18n` і `assets`, тому QML components і JSON translations потрапляють у build разом із застосунком.
+The PyInstaller spec is in `build/media_converter.spec` and includes QML, translations, and assets.
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-dev.txt
@@ -199,7 +173,7 @@ python scripts/find_ffmpeg.py
 python scripts/build_pyinstaller.py
 ```
 
-Артефакт буде в:
+The build output is created in:
 
 ```text
 dist/MediaConverter/

@@ -1439,6 +1439,13 @@ class Backend(QtCore.QObject):
     def startConversion(self, settings_map: Dict[str, Any]) -> None:
         self._start_conversion(dict(settings_map), failed_only=False)
 
+    @QtCore.Slot(str, "QVariantMap")
+    def startConversionForPath(self, path_text: str, settings_map: Dict[str, Any]) -> None:
+        task_path = Path(str(path_text or "").strip()).expanduser()
+        if self.queue_model.item_by_path(task_path) is None:
+            return
+        self._start_conversion(dict(settings_map), only_paths={task_path})
+
     @QtCore.Slot()
     def retryFailed(self) -> None:
         if self._is_running:
@@ -1544,6 +1551,23 @@ class Backend(QtCore.QObject):
     def saveTaskOverrideByPath(self, path_text: str, override_map: Dict[str, Any]) -> None:
         index = self.queue_model.index_for_path(Path(str(path_text or "").strip()).expanduser())
         self.saveTaskOverride(index, override_map)
+
+    @QtCore.Slot(str, "QVariantMap")
+    def updateTaskOverrideByPath(self, path_text: str, override_map: Dict[str, Any]) -> None:
+        index = self.queue_model.index_for_path(Path(str(path_text or "").strip()).expanduser())
+        task = self.queue_model.item_at(index)
+        if task is None:
+            return
+        merged = dict(task.overrides)
+        for key, value in dict(override_map or {}).items():
+            if value not in (None, ""):
+                merged[str(key)] = value
+        task.overrides = merged
+        self.queue_model.update_item(index, task)
+        self._refresh_output_preview(dict(self._last_settings_map))
+        self._save_state()
+        self._append_log("OK", f"Override оновлено для: {task.path.name}")
+        self.taskOverrideLoaded.emit(dict(task.overrides))
 
     @QtCore.Slot("QVariantList", "QVariantMap")
     def saveBulkOverride(self, paths: List[Any], override_map: Dict[str, Any]) -> None:

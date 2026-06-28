@@ -35,6 +35,10 @@ ApplicationWindow {
     property real sharedShimmerPhase: 0
     property bool highLoadMode: backend ? backend.queueCount > 50 : false
     property int _langVersion: 0
+    property string quickConvertPath: ""
+    property string quickConvertName: ""
+    property string quickConvertMediaType: "video"
+    property string quickConvertFormat: ""
 
     property var operationOptions: ["convert", "audio_only", "auto_subtitle", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet"]
     property var videoFormats: ["mp4", "mkv", "webm", "mov", "avi", "gif"]
@@ -72,6 +76,75 @@ ApplicationWindow {
         if (!validateForm())
             return
         backend.startConversion(collectSettings())
+    }
+
+    function outputFormatKeyFor(mediaType) {
+        if (mediaType === "image") return "out_image_fmt"
+        if (mediaType === "audio") return "out_audio_fmt"
+        if (mediaType === "subtitle") return "out_subtitle_fmt"
+        return "out_video_fmt"
+    }
+
+    function formatOptionsFor(mediaType) {
+        if (mediaType === "image") return root.imageFormats
+        if (mediaType === "audio") return root.audioFormats
+        if (mediaType === "subtitle") return root.subtitleFormats
+        return root.videoFormats
+    }
+
+    function currentFormatFor(mediaType) {
+        var options = formatOptionsFor(mediaType)
+        var settings = collectSettings()
+        var value = settings[outputFormatKeyFor(mediaType)]
+        if (value && options.indexOf(value) >= 0)
+            return value
+        return options.length > 0 ? options[0] : ""
+    }
+
+    function quickOverrideMap(format) {
+        var overrideMap = { operation: "convert" }
+        overrideMap[outputFormatKeyFor(root.quickConvertMediaType)] = format
+        return overrideMap
+    }
+
+    function quickSettingsMap(format) {
+        var settings = collectSettings()
+        settings.operation = "convert"
+        settings[outputFormatKeyFor(root.quickConvertMediaType)] = format
+        return settings
+    }
+
+    function openQuickConvert(path, name, mediaType, index) {
+        root.quickConvertPath = path || ""
+        root.quickConvertName = name || path || ""
+        root.quickConvertMediaType = mediaType || "video"
+        root.selectedPath = root.quickConvertPath
+        root.selectedIndex = index
+        root.selectedPaths = root.quickConvertPath.length > 0 ? [root.quickConvertPath] : []
+        root.lastSelectedIndex = index
+        if (backend && root.quickConvertPath.length > 0)
+            backend.selectQueuePath(root.quickConvertPath)
+
+        var options = formatOptionsFor(root.quickConvertMediaType)
+        var preferred = currentFormatFor(root.quickConvertMediaType)
+        root.quickConvertFormat = options.indexOf(preferred) >= 0 ? preferred : (options.length > 0 ? options[0] : "")
+        quickConvertPopup.open()
+    }
+
+    function saveQuickConvertOverride() {
+        if (!backend || root.quickConvertPath.length === 0 || root.quickConvertFormat.length === 0)
+            return
+        backend.updateTaskOverrideByPath(root.quickConvertPath, quickOverrideMap(root.quickConvertFormat))
+        backend.refreshOutputPreview(collectSettings())
+    }
+
+    function convertQuickFile() {
+        if (!backend || root.quickConvertPath.length === 0 || root.quickConvertFormat.length === 0)
+            return
+        var settings = quickSettingsMap(root.quickConvertFormat)
+        backend.updateTaskOverrideByPath(root.quickConvertPath, quickOverrideMap(root.quickConvertFormat))
+        backend.startConversionForPath(root.quickConvertPath, settings)
+        quickConvertPopup.close()
     }
 
     function setComboText(combo, value) {
@@ -253,260 +326,17 @@ ApplicationWindow {
 
             Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.bgBorder }
 
-            SplitView {
+            StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                orientation: Qt.Horizontal
+                currentIndex: root.activeSection
 
-                ScrollView {
-                    id: mainScroll
-                    SplitView.fillWidth: true
-                    SplitView.minimumWidth: 620
-                    clip: true
-
-                    ColumnLayout {
-                        width: mainScroll.availableWidth
-                        spacing: 12
-                        anchors.margins: 12
-
-                        PresetsBar {
-                            Layout.fillWidth: true
-                            model: backend ? backend.presetsModel : null
-                            activePreset: root.selectedPreset
-                            onPresetSelected: function(name) {
-                                root.selectedPreset = name
-                                if (backend)
-                                    backend.loadPreset(name)
-                            }
-                        }
-
-                        StackLayout {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: root.activeSection === 1 ? Math.max(520, root.height - 130) : Math.max(360, root.height * 0.45)
-                            currentIndex: root.activeSection === 1 ? 1 : 0
-
-                            Rectangle {
-                                color: "transparent"
-                                radius: 0
-
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    spacing: 10
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 10
-                                        Label {
-                                            Layout.fillWidth: true
-                                            text: I18n.t("queue")
-                                            color: Theme.textPrimary
-                                            font.family: Theme.displayFont
-                                            font.pixelSize: Theme.fontHeading
-                                            font.bold: true
-                                        }
-                                        Label {
-                                            text: backend ? backend.queueCount + " " + I18n.t("files") : "0 " + I18n.t("files")
-                                            color: Theme.textSecondary
-                                            font.family: Theme.monoFont
-                                            font.pixelSize: Theme.fontMeta
-                                        }
-                                        Label {
-                                            visible: root.selectedPaths.length > 1
-                                            text: I18n.t("selected") + ": " + root.selectedPaths.length
-                                            color: Theme.accentPrimary
-                                            font.family: Theme.monoFont
-                                            font.pixelSize: Theme.fontMeta
-                                        }
-                                        Button {
-                                            text: I18n.t("move_top")
-                                            visible: root.selectedPaths.length > 1
-                                            onClicked: backend && backend.moveSelectedPathsTop(root.selectedPaths)
-                                        }
-                                        Button {
-                                            text: I18n.t("move_up")
-                                            visible: root.selectedPaths.length > 1
-                                            onClicked: backend && backend.moveSelectedPathsUp(root.selectedPaths)
-                                        }
-                                        Button {
-                                            text: I18n.t("move_down")
-                                            visible: root.selectedPaths.length > 1
-                                            onClicked: backend && backend.moveSelectedPathsDown(root.selectedPaths)
-                                        }
-                                        Button {
-                                            text: I18n.t("move_bottom")
-                                            visible: root.selectedPaths.length > 1
-                                            onClicked: backend && backend.moveSelectedPathsBottom(root.selectedPaths)
-                                        }
-                                        Button {
-                                            text: I18n.t("batch_remove")
-                                            visible: root.selectedPaths.length > 1
-                                            onClicked: {
-                                                if (backend)
-                                                    backend.removeSelectedPaths(root.selectedPaths)
-                                                root.selectedPaths = []
-                                                root.selectedPath = ""
-                                                root.selectedIndex = -1
-                                            }
-                                        }
-                                        Button {
-                                            text: I18n.t("batch_override")
-                                            visible: root.selectedPaths.length > 1
-                                            onClicked: root.activeSection = 4
-                                        }
-                                        Button { text: I18n.t("add"); onClicked: backend && backend.addFiles() }
-                                        Button { text: I18n.t("folder"); onClicked: backend && backend.addFolder() }
-                                    }
-
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        radius: Theme.radiusPanel
-                                        color: Theme.bgSurface
-                                        border.width: 1
-                                        border.color: Theme.bgBorder
-                                        clip: true
-
-                                        DropZone {
-                                            anchors.centerIn: parent
-                                            width: Math.min(parent.width - 28, 680)
-                                            visible: backend ? backend.queueCount === 0 : true
-                                            onFilesDropped: function(urls) { backend && backend.addDroppedUrls(urls) }
-                                            onClicked: backend && backend.addFiles()
-                                        }
-
-                                        ListView {
-                                            id: queueList
-                                            anchors.fill: parent
-                                            anchors.margins: 10
-                                            visible: backend ? backend.queueCount > 0 : false
-                                            model: backend ? backend.queueModel : null
-                                            clip: true
-                                            spacing: 8
-                                            cacheBuffer: 400
-                                            reuseItems: true
-                                            boundsBehavior: Flickable.StopAtBounds
-
-                                            delegate: QueueItem {
-                                                fileName: model.name
-                                                filePath: model.path
-                                                mediaType: model.mediaType
-                                                status: model.status
-                                                errorText: model.errorText
-                                                outputPath: model.outputPath || model.previewOutput
-                                                durationText: model.durationText
-                                                sizeText: model.sizeText
-                                                thumbnailSource: model.thumbnailSource
-                                                progress: model.progress
-                                                etaText: model.etaText
-                                                speedText: model.speedText
-                                                predictedSizeText: model.predictedSizeText
-                                                compressionText: model.compressionText
-                                                exitCode: model.exitCode
-                                                hasOverride: model.hasOverride
-                                                selected: root.isPathSelected(model.path)
-                                                highLoadMode: root.highLoadMode
-                                                shimmerPhase: root.sharedShimmerPhase
-                                                itemIndex: index
-                                                onSelectedRequested: function(path, modifiers) {
-                                                    root.selectQueuePath(path, index, modifiers)
-                                                }
-                                                onRetryRequested: function(path) { backend && backend.retryTaskPath(path) }
-                                                onSkipRequested: function(path) { backend && backend.skipCurrentFile() }
-                                                onRemoveRequested: function(path) { backend && backend.removeTaskPath(path) }
-                                                onOverrideRequested: function(path) {
-                                                    root.selectedPath = path
-                                                    root.selectedIndex = index
-                                                    root.activeSection = 4
-                                                    if (backend)
-                                                        backend.selectQueuePath(path)
-                                                }
-                                                onMoveRequested: function(path, targetIndex) {
-                                                    if (backend)
-                                                        backend.movePathToIndex(path, targetIndex)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            AnalyticsPanel {
-                                speedHistory: backend ? backend.speedHistory : []
-                                fileTimings: backend ? backend.fileTimings : []
-                                codecDistribution: backend ? backend.codecDistribution : ({})
-                                resourceHistory: backend ? backend.resourceHistory : []
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 104
-                            spacing: 12
-
-                            Rectangle {
-                                Layout.preferredWidth: 230
-                                Layout.fillHeight: true
-                                radius: Theme.radiusPanel
-                                color: Theme.bgSurface
-                                border.width: 1
-                                border.color: Theme.bgBorder
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 12
-                                    spacing: 12
-                                    ArcSpinner {
-                                        arcSize: 56
-                                        progress: backend ? backend.totalProgress : 0
-                                        indeterminate: backend ? (backend.isRunning && backend.totalProgress <= 0.001) : false
-                                    }
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 4
-                                        Label { text: I18n.t("total"); color: Theme.textMuted; font.family: Theme.monoFont; font.pixelSize: Theme.fontMeta }
-                                        Label { text: backend ? Math.round(backend.totalProgress * 100) + "%" : "0%"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: Theme.fontHeading; font.bold: true }
-                                        Label { text: backend ? backend.totalProgressText : "--"; color: Theme.textSecondary; font.family: Theme.monoFont; font.pixelSize: Theme.fontMeta; elide: Text.ElideRight; Layout.fillWidth: true }
-                                    }
-                                }
-                            }
-
-                            SessionStats {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                doneCount: backend ? backend.completedCount : 0
-                                failedCount: backend ? backend.failedCount : 0
-                                skippedCount: backend ? backend.skippedCount : 0
-                                totalCount: backend ? backend.queueCount : 0
-                                elapsedText: backend ? backend.sessionElapsedText : "00:00"
-                                etaText: backend ? backend.sessionEtaText : "--:--"
-                                avgSpeedText: backend ? backend.sessionAvgSpeedText : "--"
-                                savedText: backend ? backend.sessionSavedText : "0 B"
-                                inputText: backend ? backend.sessionInputText : "0 B"
-                                outputText: backend ? backend.sessionOutputText : "0 B"
-                            }
-                        }
-
-                        AnalyticsPanel {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 360
-                            visible: root.activeSection !== 1
-                            speedHistory: backend ? backend.speedHistory : []
-                            fileTimings: backend ? backend.fileTimings : []
-                            codecDistribution: backend ? backend.codecDistribution : ({})
-                            resourceHistory: backend ? backend.resourceHistory : []
-                        }
-
-                        LogPanel {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: root.activeSection === 3 ? 260 : 160
-                        }
-                    }
-                }
-
+                QueueScreen {}
+                AnalyticsScreen {}
+                PresetsScreen {}
+                FfmpegScreen {}
                 ScrollView {
                     id: settingsScroll
-                    SplitView.preferredWidth: root.activeSection === 4 || root.activeSection === 2 || root.activeSection === 3 ? 420 : 360
-                    SplitView.minimumWidth: 320
                     clip: true
 
                     ColumnLayout {
@@ -520,6 +350,424 @@ ApplicationWindow {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    Popup {
+        id: quickConvertPopup
+        modal: true
+        focus: true
+        width: Math.min(root.width - 48, 560)
+        x: Math.round((root.width - width) / 2)
+        y: Math.round((root.height - implicitHeight) / 2)
+        padding: 16
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        onOpened: {
+            var options = root.formatOptionsFor(root.quickConvertMediaType)
+            quickFormatCombo.currentIndex = options.length > 0 ? Math.max(0, options.indexOf(root.quickConvertFormat)) : -1
+        }
+
+        background: Rectangle {
+            radius: Theme.radiusPanel
+            color: Theme.bgSurface
+            border.width: 1
+            border.color: Theme.accentPrimary
+        }
+
+        contentItem: ColumnLayout {
+            width: quickConvertPopup.width - quickConvertPopup.leftPadding - quickConvertPopup.rightPadding
+            spacing: 12
+
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("quick_convert")
+                color: Theme.textPrimary
+                font.family: Theme.displayFont
+                font.pixelSize: Theme.fontHeading
+                font.bold: true
+                elide: Text.ElideRight
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("quick_convert_hint")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontSmall
+                wrapMode: Text.WordWrap
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                color: Theme.bgBorder
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 8
+                columnSpacing: 10
+
+                FieldLabel { text: I18n.t("selected_file") }
+                Label {
+                    Layout.fillWidth: true
+                    text: root.quickConvertName
+                    color: Theme.textPrimary
+                    font.pixelSize: Theme.fontSmall
+                    elide: Text.ElideMiddle
+                }
+
+                FieldLabel { text: I18n.t("media_type") }
+                Label {
+                    Layout.fillWidth: true
+                    text: (root.quickConvertMediaType || "media").toUpperCase()
+                    color: Theme.textSecondary
+                    font.family: Theme.monoFont
+                    font.pixelSize: Theme.fontMeta
+                    elide: Text.ElideRight
+                }
+
+                FieldLabel { text: I18n.t("output_format") }
+                AppComboBox {
+                    id: quickFormatCombo
+                    model: root.formatOptionsFor(root.quickConvertMediaType)
+                    onActivated: root.quickConvertFormat = currentText
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                SecondaryButton {
+                    text: I18n.t("cancel")
+                    onClicked: quickConvertPopup.close()
+                }
+                SecondaryButton {
+                    text: I18n.t("save_format")
+                    enabled: root.quickConvertPath.length > 0 && quickFormatCombo.currentText.length > 0
+                    onClicked: {
+                        root.quickConvertFormat = quickFormatCombo.currentText
+                        root.saveQuickConvertOverride()
+                        quickConvertPopup.close()
+                    }
+                }
+                PrimaryButton {
+                    text: I18n.t("convert_this_file")
+                    enabled: backend ? (!backend.isRunning && root.quickConvertPath.length > 0 && quickFormatCombo.currentText.length > 0) : false
+                    onClicked: {
+                        root.quickConvertFormat = quickFormatCombo.currentText
+                        root.convertQuickFile()
+                    }
+                }
+            }
+        }
+    }
+
+    component QueueScreen: ScrollView {
+        id: queueScreen
+        clip: true
+
+        ColumnLayout {
+            width: queueScreen.availableWidth
+            spacing: 12
+            anchors.margins: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                Label {
+                    Layout.fillWidth: true
+                    text: I18n.t("queue")
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: Theme.fontHeading
+                    font.bold: true
+                }
+                Label {
+                    text: backend ? backend.queueCount + " " + I18n.t("files") : "0 " + I18n.t("files")
+                    color: Theme.textSecondary
+                    font.family: Theme.monoFont
+                    font.pixelSize: Theme.fontMeta
+                }
+                Label {
+                    visible: root.selectedPaths.length > 1
+                    text: I18n.t("selected") + ": " + root.selectedPaths.length
+                    color: Theme.accentPrimary
+                    font.family: Theme.monoFont
+                    font.pixelSize: Theme.fontMeta
+                }
+                Button {
+                    text: I18n.t("move_top")
+                    visible: root.selectedPaths.length > 1
+                    onClicked: backend && backend.moveSelectedPathsTop(root.selectedPaths)
+                }
+                Button {
+                    text: I18n.t("move_up")
+                    visible: root.selectedPaths.length > 1
+                    onClicked: backend && backend.moveSelectedPathsUp(root.selectedPaths)
+                }
+                Button {
+                    text: I18n.t("move_down")
+                    visible: root.selectedPaths.length > 1
+                    onClicked: backend && backend.moveSelectedPathsDown(root.selectedPaths)
+                }
+                Button {
+                    text: I18n.t("move_bottom")
+                    visible: root.selectedPaths.length > 1
+                    onClicked: backend && backend.moveSelectedPathsBottom(root.selectedPaths)
+                }
+                Button {
+                    text: I18n.t("batch_remove")
+                    visible: root.selectedPaths.length > 1
+                    onClicked: {
+                        if (backend)
+                            backend.removeSelectedPaths(root.selectedPaths)
+                        root.selectedPaths = []
+                        root.selectedPath = ""
+                        root.selectedIndex = -1
+                    }
+                }
+                Button {
+                    text: I18n.t("batch_override")
+                    visible: root.selectedPaths.length > 1
+                    onClicked: root.activeSection = 4
+                }
+                Button { text: I18n.t("add"); onClicked: backend && backend.addFiles() }
+                Button { text: I18n.t("folder"); onClicked: backend && backend.addFolder() }
+                PrimaryButton {
+                    Layout.fillWidth: false
+                    Layout.preferredWidth: 132
+                    text: I18n.t("convert_all")
+                    enabled: backend ? (backend.queueCount > 0 && !backend.isRunning && formValid) : false
+                    onClicked: root.startIfValid()
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(360, root.height - 360)
+                radius: Theme.radiusPanel
+                color: Theme.bgSurface
+                border.width: 1
+                border.color: Theme.bgBorder
+                clip: true
+
+                DropZone {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - 28, 680)
+                    visible: backend ? backend.queueCount === 0 : true
+                    onFilesDropped: function(urls) { backend && backend.addDroppedUrls(urls) }
+                    onClicked: backend && backend.addFiles()
+                }
+
+                ListView {
+                    id: queueList
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    visible: backend ? backend.queueCount > 0 : false
+                    model: backend ? backend.queueModel : null
+                    clip: true
+                    spacing: 8
+                    cacheBuffer: 400
+                    reuseItems: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    delegate: QueueItem {
+                        fileName: model.name
+                        filePath: model.path
+                        mediaType: model.mediaType
+                        status: model.status
+                        errorText: model.errorText
+                        outputPath: model.outputPath || model.previewOutput
+                        durationText: model.durationText
+                        sizeText: model.sizeText
+                        thumbnailSource: model.thumbnailSource
+                        progress: model.progress
+                        etaText: model.etaText
+                        speedText: model.speedText
+                        predictedSizeText: model.predictedSizeText
+                        compressionText: model.compressionText
+                        exitCode: model.exitCode
+                        hasOverride: model.hasOverride
+                        selected: root.isPathSelected(model.path)
+                        highLoadMode: root.highLoadMode
+                        shimmerPhase: root.sharedShimmerPhase
+                        itemIndex: index
+                        onSelectedRequested: function(path, modifiers) {
+                            root.selectQueuePath(path, index, modifiers)
+                        }
+                        onRetryRequested: function(path) { backend && backend.retryTaskPath(path) }
+                        onSkipRequested: function(path) { backend && backend.skipCurrentFile() }
+                        onRemoveRequested: function(path) { backend && backend.removeTaskPath(path) }
+                        onOverrideRequested: function(path) {
+                            root.selectedPath = path
+                            root.selectedIndex = index
+                            root.activeSection = 4
+                            if (backend)
+                                backend.selectQueuePath(path)
+                        }
+                        onQuickConvertRequested: function(path, name, mediaType) {
+                            root.openQuickConvert(path, name, mediaType, index)
+                        }
+                        onMoveRequested: function(path, targetIndex) {
+                            if (backend)
+                                backend.movePathToIndex(path, targetIndex)
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 104
+                spacing: 12
+
+                Rectangle {
+                    Layout.preferredWidth: 230
+                    Layout.fillHeight: true
+                    radius: Theme.radiusPanel
+                    color: Theme.bgSurface
+                    border.width: 1
+                    border.color: Theme.bgBorder
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        spacing: 12
+                        ArcSpinner {
+                            arcSize: 56
+                            progress: backend ? backend.totalProgress : 0
+                            indeterminate: backend ? (backend.isRunning && backend.totalProgress <= 0.001) : false
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+                            Label { text: I18n.t("total"); color: Theme.textMuted; font.family: Theme.monoFont; font.pixelSize: Theme.fontMeta }
+                            Label { text: backend ? Math.round(backend.totalProgress * 100) + "%" : "0%"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: Theme.fontHeading; font.bold: true }
+                            Label { text: backend ? backend.totalProgressText : "--"; color: Theme.textSecondary; font.family: Theme.monoFont; font.pixelSize: Theme.fontMeta; elide: Text.ElideRight; Layout.fillWidth: true }
+                        }
+                    }
+                }
+
+                SessionStats {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    doneCount: backend ? backend.completedCount : 0
+                    failedCount: backend ? backend.failedCount : 0
+                    skippedCount: backend ? backend.skippedCount : 0
+                    totalCount: backend ? backend.queueCount : 0
+                    elapsedText: backend ? backend.sessionElapsedText : "00:00"
+                    etaText: backend ? backend.sessionEtaText : "--:--"
+                    avgSpeedText: backend ? backend.sessionAvgSpeedText : "--"
+                    savedText: backend ? backend.sessionSavedText : "0 B"
+                    inputText: backend ? backend.sessionInputText : "0 B"
+                    outputText: backend ? backend.sessionOutputText : "0 B"
+                }
+            }
+
+            LogPanel {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 160
+            }
+        }
+    }
+
+    component AnalyticsScreen: Item {
+        AnalyticsPanel {
+            anchors.fill: parent
+            anchors.margins: 12
+            speedHistory: backend ? backend.speedHistory : []
+            fileTimings: backend ? backend.fileTimings : []
+            codecDistribution: backend ? backend.codecDistribution : ({})
+            resourceHistory: backend ? backend.resourceHistory : []
+        }
+    }
+
+    component PresetsScreen: ScrollView {
+        id: presetsScreen
+        clip: true
+
+        ColumnLayout {
+            width: presetsScreen.availableWidth
+            spacing: 12
+            anchors.margins: 12
+
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("presets")
+                color: Theme.textPrimary
+                font.family: Theme.displayFont
+                font.pixelSize: Theme.fontHeading
+                font.bold: true
+            }
+
+            PresetsBar {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 44
+                model: backend ? backend.presetsModel : null
+                activePreset: root.selectedPreset
+                onPresetSelected: function(name) {
+                    root.selectedPreset = name
+                    if (backend)
+                        backend.loadPreset(name)
+                }
+            }
+
+            Panel {
+                title: I18n.t("presets")
+                AppComboBox { id: presetScreenCombo; model: backend ? backend.presetsModel : null }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button { text: I18n.t("load"); onClicked: { root.selectedPreset = presetScreenCombo.currentText; backend && backend.loadPreset(presetScreenCombo.currentText) } }
+                    Button { text: I18n.t("save"); onClicked: backend && backend.savePreset(presetScreenCombo.currentText || "Custom", collectSettings()) }
+                    Button { text: I18n.t("delete"); onClicked: backend && backend.deletePreset(presetScreenCombo.currentText) }
+                }
+            }
+
+            LogPanel {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 160
+            }
+        }
+    }
+
+    component FfmpegScreen: ScrollView {
+        id: ffmpegScreen
+        clip: true
+
+        ColumnLayout {
+            width: ffmpegScreen.availableWidth
+            spacing: 12
+            anchors.margins: 12
+
+            Panel {
+                title: I18n.t("ffmpeg_watch")
+                AppTextField { id: ffmpegScreenPathField; text: backend ? backend.ffmpegPath : ""; onEditingFinished: { if (backend) backend.ffmpegPath = text } }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button { text: I18n.t("choose"); onClicked: backend && backend.pickFfmpeg() }
+                    Button { text: I18n.t("refresh"); onClicked: backend && backend.refreshEncoders() }
+                }
+                Label { Layout.fillWidth: true; text: backend ? backend.encoderInfo : ""; color: Theme.textMuted; wrapMode: Text.WordWrap; font.pixelSize: Theme.fontMeta }
+                AppTextField { id: ffmpegScreenWatchField; text: backend ? backend.watchFolder : ""; placeholderText: I18n.t("watch_folder"); onEditingFinished: { if (backend) backend.watchFolder = text } }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button { text: I18n.t("choose"); onClicked: backend && backend.pickWatchFolder() }
+                    Button { text: backend && backend.watchRunning ? I18n.t("stop_watch") : I18n.t("start_watch"); onClicked: backend && (backend.watchRunning ? backend.stopWatching() : backend.startWatching()) }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button { text: I18n.t("import"); onClicked: backend && backend.importProject() }
+                    Button { text: I18n.t("export"); onClicked: backend && backend.exportProject(collectSettings()) }
+                }
+            }
+
+            LogPanel {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 220
             }
         }
     }

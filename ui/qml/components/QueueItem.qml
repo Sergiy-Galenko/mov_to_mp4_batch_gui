@@ -32,6 +32,7 @@ Rectangle {
     signal skipRequested(string path)
     signal removeRequested(string path)
     signal overrideRequested(string path)
+    signal quickConvertRequested(string path, string name, string mediaType)
 
     function canonicalStatus() {
         if (status === "success")
@@ -137,8 +138,13 @@ Rectangle {
         id: mouse
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.LeftButton
-        onClicked: root.selectedRequested(root.filePath, mouse.modifiers)
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: function(mouseEvent) {
+            if (mouseEvent.button === Qt.RightButton)
+                root.quickConvertRequested(root.filePath, root.fileName, root.mediaType)
+            else
+                root.selectedRequested(root.filePath, mouseEvent.modifiers)
+        }
     }
 
     ColumnLayout {
