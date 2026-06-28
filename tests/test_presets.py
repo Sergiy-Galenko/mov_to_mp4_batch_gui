@@ -1,6 +1,6 @@
-import unittest
+﻿import unittest
 
-from core.presets import DEFAULT_PRESETS
+from app.presets import DEFAULT_PRESETS
 
 
 class PresetsTest(unittest.TestCase):

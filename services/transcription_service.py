@@ -1,10 +1,24 @@
-import shutil
+﻿import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Optional
 
-from core.models import ConversionSettings
+from app.models import ConversionSettings
+
+
+def _try_import_whisper() -> bool:
+    try:
+        import whisper  # noqa: F401
+    except ImportError:
+        return False
+    except Exception:
+        return False
+    return True
+
+
+def is_whisper_available() -> bool:
+    return shutil.which("whisper") is not None or _try_import_whisper()
 
 
 class TranscriptionService:
@@ -73,7 +87,10 @@ class TranscriptionService:
                 cmd += ["--language", language]
             if log_cb:
                 log_cb("INFO", f"Whisper: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True)
+            except FileNotFoundError as exc:
+                raise RuntimeError("Whisper не знайдено. Встанови openai-whisper або CLI whisper.") from exc
             if result.returncode != 0:
                 raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "Whisper завершився з помилкою")
 

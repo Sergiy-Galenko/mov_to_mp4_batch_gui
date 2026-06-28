@@ -1,11 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 import subprocess
 from pathlib import Path
 from typing import Optional
 
-from core.models import MediaInfo
+from app.models import MediaInfo
 from services.ffmpeg_service import FfmpegService
 
 

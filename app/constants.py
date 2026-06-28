@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from app.paths import DEFAULT_OUTPUT_DIR, HISTORY_PATH, PRESET_PATH, STATE_PATH, THEME_PATH
 
 APP_TITLE = "Media Converter - Photo + Video (FFmpeg)"
 
@@ -121,9 +121,8 @@ POSITION_MAP = {
 THEMES = ["light", "dark"]
 DEFAULT_THEME = "light"
 
-PRESET_STORE = Path.home() / ".media_converter_gui_presets.json"
-DEFAULT_OUTPUT_DIR = Path.home() / "Videos" / "converted"
-THEME_STORE = Path.home() / ".media_converter_gui_theme.json"
-STATE_STORE = Path.home() / ".media_converter_gui_state.json"
-HISTORY_STORE = Path.home() / ".media_converter_gui_history.json"
+PRESET_STORE = PRESET_PATH
+THEME_STORE = THEME_PATH
+STATE_STORE = STATE_PATH
+HISTORY_STORE = HISTORY_PATH
 RECENT_FOLDERS_LIMIT = 8

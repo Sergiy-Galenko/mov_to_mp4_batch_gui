@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 import queue
@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from config.constants import (
+from app.constants import (
     ANALYTICS_EMIT_INTERVAL_SEC,
     APP_TITLE,
     EVENT_POLL_INTERVAL_MS,
@@ -19,21 +19,16 @@ from config.constants import (
     RESOURCE_SAMPLE_INTERVAL_SEC,
     WATCH_SCAN_INTERVAL_MS,
 )
-from config.paths import find_ffmpeg, find_ffprobe
-from core.localization import normalize_language, translate
-from core.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
-from core.performance_profiles import prediction_factor
-from core.settings import merge_settings_maps, settings_map_to_model
-from services.conversion_runner import ConversionRunner
-from services.converter_service import ConverterService
+from app.paths import find_ffmpeg, find_ffprobe
+from app.localization import normalize_language, translate
+from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
+from app.performance_profiles import prediction_factor
+from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
 from services.history_store import HistoryStore
-from services.media_analysis_service import MediaAnalysisService
 from services.preset_manager import PresetManager
-from services.preview_builder import PreviewBuilder
 from services.queue_manager import QueueManager
 from services.settings_manager import SettingsManager
-from services.validation_service import ValidationService
 from ui.models import HistoryModel, LogModel, QueueModel
 from utils.formatting import format_bytes, format_time
 from utils.state import load_json_file, save_json_file
@@ -67,6 +62,7 @@ class Backend(QtCore.QObject):
     coverArtPicked = QtCore.Signal(str)
     audioReplacePicked = QtCore.Signal(str)
     uiLanguageChanged = QtCore.Signal()
+    languageChanged = QtCore.Signal()
     speedHistoryChanged = QtCore.Signal(list)
     fileTimingsChanged = QtCore.Signal(list)
     codecDistributionChanged = QtCore.Signal(dict)
@@ -78,15 +74,15 @@ class Backend(QtCore.QObject):
         self.event_queue: "queue.Queue[tuple]" = queue.Queue()
         self.ffmpeg_service = FfmpegService(find_ffmpeg(), None)
         self.ffmpeg_service.ffprobe_path = find_ffprobe(self.ffmpeg_service.ffmpeg_path)
-        self.converter = ConverterService(self.ffmpeg_service, self.event_queue)
-        self.runner = ConversionRunner(self.converter)
+        self._converter_service = None
+        self._runner = None
+        self._media_analysis = None
+        self._preview_builder = None
+        self._validation = None
         self.queue_manager = QueueManager()
         self.settings_manager = SettingsManager()
         self.preset_manager = PresetManager()
         self.history_store = HistoryStore()
-        self.media_analysis = MediaAnalysisService(self.ffmpeg_service)
-        self.preview_builder = PreviewBuilder(self.ffmpeg_service)
-        self.validation = ValidationService(self.ffmpeg_service)
 
         self.queue_model = QueueModel()
         self.log_model = LogModel()
@@ -171,6 +167,46 @@ class Backend(QtCore.QObject):
         self._watch_timer.setInterval(WATCH_SCAN_INTERVAL_MS)
         self._watch_timer.timeout.connect(self._scan_watch_folder)
 
+    @property
+    def converter(self):
+        if self._converter_service is None:
+            from services.converter_service import ConverterService
+
+            self._converter_service = ConverterService(self.ffmpeg_service, self.event_queue)
+        return self._converter_service
+
+    @property
+    def runner(self):
+        if self._runner is None:
+            from services.conversion_runner import ConversionRunner
+
+            self._runner = ConversionRunner(self.converter)
+        return self._runner
+
+    @property
+    def media_analysis(self):
+        if self._media_analysis is None:
+            from services.media_analysis_service import MediaAnalysisService
+
+            self._media_analysis = MediaAnalysisService(self.ffmpeg_service)
+        return self._media_analysis
+
+    @property
+    def preview_builder(self):
+        if self._preview_builder is None:
+            from services.preview_builder import PreviewBuilder
+
+            self._preview_builder = PreviewBuilder(self.ffmpeg_service)
+        return self._preview_builder
+
+    @property
+    def validation(self):
+        if self._validation is None:
+            from services.validation_service import ValidationService
+
+            self._validation = ValidationService(self.ffmpeg_service)
+        return self._validation
+
     @QtCore.Property(str, constant=True)
     def appTitle(self) -> str:
         return APP_TITLE
@@ -246,18 +282,46 @@ class Backend(QtCore.QObject):
     def onboardingVisible(self) -> bool:
         return self._show_onboarding
 
+    @QtCore.Property(bool, constant=True)
+    def isWhisperAvailable(self) -> bool:
+        from services.transcription_service import is_whisper_available
+
+        return is_whisper_available()
+
     @QtCore.Property(str, notify=uiLanguageChanged)
     def uiLanguage(self) -> str:
         return self._ui_language
 
     @uiLanguage.setter
     def uiLanguage(self, value: str) -> None:
+        self.setLanguage(value)
+
+    @QtCore.Property(str, notify=languageChanged)
+    def currentLanguage(self) -> str:
+        return self._ui_language
+
+    @QtCore.Property("QVariantList", notify=languageChanged)
+    def availableLanguages(self) -> List[Dict[str, str]]:
+        return [
+            {"code": "uk", "label": translate("ukrainian", "uk")},
+            {"code": "en", "label": translate("english", "en")},
+            {"code": "pl", "label": translate("polish", "pl")},
+            {"code": "de", "label": translate("german", "de")},
+        ]
+
+    @QtCore.Slot(str)
+    def setLanguage(self, value: str) -> None:
         normalized = normalize_language(str(value or "uk"))
         if self._ui_language == normalized:
             return
         self._ui_language = normalized
         self.uiLanguageChanged.emit()
+        self.languageChanged.emit()
         self._save_state()
+
+    @QtCore.Slot(str, result=str)
+    def tr(self, key: str) -> str:
+        return self._tr(key)
 
     def _tr(self, key: str, **kwargs: Any) -> str:
         return translate(key, self._ui_language, **kwargs)

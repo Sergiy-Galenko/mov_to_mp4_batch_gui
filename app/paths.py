@@ -5,6 +5,28 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 
+def get_app_data_dir() -> Path:
+    """Return the OS-appropriate writable app data directory."""
+    if sys.platform == "win32":
+        base = Path.home() / "AppData" / "Local" / "MediaConverter"
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support" / "MediaConverter"
+    else:
+        base = Path.home() / ".local" / "share" / "MediaConverter"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+APP_DATA_DIR = get_app_data_dir()
+STATE_PATH = APP_DATA_DIR / "state.json"
+SETTINGS_PATH = APP_DATA_DIR / "settings.json"
+LOG_PATH = APP_DATA_DIR / "history.log"
+PRESET_PATH = APP_DATA_DIR / "presets.json"
+THEME_PATH = APP_DATA_DIR / "theme.json"
+HISTORY_PATH = APP_DATA_DIR / "history.json"
+DEFAULT_OUTPUT_DIR = Path.home() / "Videos" / "converted"
+
+
 def _runtime_roots() -> Iterable[Path]:
     project_root = Path(__file__).resolve().parents[1]
     yield project_root

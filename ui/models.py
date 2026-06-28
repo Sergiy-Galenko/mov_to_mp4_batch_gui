@@ -1,11 +1,11 @@
-import re
+﻿import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from PySide6 import QtCore
 
-from core.models import MediaInfo, TaskItem, TaskStatus
+from app.models import MediaInfo, TaskItem, TaskStatus
 from utils.formatting import format_bytes, format_time
 
 

@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import replace
 from typing import Dict
 
-from core.models import ConversionSettings
+from app.models import ConversionSettings
 
 
 PROFILE_NAMES = ["Quality", "Balanced", "Fast", "Small file"]

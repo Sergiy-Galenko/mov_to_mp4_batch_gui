@@ -16,7 +16,11 @@ def normalize_language(value: str) -> str:
 
 
 def translations_dir() -> Path:
-    return Path(__file__).resolve().parent.parent / "ui" / "qml" / "translations"
+    ui_dir = Path(__file__).resolve().parent.parent / "ui"
+    preferred = ui_dir / "i18n"
+    if preferred.exists():
+        return preferred
+    return ui_dir / "qml" / "translations"
 
 
 @lru_cache(maxsize=8)

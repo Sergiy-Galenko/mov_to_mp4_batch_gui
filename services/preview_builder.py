@@ -1,11 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core.models import ConversionSettings, MediaInfo, PreviewItem, PreviewSummary, TaskItem
-from core.settings import merge_settings_maps, settings_map_to_model
+from app.models import ConversionSettings, MediaInfo, PreviewItem, PreviewSummary, TaskItem
+from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
 from services.validation_service import OPERATION_LABELS, operation_supports_media
 from utils.files import build_output_path

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -8,11 +8,11 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-from config.paths import find_ffmpeg, find_ffprobe
-from core.localization import normalize_language, translate
-from core.models import ConversionSettings
-from core.performance_profiles import PROFILE_NAMES
-from core.settings import settings_map_to_model
+from app.paths import find_ffmpeg, find_ffprobe
+from app.localization import normalize_language, translate
+from app.models import ConversionSettings
+from app.performance_profiles import PROFILE_NAMES
+from app.settings import settings_map_to_model
 from services.converter_service import ConverterService
 from services.ffmpeg_service import FfmpegService
 from services.preset_manager import PresetManager

@@ -2,6 +2,8 @@
 from pathlib import Path
 from typing import Any, Dict
 
+from utils.state import save_json_file
+
 
 DEFAULT_PRESETS: Dict[str, Dict[str, Any]] = {
     "H.264 • Баланс (MP4)": {
@@ -214,7 +216,6 @@ def load_presets(path: Path) -> Dict[str, Dict[str, Any]]:
 
 def save_presets(path: Path, presets: Dict[str, Dict[str, Any]]) -> None:
     try:
-        with path.open("w", encoding="utf-8") as fh:
-            json.dump(presets, fh, ensure_ascii=False, indent=2)
+        save_json_file(path, presets)
     except Exception:
         return

@@ -1,10 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from config.constants import PRESET_STORE
-from core.presets import load_presets, save_presets
+from app.constants import PRESET_STORE
+from app.presets import load_presets, save_presets
 
 
 class PresetManager:

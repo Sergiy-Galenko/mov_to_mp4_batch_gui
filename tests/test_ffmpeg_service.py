@@ -1,8 +1,8 @@
-import tempfile
+﻿import tempfile
 import unittest
 from pathlib import Path
 
-from core.models import ConversionSettings, MediaInfo
+from app.models import ConversionSettings, MediaInfo
 from services.ffmpeg_service import FfmpegService
 
 

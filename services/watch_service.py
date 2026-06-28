@@ -1,4 +1,4 @@
-"""Watch folder service with debounced file detection."""
+﻿"""Watch folder service with debounced file detection."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Callable, List, Optional, Set
 
-from config.constants import WATCH_DEBOUNCE_SEC
+from app.constants import WATCH_DEBOUNCE_SEC
 
 
 class WatchService:

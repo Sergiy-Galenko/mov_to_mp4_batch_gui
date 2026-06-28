@@ -1,4 +1,4 @@
-import os
+﻿import os
 import signal
 import subprocess
 import threading
@@ -9,9 +9,9 @@ from pathlib import Path
 from queue import Queue
 from typing import Dict, List, Optional, Tuple
 
-from config.constants import PROGRESS_THROTTLE_SEC
-from core.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
-from services.ffmpeg_service import FfmpegService
+from app.constants import PROGRESS_THROTTLE_SEC
+from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
+from services.ffmpeg_service import FfmpegService, parse_progress_line
 from services.transcription_service import TranscriptionService
 from services.validation_service import operation_supports_media
 from utils.files import build_output_path, safe_output_path, sanitize_file_stem
@@ -63,11 +63,7 @@ class ConverterService:
         self.stop_event.set()
         for child in list(self.child_services):
             child.stop()
-        if self.current_proc and self.current_proc.poll() is None:
-            try:
-                self.current_proc.terminate()
-            except Exception:
-                pass
+        self._terminate_process(self.current_proc)
 
     def pause(self) -> None:
         self.pause_event.set()
@@ -85,11 +81,22 @@ class ConverterService:
         self.skip_event.set()
         for child in list(self.child_services):
             child.skip_current()
-        if self.current_proc and self.current_proc.poll() is None:
+        self._terminate_process(self.current_proc)
+
+    def _terminate_process(self, proc: Optional[subprocess.Popen], timeout: float = 3.0) -> None:
+        if not proc or proc.poll() is not None:
+            return
+        try:
+            proc.terminate()
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
             try:
-                self.current_proc.terminate()
+                proc.kill()
+                proc.wait(timeout=1.0)
             except Exception:
                 pass
+        except Exception:
+            pass
 
     def _wait_if_paused(self) -> None:
         emitted = False
@@ -169,6 +176,33 @@ class ConverterService:
     def _task_duration(self, task: TaskItem) -> float:
         info = self.media_info.get(task.path)
         return info.duration or 0.0 if info else 0.0
+
+    def _log_media_info(self, task: TaskItem, info: MediaInfo) -> None:
+        self._log(
+            "INFO",
+            f"{task.path.name}: {format_time(info.duration)} | {info.vcodec or '-'}"
+            f"/{info.acodec or '-'} | {info.width or '-'}x{info.height or '-'} | {format_bytes(info.size_bytes)}",
+        )
+        analysis_bits = []
+        if info.fps:
+            mode = f" {info.frame_rate_mode}" if info.frame_rate_mode else ""
+            analysis_bits.append(f"{info.fps:.3f} fps{mode}")
+        if info.dynamic_range:
+            analysis_bits.append(info.dynamic_range)
+        if info.color_space:
+            analysis_bits.append(info.color_space)
+        if info.rotation not in (None, 0):
+            analysis_bits.append(f"rot {info.rotation}°")
+        if info.audio_streams:
+            analysis_bits.append(f"a:{info.audio_streams}")
+        if info.subtitle_streams:
+            analysis_bits.append(f"s:{info.subtitle_streams}")
+        if info.chapters:
+            analysis_bits.append(f"chapters:{len(info.chapters)}")
+        if analysis_bits:
+            self._log("INFO", f"{task.path.name}: {' | '.join(analysis_bits)}")
+        for warning in info.warnings:
+            self._log("WARN", f"{task.path.name}: {warning}")
 
     def _resolve_output_path(self, task: TaskItem, settings: ConversionSettings, out_dir: Path, index: int) -> Path:
         out_ext = self.ffmpeg.output_extension_for(task.media_type, settings)
@@ -470,11 +504,12 @@ class ConverterService:
         self.media_info.clear()
         self.media_info.update(self.prefetched_media_info)
         if self.ffmpeg.ffprobe_path:
+            missing_probe: List[Path] = []
             for task in tasks:
                 self._task_state(task.path, TaskStatus.ANALYZING)
                 info = self.media_info.get(task.path)
                 if info is None:
-                    info = self.ffmpeg.probe_media(task.path)
+                    missing_probe.append(task.path)
                 if info:
                     self.media_info[task.path] = info
                     self._log(
@@ -502,7 +537,18 @@ class ConverterService:
                         self._log("INFO", f"{task.path.name}: {' | '.join(analysis_bits)}")
                     for warning in info.warnings:
                         self._log("WARN", f"{task.path.name}: {warning}")
-                self._task_state(task.path, TaskStatus.READY)
+                if info:
+                    self._task_state(task.path, TaskStatus.READY)
+            if missing_probe:
+                probed = self.ffmpeg.probe_media_batch(missing_probe, max_workers=4)
+                for task in tasks:
+                    if task.path not in missing_probe:
+                        continue
+                    info = probed.get(task.path)
+                    if info is not None:
+                        self.media_info[task.path] = info
+                        self._log_media_info(task, info)
+                    self._task_state(task.path, TaskStatus.READY)
         else:
             self._log("WARN", "FFprobe РЅРµ Р·РЅР°Р№РґРµРЅРѕ. РџСЂРѕРіСЂРµСЃ/ETA РјРѕР¶СѓС‚СЊ Р±СѓС‚Рё РЅРµС‚РѕС‡РЅС–.")
             for task in tasks:
@@ -935,21 +981,17 @@ class ConverterService:
             for line in proc.stdout:
                 self._wait_if_paused()
                 if self.skip_event.is_set():
-                    try:
-                        proc.terminate()
-                    except Exception:
-                        pass
+                    self._terminate_process(proc)
                     break
                 if self.stop_event.is_set():
-                    try:
-                        proc.terminate()
-                    except Exception:
-                        pass
+                    self._terminate_process(proc)
                     break
-                line = line.strip()
-                if not line or "=" not in line:
+                parsed_line = parse_progress_line(line)
+                if not parsed_line:
                     continue
-                key, value = line.split("=", 1)
+                key, value = next(iter(parsed_line.items()))
+                if value in {"", "N/A"}:
+                    continue
                 if key in {"out_time_ms", "out_time_us"}:
                     try:
                         out_time = int(value) / 1_000_000
@@ -994,9 +1036,11 @@ class ConverterService:
 
         if pending_progress is not None:
             self._emit("progress", *pending_progress)
-        rc = proc.wait()
-        err_thread.join(timeout=0.2)
-        self.current_proc = None
+        try:
+            rc = proc.wait()
+        finally:
+            err_thread.join(timeout=0.2)
+            self.current_proc = None
         if self.skip_event.is_set():
             return self.SKIP_RC
         return rc

@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from typing import List
 
-from core.models import ConversionSettings, TaskItem
+from app.models import ConversionSettings, TaskItem
 from services.converter_service import ConverterService
 
 

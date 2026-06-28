@@ -1,6 +1,6 @@
-from typing import Any, Dict, Mapping, Optional
+﻿from typing import Any, Dict, Mapping, Optional
 
-from config.constants import (
+from app.constants import (
     HW_ENCODER_MAP,
     HW_ENCODER_OPTIONS,
     OPERATION_MAP,
@@ -13,9 +13,99 @@ from config.constants import (
     VIDEO_CODEC_OPTIONS,
     VIDEO_CODEC_MAP,
 )
-from core.models import ConversionSettings
-from core.performance_profiles import apply_performance_profile, normalize_profile
+from app.models import ConversionSettings
+from app.performance_profiles import apply_performance_profile, normalize_profile
 from utils.formatting import parse_float, parse_int, parse_time_to_seconds
+
+
+SETTINGS_SCHEMA = {
+    "operation": (str, "convert"),
+    "out_video_fmt": (str, "mp4"),
+    "out_image_fmt": (str, "jpg"),
+    "out_audio_fmt": (str, "mp3"),
+    "out_subtitle_fmt": (str, "srt"),
+    "audio_bitrate": (str, "192k"),
+    "audio_track_index": (int, 0),
+    "crf": (int, 23),
+    "preset": (str, "medium"),
+    "img_quality": (int, 90),
+    "overwrite": (bool, False),
+    "fast_copy": (bool, False),
+    "skip_existing": (bool, False),
+    "output_template": (str, "{stem}"),
+    "performance_profile": (str, "Balanced"),
+    "target_size_mb": (float, 0.0),
+    "cpu_load_limit": (int, 95),
+    "gpu_load_limit": (int, 98),
+    "merge": (bool, False),
+    "subtitle_stream": (int, 0),
+    "contact_sheet_cols": (int, 4),
+    "contact_sheet_rows": (int, 4),
+    "contact_sheet_width": (int, 320),
+    "contact_sheet_interval": (int, 10),
+    "watermark_opacity": (int, 80),
+    "watermark_scale": (int, 30),
+    "text_size": (int, 24),
+    "text_box": (bool, False),
+    "text_box_opacity": (int, 50),
+    "trim_silence": (bool, False),
+    "silence_threshold_db": (int, -50),
+    "silence_duration": (float, 0.3),
+    "split_chapters": (bool, False),
+    "strip_metadata": (bool, False),
+    "copy_metadata": (bool, False),
+    "language": (str, "uk"),
+}
+
+
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return value != 0
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off", ""}:
+        return False
+    return default
+
+
+def _coerce_int(value: Any, default: int, *, minimum: Optional[int] = None, maximum: Optional[int] = None) -> int:
+    parsed = parse_int(str(value)) if value is not None else None
+    result = parsed if parsed is not None else default
+    if minimum is not None:
+        result = max(minimum, result)
+    if maximum is not None:
+        result = min(maximum, result)
+    return result
+
+
+def _coerce_float(value: Any, default: Optional[float] = None) -> Optional[float]:
+    if value in (None, ""):
+        return default
+    parsed = parse_float(str(value))
+    return parsed if parsed is not None else default
+
+
+def coerce_settings(raw: Mapping[str, Any]) -> Dict[str, Any]:
+    result: Dict[str, Any] = {}
+    for key, (typ, default) in SETTINGS_SCHEMA.items():
+        value = raw.get(key, default)
+        try:
+            if typ is bool:
+                result[key] = _coerce_bool(value, bool(default))
+            elif typ is int:
+                result[key] = _coerce_int(value, int(default))
+            elif typ is float:
+                result[key] = _coerce_float(value, float(default))
+            else:
+                result[key] = typ(value)
+        except (TypeError, ValueError):
+            result[key] = default
+    return result
 
 
 def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional[ConversionSettings] = None) -> ConversionSettings:
@@ -46,14 +136,14 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
         settings.subtitle_out_format = out_subtitle_format
 
     settings.audio_bitrate = str(settings_map.get("audio_bitrate") or settings.audio_bitrate).strip() or settings.audio_bitrate
-    settings.audio_track_index = max(0, int(settings_map.get("audio_track_index", settings.audio_track_index)))
-    settings.crf = int(settings_map.get("crf", settings.crf))
+    settings.audio_track_index = _coerce_int(settings_map.get("audio_track_index"), settings.audio_track_index, minimum=0)
+    settings.crf = _coerce_int(settings_map.get("crf"), settings.crf, minimum=0, maximum=51)
     settings.preset = str(settings_map.get("preset") or settings.preset).strip()
     settings.portrait = settings_map.get("portrait") or settings.portrait
-    settings.img_quality = int(settings_map.get("img_quality", settings.img_quality))
-    settings.overwrite = bool(settings_map.get("overwrite", settings.overwrite))
-    settings.fast_copy = bool(settings_map.get("fast_copy", settings.fast_copy))
-    settings.skip_existing = bool(settings_map.get("skip_existing", settings.skip_existing))
+    settings.img_quality = _coerce_int(settings_map.get("img_quality"), settings.img_quality, minimum=1, maximum=100)
+    settings.overwrite = _coerce_bool(settings_map.get("overwrite"), settings.overwrite)
+    settings.fast_copy = _coerce_bool(settings_map.get("fast_copy"), settings.fast_copy)
+    settings.skip_existing = _coerce_bool(settings_map.get("skip_existing"), settings.skip_existing)
     settings.output_template = str(settings_map.get("output_template") or settings.output_template).strip() or "{stem}"
     settings.platform_profile = str(settings_map.get("platform_profile") or settings.platform_profile).strip()
     settings.performance_profile = normalize_profile(str(settings_map.get("performance_profile") or settings.performance_profile))
@@ -66,7 +156,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
 
     settings.trim_start = parse_time_to_seconds(str(settings_map.get("trim_start", "")))
     settings.trim_end = parse_time_to_seconds(str(settings_map.get("trim_end", "")))
-    settings.merge = bool(settings_map.get("merge", settings.merge))
+    settings.merge = _coerce_bool(settings_map.get("merge"), settings.merge)
     settings.merge_name = str(settings_map.get("merge_name") or settings.merge_name).strip() or "merged"
 
     settings.resize_w = parse_int(str(settings_map.get("resize_w", "")))
@@ -84,7 +174,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
 
     settings.subtitle_mode = str(settings_map.get("subtitle_mode") or settings.subtitle_mode).strip() or "none"
     settings.subtitle_path = str(settings_map.get("subtitle_path") or settings.subtitle_path).strip()
-    settings.subtitle_stream = int(settings_map.get("subtitle_stream", settings.subtitle_stream))
+    settings.subtitle_stream = _coerce_int(settings_map.get("subtitle_stream"), settings.subtitle_stream, minimum=0)
     settings.subtitle_language = str(settings_map.get("subtitle_language") or settings.subtitle_language).strip() or "auto"
     settings.subtitle_model = str(settings_map.get("subtitle_model") or settings.subtitle_model).strip() or "base"
     settings.subtitle_engine = str(settings_map.get("subtitle_engine") or settings.subtitle_engine).strip() or "auto"
@@ -94,27 +184,27 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
         settings.out_subtitle_format = subtitle_out_format
 
     settings.thumbnail_time = parse_time_to_seconds(str(settings_map.get("thumbnail_time", "")))
-    settings.contact_sheet_cols = max(1, int(settings_map.get("sheet_cols", settings.contact_sheet_cols)))
-    settings.contact_sheet_rows = max(1, int(settings_map.get("sheet_rows", settings.contact_sheet_rows)))
-    settings.contact_sheet_width = max(80, int(settings_map.get("sheet_width", settings.contact_sheet_width)))
-    settings.contact_sheet_interval = max(1, int(settings_map.get("sheet_interval", settings.contact_sheet_interval)))
+    settings.contact_sheet_cols = _coerce_int(settings_map.get("sheet_cols"), settings.contact_sheet_cols, minimum=1)
+    settings.contact_sheet_rows = _coerce_int(settings_map.get("sheet_rows"), settings.contact_sheet_rows, minimum=1)
+    settings.contact_sheet_width = _coerce_int(settings_map.get("sheet_width"), settings.contact_sheet_width, minimum=80)
+    settings.contact_sheet_interval = _coerce_int(settings_map.get("sheet_interval"), settings.contact_sheet_interval, minimum=1)
 
     settings.watermark_path = str(settings_map.get("wm_path", settings.watermark_path))
     wm_pos = settings_map.get("wm_pos") or settings.watermark_pos
     if wm_pos in POSITION_OPTIONS:
         settings.watermark_pos = wm_pos
-    settings.watermark_opacity = int(settings_map.get("wm_opacity", settings.watermark_opacity))
-    settings.watermark_scale = int(settings_map.get("wm_scale", settings.watermark_scale))
+    settings.watermark_opacity = _coerce_int(settings_map.get("wm_opacity"), settings.watermark_opacity, minimum=0, maximum=100)
+    settings.watermark_scale = _coerce_int(settings_map.get("wm_scale"), settings.watermark_scale, minimum=1, maximum=100)
 
     settings.text_wm = str(settings_map.get("text_wm", settings.text_wm))
     text_pos = settings_map.get("text_pos") or settings.text_pos
     if text_pos in POSITION_OPTIONS:
         settings.text_pos = text_pos
-    settings.text_size = int(settings_map.get("text_size", settings.text_size))
+    settings.text_size = _coerce_int(settings_map.get("text_size"), settings.text_size, minimum=1)
     settings.text_color = str(settings_map.get("text_color") or settings.text_color)
-    settings.text_box = bool(settings_map.get("text_box", settings.text_box))
+    settings.text_box = _coerce_bool(settings_map.get("text_box"), settings.text_box)
     settings.text_box_color = str(settings_map.get("text_box_color") or settings.text_box_color)
-    settings.text_box_opacity = int(settings_map.get("text_box_opacity", settings.text_box_opacity))
+    settings.text_box_opacity = _coerce_int(settings_map.get("text_box_opacity"), settings.text_box_opacity, minimum=0, maximum=100)
     settings.text_font = str(settings_map.get("text_font", settings.text_font))
 
     codec = settings_map.get("codec") or settings.video_codec
@@ -134,18 +224,18 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.normalize_audio = str(settings_map.get("normalize_audio") or settings.normalize_audio).strip() or "none"
     peak_limit = parse_float(str(settings_map.get("audio_peak_limit_db", "")))
     settings.audio_peak_limit_db = peak_limit
-    settings.trim_silence = bool(settings_map.get("trim_silence", settings.trim_silence))
+    settings.trim_silence = _coerce_bool(settings_map.get("trim_silence"), settings.trim_silence)
     silence_threshold = parse_int(str(settings_map.get("silence_threshold_db", settings.silence_threshold_db)))
     settings.silence_threshold_db = silence_threshold if silence_threshold is not None else settings.silence_threshold_db
     silence_duration = parse_float(str(settings_map.get("silence_duration", settings.silence_duration)))
     settings.silence_duration = silence_duration if silence_duration and silence_duration > 0 else settings.silence_duration
-    settings.split_chapters = bool(settings_map.get("split_chapters", settings.split_chapters))
+    settings.split_chapters = _coerce_bool(settings_map.get("split_chapters"), settings.split_chapters)
     settings.cover_art_path = str(settings_map.get("cover_art_path") or settings.cover_art_path).strip()
     settings.before_hook = str(settings_map.get("before_hook") or settings.before_hook).strip()
     settings.after_hook = str(settings_map.get("after_hook") or settings.after_hook).strip()
 
-    settings.copy_metadata = bool(settings_map.get("copy_metadata", settings.copy_metadata))
-    settings.strip_metadata = bool(settings_map.get("strip_metadata", settings.strip_metadata))
+    settings.copy_metadata = _coerce_bool(settings_map.get("copy_metadata"), settings.copy_metadata)
+    settings.strip_metadata = _coerce_bool(settings_map.get("strip_metadata"), settings.strip_metadata)
     settings.meta_title = str(settings_map.get("meta_title", settings.meta_title))
     settings.meta_comment = str(settings_map.get("meta_comment", settings.meta_comment))
     settings.meta_author = str(settings_map.get("meta_author", settings.meta_author))

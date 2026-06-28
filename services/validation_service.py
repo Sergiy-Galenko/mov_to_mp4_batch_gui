@@ -1,13 +1,13 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import shutil
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from config.constants import OUT_AUDIO_FORMATS, OUT_IMAGE_FORMATS, OUT_SUBTITLE_FORMATS, OUT_VIDEO_FORMATS
-from config.paths import find_ffprobe
-from core.models import ConversionSettings, TaskItem
-from core.settings import merge_settings_maps, settings_map_to_model
+from app.constants import OUT_AUDIO_FORMATS, OUT_IMAGE_FORMATS, OUT_SUBTITLE_FORMATS, OUT_VIDEO_FORMATS
+from app.paths import find_ffprobe
+from app.models import ConversionSettings, TaskItem
+from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
 from utils.files import build_output_path, is_subtitle
 from utils.formatting import parse_float, parse_time_to_seconds

@@ -1,10 +1,11 @@
-import hashlib
+﻿import hashlib
+import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from config.constants import AUDIO_EXTS, IMAGE_EXTS, SUBTITLE_EXTS, VIDEO_EXTS
+from app.constants import AUDIO_EXTS, IMAGE_EXTS, SUBTITLE_EXTS, VIDEO_EXTS
 
 
 def is_video(path: Path) -> bool:
@@ -64,6 +65,20 @@ def file_sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
             if not chunk:
                 break
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def partial_hash(path: Path, chunk_size: int = 65536) -> str:
+    digest = hashlib.md5()
+    try:
+        size = os.path.getsize(path)
+        with path.open("rb") as fh:
+            digest.update(fh.read(chunk_size))
+            if size > chunk_size:
+                fh.seek(-min(chunk_size, size), os.SEEK_END)
+                digest.update(fh.read(chunk_size))
+    except OSError:
+        return ""
     return digest.hexdigest()
 
 

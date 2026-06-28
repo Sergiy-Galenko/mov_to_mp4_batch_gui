@@ -1,9 +1,9 @@
-import sys
+﻿import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from core.models import TaskItem
+from app.models import TaskItem
 from services.ffmpeg_service import FfmpegService
 from services.preview_builder import PreviewBuilder
 from services.validation_service import ValidationService

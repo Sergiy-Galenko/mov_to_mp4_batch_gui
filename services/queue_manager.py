@@ -1,10 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from core.models import TASK_STATUSES, TaskItem, TaskStatus
-from utils.files import file_sha256, media_type
+from app.models import TASK_STATUSES, TaskItem, TaskStatus
+from utils.files import media_type, partial_hash
 
 
 class QueueManager:
@@ -122,7 +122,7 @@ class QueueManager:
                 continue
             if not item.content_hash and item.path.exists():
                 try:
-                    item.content_hash = file_sha256(item.path)
+                    item.content_hash = partial_hash(item.path)
                 except Exception as exc:
                     log_lines.append(f"Не вдалося порахувати hash для {item.path.name}: {exc}")
                     unique.append(item)

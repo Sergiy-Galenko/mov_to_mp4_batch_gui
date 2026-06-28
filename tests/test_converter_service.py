@@ -1,9 +1,9 @@
-import queue
+﻿import queue
 import tempfile
 import unittest
 from pathlib import Path
 
-from core.models import ConversionSettings, TaskItem
+from app.models import ConversionSettings, TaskItem
 from services.converter_service import ConverterService
 
 

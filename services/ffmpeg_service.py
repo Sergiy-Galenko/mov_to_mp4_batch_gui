@@ -1,11 +1,12 @@
-import json
+﻿import json
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from config.constants import HW_ENCODER_MAP, OPERATION_MAP, PORTRAIT_PRESETS, POSITION_MAP, VIDEO_CODEC_MAP
-from core.models import ConversionSettings, MediaChapter, MediaInfo
+from app.constants import HW_ENCODER_MAP, OPERATION_MAP, PORTRAIT_PRESETS, POSITION_MAP, VIDEO_CODEC_MAP
+from app.models import ConversionSettings, MediaChapter, MediaInfo
 from utils.formatting import build_atempo_chain
 
 
@@ -15,6 +16,28 @@ def escape_drawtext(text: str) -> str:
 
 def escape_filter_path(path: str) -> str:
     return path.replace("\\", "/").replace(":", "\\:")
+
+
+def parse_progress_line(line: str) -> Dict[str, str]:
+    text = line.strip()
+    if "=" not in text:
+        return {}
+    key, _, value = text.partition("=")
+    key = key.strip()
+    if not key:
+        return {}
+    return {key: value.strip()}
+
+
+def parse_duration_ms(ffprobe_output: str) -> Optional[float]:
+    try:
+        data = json.loads(ffprobe_output)
+        duration_str = data.get("format", {}).get("duration", "")
+        if duration_str and duration_str != "N/A":
+            return float(duration_str) * 1000
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return None
 
 
 def _ratio_to_float(value: Any) -> Optional[float]:
@@ -114,6 +137,41 @@ class FfmpegService:
             if len(parts) >= 2:
                 encoders.add(parts[1])
         return encoders
+
+    def probe_duration_ms(self, path: Path) -> Optional[float]:
+        if not self.ffprobe_path:
+            return None
+        cmd = [
+            self.ffprobe_path,
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            str(path),
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+        except Exception:
+            return None
+        if result.returncode != 0:
+            return None
+        return parse_duration_ms(result.stdout)
+
+    def probe_media_batch(self, paths: List[Path], max_workers: int = 4) -> Dict[Path, Optional[MediaInfo]]:
+        if not paths:
+            return {}
+        worker_count = max(1, min(max_workers, len(paths)))
+        results: Dict[Path, Optional[MediaInfo]] = {}
+        with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="ffprobe-batch") as pool:
+            futures = {pool.submit(self.probe_media, path): path for path in paths}
+            for future in as_completed(futures):
+                path = futures[future]
+                try:
+                    results[path] = future.result()
+                except Exception:
+                    results[path] = None
+        return results
 
     def probe_media(self, path: Path) -> Optional[MediaInfo]:
         if not self.ffprobe_path:
@@ -474,7 +532,7 @@ class FfmpegService:
 
         rotate_expr = None
         if settings.rotate:
-            from config.constants import ROTATE_MAP
+            from app.constants import ROTATE_MAP
 
             rotate_expr = ROTATE_MAP.get(settings.rotate)
         if rotate_expr:
@@ -570,7 +628,7 @@ class FfmpegService:
 
         rotate_expr = None
         if settings.rotate:
-            from config.constants import ROTATE_MAP
+            from app.constants import ROTATE_MAP
 
             rotate_expr = ROTATE_MAP.get(settings.rotate)
         if rotate_expr:
