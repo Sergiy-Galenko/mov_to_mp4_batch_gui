@@ -88,17 +88,17 @@ Rectangle {
 
         Button {
             Layout.fillWidth: true
-            text: root.collapsed ? "+" : I18n.t("add_files")
+            text: root.collapsed ? "📄" : "📄  " + I18n.t("add_files")
             onClicked: root.addFilesRequested()
         }
         Button {
             Layout.fillWidth: true
-            text: root.collapsed ? "D" : I18n.t("add_folder")
+            text: root.collapsed ? "📁" : "📁  " + I18n.t("add_folder")
             onClicked: root.addFolderRequested()
         }
         Button {
             Layout.fillWidth: true
-            text: root.collapsed ? "H" : I18n.t("hash_dedupe")
+            text: root.collapsed ? "🔎" : "🔎  " + I18n.t("hash_dedupe")
             onClicked: root.dedupeRequested()
         }
 

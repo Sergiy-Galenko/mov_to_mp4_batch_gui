@@ -71,6 +71,21 @@ Rectangle {
         return lines.slice(Math.max(0, lines.length - 5)).join("\n") || text
     }
 
+    function fallbackExtension() {
+        if (mediaType === "image") return "jpg"
+        if (mediaType === "audio") return "mp3"
+        if (mediaType === "subtitle") return "srt"
+        return "mp4"
+    }
+
+    function outputExtension() {
+        var path = root.outputPath || ""
+        var dot = path.lastIndexOf(".")
+        if (dot >= 0 && dot < path.length - 1)
+            return path.slice(dot + 1).toLowerCase()
+        return fallbackExtension()
+    }
+
     width: ListView.view ? ListView.view.width : 720
     implicitHeight: details.visible ? 172 : 128
     radius: Theme.radiusPanel
@@ -194,7 +209,7 @@ Rectangle {
                     }
 
                     Label {
-                        text: (root.mediaType || "media").toUpperCase() + " -> " + (root.outputPath ? root.outputPath.split(".").pop() : "mp4")
+                        text: (root.mediaType || "media").toUpperCase() + " -> " + root.outputExtension()
                         color: Theme.textSecondary
                         font.family: Theme.monoFont
                         font.pixelSize: Theme.fontMeta

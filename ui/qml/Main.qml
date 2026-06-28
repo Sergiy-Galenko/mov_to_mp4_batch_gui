@@ -392,7 +392,7 @@ ApplicationWindow {
                                                 mediaType: model.mediaType
                                                 status: model.status
                                                 errorText: model.errorText
-                                                outputPath: model.outputPath
+                                                outputPath: model.outputPath || model.previewOutput
                                                 durationText: model.durationText
                                                 sizeText: model.sizeText
                                                 thumbnailSource: model.thumbnailSource

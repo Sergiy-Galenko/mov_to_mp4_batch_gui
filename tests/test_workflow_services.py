@@ -78,6 +78,24 @@ class WorkflowServicesTest(unittest.TestCase):
         self.assertTrue(str(summary.items[1].output_path).endswith(".vtt"))
         self.assertIn("webvtt", summary.items[1].command)
 
+    def test_preview_uses_image_format_for_image_sources(self) -> None:
+        ffmpeg = FfmpegService("ffmpeg", None)
+        builder = PreviewBuilder(ffmpeg)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            image = tmp / "cover.jpg"
+            image.write_text("image", encoding="utf-8")
+
+            summary = builder.build(
+                {"operation": "Конвертація", "out_video_fmt": "mp4", "out_image_fmt": "webp"},
+                tasks=[TaskItem(path=image, media_type="image")],
+                output_dir=tmpdir,
+            )
+
+        self.assertEqual(len(summary.items), 1)
+        self.assertTrue(str(summary.items[0].output_path).endswith(".webp"))
+        self.assertFalse(str(summary.items[0].output_path).endswith(".mp4"))
+
 
 if __name__ == "__main__":
     unittest.main()
