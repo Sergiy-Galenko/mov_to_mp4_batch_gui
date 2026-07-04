@@ -27,6 +27,12 @@ ApplicationWindow {
     property bool logErrorsOnly: false
     property var validationResult: ({ ok: true, errors: {}, warnings: [], summary: "OK" })
     property bool formValid: true
+    property string queueSearchText: ""
+    property string queueStatusFilter: "all"
+    property bool queueShowThumbnail: true
+    property bool queueShowMetrics: true
+    property bool queueShowActions: true
+    property string toastText: ""
     property string selectedPath: ""
     property int selectedIndex: -1
     property var selectedPaths: []
@@ -46,7 +52,7 @@ ApplicationWindow {
         { title: "analytics", icon: "📊", page: 1, target: "" },
         { title: "presets", icon: "🎛️", page: 2, target: "" },
         { title: "ffmpeg", icon: "🧰", page: 3, target: "" },
-        { title: "youtube_download", icon: "▶️", page: 4, target: "" },
+        { title: "downloads", icon: "▶️", page: 4, target: "" },
         { title: "run", icon: "🚀", page: 5, target: "run" },
         { title: "core", icon: "⚙️", page: 5, target: "core" },
         { title: "output", icon: "📤", page: 5, target: "output" },
@@ -252,6 +258,31 @@ ApplicationWindow {
         }
     }
 
+    function queueItemMatches(name, path, mediaType, status) {
+        var needle = String(queueSearchText || "").trim().toLowerCase()
+        if (needle.length > 0) {
+            var haystack = [name, path, mediaType, status].join(" ").toLowerCase()
+            if (haystack.indexOf(needle) < 0)
+                return false
+        }
+        var filter = String(queueStatusFilter || "all")
+        if (filter === "all")
+            return true
+        if (filter === "pending")
+            return status === "queued" || status === "ready" || status === "analyzing"
+        if (filter === "processing")
+            return status === "running" || status === "paused"
+        if (filter === "done")
+            return status === "success"
+        return status === filter
+    }
+
+    function showToast(message) {
+        toastText = String(message || "")
+        if (toastText.length > 0)
+            toastTimer.restart()
+    }
+
     Timer {
         id: settingsSyncTimer
         interval: 260
@@ -273,6 +304,13 @@ ApplicationWindow {
         }
     }
 
+    Timer {
+        id: toastTimer
+        interval: 3600
+        repeat: false
+        onTriggered: root.toastText = ""
+    }
+
     Connections {
         target: backend
         function onPresetLoaded(data) { applyPreset(data) }
@@ -291,6 +329,9 @@ ApplicationWindow {
         function onWatchFolderChanged() { settingsPanel.syncBackendPaths() }
         function onTaskOverrideLoaded(data) {
             settingsPanel.loadTaskOverride(data)
+        }
+        function onToastRequested(message) {
+            root.showToast(message)
         }
     }
 
@@ -402,6 +443,33 @@ ApplicationWindow {
                     }
                 }
             }
+        }
+    }
+
+    Rectangle {
+        z: 1000
+        visible: root.toastText.length > 0
+        opacity: visible ? 1 : 0
+        width: Math.min(root.width - 48, toastLabel.implicitWidth + 32)
+        height: Math.max(42, toastLabel.implicitHeight + 18)
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: 18
+        anchors.bottomMargin: 18
+        radius: Theme.radiusPanel
+        color: Theme.bgElevated
+        border.width: 1
+        border.color: Theme.accentPrimary
+
+        Label {
+            id: toastLabel
+            anchors.fill: parent
+            anchors.margins: 10
+            text: root.toastText
+            color: Theme.textPrimary
+            font.pixelSize: Theme.fontSmall
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
         }
     }
 
@@ -597,6 +665,64 @@ ApplicationWindow {
                 }
             }
 
+            Panel {
+                title: I18n.t("queue_tools")
+                RowLayout {
+                    Layout.fillWidth: true
+                    AppTextField {
+                        id: queueSearchField
+                        placeholderText: I18n.t("queue_search")
+                        text: root.queueSearchText
+                        onTextChanged: root.queueSearchText = text
+                    }
+                    AppComboBox {
+                        id: queueStatusFilterCombo
+                        Layout.preferredWidth: 150
+                        model: ["all", "pending", "processing", "done", "failed", "skipped", "cancelled"]
+                        onActivated: root.queueStatusFilter = currentText
+                    }
+                    Button {
+                        text: I18n.t("errors_only")
+                        enabled: backend ? backend.failedCount > 0 : false
+                        onClicked: {
+                            root.queueStatusFilter = "failed"
+                            queueStatusFilterCombo.currentIndex = 4
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    AppCheckBox { text: I18n.t("show_thumbnail"); checked: root.queueShowThumbnail; onToggled: root.queueShowThumbnail = checked }
+                    AppCheckBox { text: I18n.t("show_metrics"); checked: root.queueShowMetrics; onToggled: root.queueShowMetrics = checked }
+                    AppCheckBox { text: I18n.t("show_actions"); checked: root.queueShowActions; onToggled: root.queueShowActions = checked }
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        text: I18n.t("retry")
+                        visible: backend ? backend.failedCount > 0 : false
+                        onClicked: backend && backend.retryFailed()
+                    }
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: backend && backend.failedCount > 0 ? 34 : 0
+                    visible: backend ? backend.failedCount > 0 : false
+                    radius: Theme.radiusButton
+                    color: Theme.dangerSoft
+                    border.width: 1
+                    border.color: Theme.accentError
+                    Label {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        verticalAlignment: Text.AlignVCenter
+                        text: I18n.t("failed_items") + ": " + (backend ? backend.failedCount : 0)
+                        color: Theme.textPrimary
+                        font.pixelSize: Theme.fontMeta
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.max(360, root.height - 360)
@@ -627,6 +753,9 @@ ApplicationWindow {
                     boundsBehavior: Flickable.StopAtBounds
 
                     delegate: QueueItem {
+                        property bool matchesQueueFilter: root.queueItemMatches(model.name, model.path, model.mediaType, model.status)
+                        visible: matchesQueueFilter
+                        height: matchesQueueFilter ? implicitHeight : 0
                         fileName: model.name
                         filePath: model.path
                         mediaType: model.mediaType
@@ -645,6 +774,9 @@ ApplicationWindow {
                         hasOverride: model.hasOverride
                         selected: root.isPathSelected(model.path)
                         highLoadMode: root.highLoadMode
+                        showThumbnail: root.queueShowThumbnail
+                        showMetrics: root.queueShowMetrics
+                        showActions: root.queueShowActions
                         shimmerPhase: root.sharedShimmerPhase
                         itemIndex: index
                         onSelectedRequested: function(path, modifiers) {
@@ -843,23 +975,118 @@ ApplicationWindow {
 
     component YoutubeDownloadPanel: Panel {
         title: I18n.t("youtube_download")
-        AppTextField {
-            id: youtubeUrlField
+        function startDownload(mode) {
+            if (!backend)
+                return
+            backend.downloadYoutubeAdvanced({
+                url: youtubeUrlField.text,
+                mode: mode,
+                quality: youtubeQualityCombo.currentText,
+                playlist: youtubePlaylistCheck.checked,
+                subtitles: youtubeSubtitlesCheck.checked,
+                cookies_file: youtubeCookiesField.text
+            })
+        }
+
+        RowLayout {
             Layout.fillWidth: true
-            placeholderText: I18n.t("youtube_url")
-            enabled: backend ? !backend.youtubeDownloadRunning : false
+            AppComboBox {
+                id: youtubeHistoryCombo
+                Layout.fillWidth: true
+                model: backend ? backend.youtubeDownloadHistory : []
+                enabled: backend ? backend.youtubeDownloadHistory.length > 0 && !backend.youtubeDownloadRunning : false
+                onActivated: youtubeUrlField.text = currentText
+            }
+            Button {
+                text: I18n.t("clear")
+                enabled: backend ? backend.youtubeDownloadHistory.length > 0 && !backend.youtubeDownloadRunning : false
+                onClicked: backend && backend.clearYoutubeHistory()
+            }
+        }
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: youtubeUrlField.implicitHeight
+
+            AppTextField {
+                id: youtubeUrlField
+                anchors.fill: parent
+                placeholderText: I18n.t("youtube_url")
+                enabled: backend ? !backend.youtubeDownloadRunning : false
+            }
+
+            DropArea {
+                anchors.fill: parent
+                onDropped: function(drop) {
+                    var value = ""
+                    if (drop.hasText)
+                        value = String(drop.text || "").trim()
+                    else if (drop.hasUrls && drop.urls.length > 0)
+                        value = String(drop.urls[0] || "").trim()
+                    if (value.indexOf("http://") === 0 || value.indexOf("https://") === 0) {
+                        youtubeUrlField.text = value
+                        drop.acceptProposedAction()
+                    }
+                }
+            }
+        }
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            rowSpacing: 8
+            columnSpacing: 8
+            FieldLabel { text: I18n.t("youtube_quality") }
+            AppComboBox {
+                id: youtubeQualityCombo
+                model: ["best", "1080p", "720p", "audio_only"]
+                currentIndex: 0
+                enabled: backend ? !backend.youtubeDownloadRunning : false
+            }
+            FieldLabel { text: I18n.t("youtube.cookies_file") }
+            RowLayout {
+                Layout.fillWidth: true
+                AppTextField {
+                    id: youtubeCookiesField
+                    text: backend ? backend.youtubeCookiesPath : ""
+                    enabled: backend ? !backend.youtubeDownloadRunning : false
+                    onEditingFinished: backend && backend.setYoutubeCookiesPath(text)
+                }
+                Button {
+                    text: "..."
+                    Layout.preferredWidth: 42
+                    enabled: backend ? !backend.youtubeDownloadRunning : false
+                    onClicked: backend && backend.pickYoutubeCookies()
+                }
+            }
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            AppCheckBox {
+                id: youtubePlaylistCheck
+                text: I18n.t("youtube.playlist")
+                enabled: backend ? !backend.youtubeDownloadRunning : false
+            }
+            AppCheckBox {
+                id: youtubeSubtitlesCheck
+                text: I18n.t("youtube.subtitles")
+                enabled: backend ? !backend.youtubeDownloadRunning : false
+            }
         }
         RowLayout {
             Layout.fillWidth: true
             Button {
                 text: I18n.t("download_video")
                 enabled: backend && !backend.youtubeDownloadRunning && String(youtubeUrlField.text).trim().length > 0
-                onClicked: backend.downloadYoutube(youtubeUrlField.text, "video")
+                onClicked: startDownload("video")
             }
             Button {
                 text: I18n.t("download_audio")
                 enabled: backend && !backend.youtubeDownloadRunning && String(youtubeUrlField.text).trim().length > 0
-                onClicked: backend.downloadYoutube(youtubeUrlField.text, "audio")
+                onClicked: startDownload("audio")
+            }
+            Button {
+                text: I18n.t("cancel")
+                enabled: backend ? backend.youtubeDownloadRunning : false
+                onClicked: backend && backend.cancelYoutubeDownload()
             }
         }
         ProgressBar {

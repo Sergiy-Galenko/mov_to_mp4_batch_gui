@@ -30,7 +30,12 @@ from services.preset_manager import PresetManager
 from services.queue_manager import QueueManager
 from services.settings_manager import SettingsManager
 from services.watch_service import WatchService
-from services.youtube_download_service import DownloadProgress, YouTubeDownloadError, YouTubeDownloadService
+from services.youtube_download_service import (
+    DownloadProgress,
+    YouTubeDownloadCancelled,
+    YouTubeDownloadError,
+    YouTubeDownloadService,
+)
 from ui.models import HistoryModel, LogModel, QueueModel
 from utils.formatting import format_bytes, format_time
 from utils.state import load_json_file, save_json_file
@@ -71,6 +76,8 @@ class Backend(QtCore.QObject):
     resourceHistoryChanged = QtCore.Signal(list)
     sessionStatsChanged = QtCore.Signal()
     youtubeDownloadChanged = QtCore.Signal()
+    youtubeHistoryChanged = QtCore.Signal()
+    toastRequested = QtCore.Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -133,6 +140,9 @@ class Backend(QtCore.QObject):
         self._youtube_download_running = False
         self._youtube_download_progress = 0.0
         self._youtube_download_status = "Готово"
+        self._youtube_history = self.settings_manager.youtube_history()
+        self._youtube_cookies_path = self.settings_manager.youtube_cookies_path()
+        self._youtube_cancel_event: Optional[threading.Event] = None
         self._is_running = False
         self._is_paused = False
         self._active_task_path = ""
@@ -372,6 +382,14 @@ class Backend(QtCore.QObject):
     def youtubeDownloadStatus(self) -> str:
         return self._youtube_download_status
 
+    @QtCore.Property("QVariantList", notify=youtubeHistoryChanged)
+    def youtubeDownloadHistory(self) -> List[str]:
+        return list(self._youtube_history)
+
+    @QtCore.Property(str, notify=youtubeHistoryChanged)
+    def youtubeCookiesPath(self) -> str:
+        return self._youtube_cookies_path
+
     @QtCore.Property(bool, notify=isRunningChanged)
     def isRunning(self) -> bool:
         return self._is_running
@@ -532,6 +550,8 @@ class Backend(QtCore.QObject):
             queue_items=[self.queue_manager.serialize_task(item) for item in self.queue_model.items()],
             pending_recovery=self._is_running if pending_recovery is None else pending_recovery,
             onboarding_completed=True,
+            youtube_history=list(self._youtube_history),
+            youtube_cookies_path=self._youtube_cookies_path,
         )
 
     def _append_log(self, level: str, msg: str) -> None:
@@ -876,8 +896,19 @@ class Backend(QtCore.QObject):
 
     @QtCore.Slot(str, str)
     def downloadYoutube(self, url: str, mode: str) -> None:
-        clean_url = str(url or "").strip()
-        clean_mode = "audio" if str(mode or "").lower() == "audio" else "video"
+        self.downloadYoutubeAdvanced({"url": url, "mode": mode})
+
+    @QtCore.Slot("QVariantMap")
+    def downloadYoutubeAdvanced(self, options: Dict[str, Any]) -> None:
+        payload = dict(options or {})
+        clean_url = str(payload.get("url") or "").strip()
+        quality = str(payload.get("quality") or "best").strip().lower()
+        clean_mode = str(payload.get("mode") or "").strip().lower()
+        if clean_mode not in {"audio", "video"}:
+            clean_mode = "audio" if quality == "audio_only" else "video"
+        playlist = bool(payload.get("playlist"))
+        subtitles = bool(payload.get("subtitles"))
+        cookies_file = str(payload.get("cookies_file") or self._youtube_cookies_path or "").strip()
         if not clean_url:
             self._append_log("WARN", self._tr("youtube.empty_url"))
             return
@@ -892,26 +923,86 @@ class Backend(QtCore.QObject):
             self._append_log("ERROR", self._tr("backend.output_dir_error", error=exc))
             return
 
+        self._youtube_cancel_event = threading.Event()
         self._set_youtube_download_state(True, 0.0, self._tr("youtube.downloading"))
         threading.Thread(
             target=self._download_youtube_async,
-            args=(clean_url, clean_mode, output_dir),
+            args=(clean_url, clean_mode, quality, playlist, subtitles, cookies_file, output_dir, self._youtube_cancel_event),
             daemon=True,
         ).start()
 
-    def _download_youtube_async(self, url: str, mode: str, output_dir: Path) -> None:
+    @QtCore.Slot()
+    def cancelYoutubeDownload(self) -> None:
+        if self._youtube_cancel_event:
+            self._youtube_cancel_event.set()
+            self.event_queue.put(("youtube_download_progress", None, self._tr("youtube.cancelling")))
+
+    @QtCore.Slot(str)
+    def setYoutubeCookiesPath(self, path_text: str) -> None:
+        value = str(path_text or "").strip()
+        if self._youtube_cookies_path == value:
+            return
+        self._youtube_cookies_path = value
+        self.youtubeHistoryChanged.emit()
+        self._save_state()
+
+    @QtCore.Slot()
+    def pickYoutubeCookies(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(None, self._tr("youtube.cookies_file"), "", "Cookies (*.txt);;All Files (*)")
+        if path:
+            self.setYoutubeCookiesPath(path)
+
+    @QtCore.Slot()
+    def clearYoutubeHistory(self) -> None:
+        self._youtube_history = []
+        self.youtubeHistoryChanged.emit()
+        self._save_state()
+
+    def _download_youtube_async(
+        self,
+        url: str,
+        mode: str,
+        quality: str,
+        playlist: bool,
+        subtitles: bool,
+        cookies_file: str,
+        output_dir: Path,
+        cancel_event: threading.Event,
+    ) -> None:
         def on_progress(progress: DownloadProgress) -> None:
             self.event_queue.put(("youtube_download_progress", progress.percent, progress.message))
 
         try:
             service = YouTubeDownloadService(self.ffmpegPath or self.ffmpeg_service.ffmpeg_path)
-            output_path = service.download(url, output_dir, mode=mode, progress_callback=on_progress)
+            output_paths = service.download_many(
+                url,
+                output_dir,
+                mode=mode,
+                quality=quality,
+                playlist=playlist,
+                subtitles=subtitles,
+                cookies_file=cookies_file,
+                cancel_event=cancel_event,
+                progress_callback=on_progress,
+            )
+        except YouTubeDownloadCancelled as exc:
+            self.event_queue.put(("youtube_download_cancelled", str(exc)))
         except YouTubeDownloadError as exc:
             self.event_queue.put(("youtube_download_failed", str(exc)))
         except Exception as exc:
             self.event_queue.put(("youtube_download_failed", str(exc) or exc.__class__.__name__))
         else:
-            self.event_queue.put(("youtube_download_done", output_path, str(output_dir)))
+            self.event_queue.put(("youtube_download_done", output_paths, str(output_dir), url))
+
+    def _remember_youtube_url(self, url: str) -> None:
+        value = str(url or "").strip()
+        if not value:
+            return
+        self._youtube_history = [item for item in self._youtube_history if item != value]
+        self._youtube_history.insert(0, value)
+        self._youtube_history = self._youtube_history[:20]
+        self.youtubeHistoryChanged.emit()
+        self._save_state()
 
     def _set_youtube_download_state(self, running: bool, progress: Optional[float], status: str) -> None:
         self._youtube_download_running = running
@@ -1721,17 +1812,32 @@ class Backend(QtCore.QObject):
                     _, progress, msg = event
                     self._set_youtube_download_state(True, progress, str(msg or self._tr("youtube.downloading")))
                 elif etype == "youtube_download_done":
-                    _, output_path, remember_folder = event
-                    path = Path(output_path)
+                    _, output_paths, remember_folder, source_url = event
+                    paths = [Path(path) for path in output_paths]
                     self._set_youtube_download_state(False, 1.0, self._tr("youtube.done"))
-                    self._append_log("OK", self._tr("youtube.added_to_queue", file=path.name))
+                    if paths:
+                        if len(paths) == 1:
+                            self._append_log("OK", self._tr("youtube.added_to_queue", file=paths[0].name))
+                        else:
+                            self._append_log("OK", self._tr("youtube.added_many_to_queue", count=len(paths)))
+                    self._remember_youtube_url(str(source_url or ""))
                     if remember_folder:
                         self._remember_folder(remember_folder)
-                    self._add_paths([path])
+                    self._add_paths(paths)
+                    self.toastRequested.emit(self._tr("youtube.done"))
+                    self._youtube_cancel_event = None
+                elif etype == "youtube_download_cancelled":
+                    _, msg = event
+                    self._set_youtube_download_state(False, 0.0, self._tr("youtube.cancelled"))
+                    self._append_log("WARN", self._tr("youtube.cancelled_detail", error=msg))
+                    self.toastRequested.emit(self._tr("youtube.cancelled"))
+                    self._youtube_cancel_event = None
                 elif etype == "youtube_download_failed":
                     _, msg = event
                     self._set_youtube_download_state(False, 0.0, self._tr("youtube.failed"))
                     self._append_log("ERROR", self._tr("youtube.failed_detail", error=msg))
+                    self.toastRequested.emit(self._tr("youtube.failed"))
+                    self._youtube_cancel_event = None
                 elif etype == "progress":
                     if len(event) >= 8:
                         _, file_pct, out_time, duration, file_eta, total_pct, total_eta, speed = event
@@ -1813,6 +1919,7 @@ class Backend(QtCore.QObject):
                     if stopped:
                         self._cancel_active_items()
                     self._set_status(self._tr("backend.stopped") if stopped else self._tr("backend.ready"))
+                    self.toastRequested.emit(self._tr("backend.stopped") if stopped else self._tr("toast.conversion_done"))
                     self._refresh_session_stats(total_eta=0.0)
                     self._save_state(pending_recovery=False)
                 elif etype == "media_info":

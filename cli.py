@@ -79,6 +79,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output-dir", required=True, help="Output directory")
     parser.add_argument("--download-url", action="append", help="Download a YouTube URL into the output directory")
     parser.add_argument("--download-mode", choices=["video", "audio"], default="video", help="YouTube download mode")
+    parser.add_argument("--download-quality", choices=sorted(YouTubeDownloadService.QUALITY_OPTIONS), default="best", help="Video quality for downloads")
+    parser.add_argument("--download-playlist", action="store_true", help="Allow playlist downloads")
+    parser.add_argument("--download-subtitles", action="store_true", help="Download available subtitles next to the media")
+    parser.add_argument("--download-cookies", help="Path to a Netscape cookies.txt file for restricted videos")
     parser.add_argument(
         "--download-audio-format",
         choices=sorted(YouTubeDownloadService.AUDIO_FORMATS),
@@ -134,7 +138,7 @@ def main(argv: List[str] | None = None) -> int:
     download_only = args.download_only or bool(args.download_url and not input_paths)
     ffmpeg_path = args.ffmpeg or find_ffmpeg()
     ffprobe_path = args.ffprobe or find_ffprobe(ffmpeg_path)
-    if not ffmpeg_path and (not download_only or args.download_mode == "audio"):
+    if not ffmpeg_path and (not download_only or args.download_mode == "audio" or args.download_quality == "audio_only"):
         print(translate("backend.ffmpeg_missing", language), file=sys.stderr)
         return 2
 
@@ -151,18 +155,23 @@ def main(argv: List[str] | None = None) -> int:
         for url in args.download_url:
             try:
                 print(f"download {args.download_mode}: {url}")
-                downloaded = downloader.download(
+                downloaded = downloader.download_many(
                     url,
                     out_dir,
                     mode=args.download_mode,
                     audio_format=args.download_audio_format,
+                    quality=args.download_quality,
+                    playlist=args.download_playlist,
+                    subtitles=args.download_subtitles,
+                    cookies_file=args.download_cookies or "",
                     progress_callback=_print_download_progress,
                 )
             except YouTubeDownloadError as exc:
                 print(f"YouTube download failed: {exc}", file=sys.stderr)
                 return 2
-            print(f"downloaded: {downloaded}")
-            downloaded_paths.append(downloaded)
+            for path in downloaded:
+                print(f"downloaded: {path}")
+            downloaded_paths.extend(downloaded)
 
     if download_only:
         return 0

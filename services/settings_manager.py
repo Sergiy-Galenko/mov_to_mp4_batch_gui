@@ -42,6 +42,15 @@ class SettingsManager:
         value = self.state.get("last_settings")
         return dict(value) if isinstance(value, dict) else {}
 
+    def youtube_history(self) -> List[str]:
+        value = self.state.get("youtube_history", [])
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value if str(item or "").strip()][:20]
+
+    def youtube_cookies_path(self) -> str:
+        return str(self.state.get("youtube_cookies_path") or "")
+
     def save(
         self,
         *,
@@ -54,6 +63,8 @@ class SettingsManager:
         queue_items: List[Dict[str, Any]],
         pending_recovery: bool,
         onboarding_completed: bool = True,
+        youtube_history: Optional[List[str]] = None,
+        youtube_cookies_path: str = "",
     ) -> None:
         self.state = {
             "recent_folders": recent_folders[:RECENT_FOLDERS_LIMIT],
@@ -66,6 +77,8 @@ class SettingsManager:
             "queue_items": list(queue_items),
             "pending_recovery": bool(pending_recovery),
             "onboarding_completed": bool(onboarding_completed),
+            "youtube_history": list(youtube_history or [])[:20],
+            "youtube_cookies_path": str(youtube_cookies_path or ""),
         }
         save_json_state(self.path, self.state)
 

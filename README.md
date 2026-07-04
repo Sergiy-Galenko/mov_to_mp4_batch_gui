@@ -57,10 +57,16 @@ Basic workflow:
 
 ## YouTube Downloads
 
-The FFmpeg / Watch screen includes a YouTube download panel. Paste a URL and choose:
+The Downloads screen includes a YouTube download panel. Paste or drag a URL into the URL field and choose:
 
 - `Download video`: downloads the best practical video and adds it to the queue.
 - `Download audio`: extracts audio, defaults to MP3 behavior in the backend, and adds it to the queue.
+- Quality: `best`, `1080p`, `720p`, or `audio_only`.
+- Optional playlist downloads.
+- Optional subtitle download.
+- Optional `cookies.txt` file for private, age-restricted, or account-bound videos.
+- Download history for recent URLs.
+- Cancel button for an active download.
 
 Downloaded files are saved to the configured output directory. Audio extraction and some video merges require FFmpeg, so keep the FFmpeg path configured.
 
@@ -91,6 +97,7 @@ python main.py --cli -i input.mp4 -o ./out --profile "Small file" --target-size-
 python main.py --cli -i input.mov -o ./out --settings-json settings.json --language en
 python main.py --cli -o ./downloads --download-url "https://youtu.be/VIDEO_ID" --download-mode video
 python main.py --cli -o ./downloads --download-url "https://youtu.be/VIDEO_ID" --download-mode audio --download-audio-format mp3
+python main.py --cli -o ./downloads --download-url "https://youtu.be/PLAYLIST_ID" --download-playlist --download-quality 720p
 ```
 
 Useful CLI arguments:
@@ -104,7 +111,11 @@ Useful CLI arguments:
 - `--language`: choose `uk`, `en`, `pl`, or `de`.
 - `--download-url`: download a YouTube/video-site URL before conversion, or download only when no `--input` is provided.
 - `--download-mode`: choose `video` or `audio`.
+- `--download-quality`: choose `best`, `1080p`, `720p`, or `audio_only`.
 - `--download-audio-format`: choose `mp3`, `m4a`, `opus`, `wav`, `flac`, or `aac`.
+- `--download-playlist`: allow playlist downloads.
+- `--download-subtitles`: download subtitles next to the media.
+- `--download-cookies`: use a Netscape `cookies.txt` file.
 - `--download-only`: download URL(s) and exit without conversion.
 
 ## Localization
@@ -177,7 +188,7 @@ python -m pytest -q
 Current expected result:
 
 ```text
-69 passed
+71 passed
 ```
 
 ## Build

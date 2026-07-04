@@ -23,6 +23,9 @@ Rectangle {
     property bool hasOverride: false
     property bool selected: false
     property bool highLoadMode: false
+    property bool showThumbnail: true
+    property bool showMetrics: true
+    property bool showActions: true
     property real shimmerPhase: 0
     property int itemIndex: -1
 
@@ -167,6 +170,7 @@ Rectangle {
             }
 
             Rectangle {
+                visible: root.showThumbnail
                 Layout.preferredWidth: 38
                 Layout.preferredHeight: 38
                 radius: 8
@@ -215,6 +219,7 @@ Rectangle {
                     }
 
                     Label {
+                        visible: root.showMetrics
                         text: (root.mediaType || "media").toUpperCase() + " -> " + root.outputExtension()
                         color: Theme.textSecondary
                         font.family: Theme.monoFont
@@ -222,6 +227,7 @@ Rectangle {
                     }
 
                     Label {
+                        visible: root.showMetrics
                         text: root.sizeText + (root.durationText ? " / " + root.durationText : "")
                         color: Theme.textMuted
                         font.family: Theme.monoFont
@@ -277,7 +283,7 @@ Rectangle {
                 color: Theme.textSecondary
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
-                visible: canonicalStatus() !== "pending"
+                visible: root.showMetrics && canonicalStatus() !== "pending"
             }
 
             Label {
@@ -285,7 +291,7 @@ Rectangle {
                 color: Theme.accentWarn
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
-                visible: canonicalStatus() === "processing"
+                visible: root.showMetrics && canonicalStatus() === "processing"
             }
 
             Label {
@@ -293,7 +299,7 @@ Rectangle {
                 color: Theme.textSecondary
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
-                visible: canonicalStatus() === "processing"
+                visible: root.showMetrics && canonicalStatus() === "processing"
             }
 
             Label {
@@ -301,7 +307,7 @@ Rectangle {
                 color: Theme.textMuted
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
-                visible: root.predictedSizeText.length > 0 && canonicalStatus() !== "processing"
+                visible: root.showMetrics && root.predictedSizeText.length > 0 && canonicalStatus() !== "processing"
             }
 
             Label {
@@ -309,30 +315,33 @@ Rectangle {
                 color: Theme.accentSuccess
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
-                visible: root.compressionText.length > 0
+                visible: root.showMetrics && root.compressionText.length > 0
             }
 
             Item { Layout.fillWidth: true }
 
             Button {
                 text: root.hasOverride ? I18n.t("override") + " *" : I18n.t("override")
+                visible: root.showActions
                 flat: true
                 onClicked: root.overrideRequested(root.filePath)
             }
             Button {
                 text: I18n.t("retry")
-                visible: canonicalStatus() === "failed"
+                visible: root.showActions && canonicalStatus() === "failed"
                 flat: true
                 onClicked: root.retryRequested(root.filePath)
             }
             Button {
                 text: I18n.t("skip")
+                visible: root.showActions
                 enabled: canonicalStatus() === "processing"
                 flat: true
                 onClicked: root.skipRequested(root.filePath)
             }
             Button {
                 text: I18n.t("remove")
+                visible: root.showActions
                 flat: true
                 onClicked: root.removeRequested(root.filePath)
             }
