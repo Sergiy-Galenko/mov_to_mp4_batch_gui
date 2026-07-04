@@ -312,6 +312,7 @@
   "enable_tray": "Увімкнути трей",
   "minimize_to_tray": "Згортати до трею",
   "tray_notifications": "Сповіщення",
+  "push_notifications": "Push-сповіщення",
 
   "folder_filter": "Фільтр типу",
   "folder_exclude": "Виключити паттерни",

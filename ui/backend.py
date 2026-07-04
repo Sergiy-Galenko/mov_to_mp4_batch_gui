@@ -90,6 +90,7 @@ class Backend(QtCore.QObject):
     shortcutsChanged = QtCore.Signal()
     previewGenerated = QtCore.Signal(str, dict)  # path, preview_data
     trayVisibilityChanged = QtCore.Signal()
+    pushNotificationsChanged = QtCore.Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -118,7 +119,9 @@ class Backend(QtCore.QObject):
         )
         self.folder_scanner = FolderScanner()
         self.system_tray = SystemTrayService(parent=self, app_title=APP_TITLE)
-        self._tray_enabled = False
+        self._tray_enabled = self.settings_manager.tray_enabled()
+        self._push_notifications_enabled = self.settings_manager.push_notifications_enabled()
+        self._system_tray_signals_connected = False
         self._folder_type_filter = ""
         self._folder_exclude_patterns = ""
 
@@ -702,32 +705,82 @@ class Backend(QtCore.QObject):
 
     @trayEnabled.setter
     def trayEnabled(self, value: bool) -> None:
-        self._tray_enabled = bool(value)
+        next_value = bool(value)
+        if self._tray_enabled == next_value:
+            return
+        self._tray_enabled = next_value
         self.system_tray.set_visible(self._tray_enabled)
         self.trayVisibilityChanged.emit()
+        self._save_state()
+
+    @QtCore.Property(bool, notify=pushNotificationsChanged)
+    def pushNotificationsEnabled(self) -> bool:
+        return self._push_notifications_enabled
+
+    @pushNotificationsEnabled.setter
+    def pushNotificationsEnabled(self, value: bool) -> None:
+        next_value = bool(value)
+        if self._push_notifications_enabled == next_value:
+            return
+        self._push_notifications_enabled = next_value
+        self.system_tray.set_notifications_enabled(self._push_notifications_enabled)
+        self.pushNotificationsChanged.emit()
+        self._save_state()
 
     @QtCore.Slot()
     def setupSystemTray(self) -> None:
         """Initialize system tray (must be called after window is created)."""
         app = QtWidgets.QApplication.instance()
-        if app and app.activeWindow():
-            self.system_tray.setup(app.activeWindow())
+        if not app:
+            return
+        window = app.activeWindow()
+        if window is None:
+            visible_windows = [item for item in QtGui.QGuiApplication.topLevelWindows() if item.isVisible()]
+            window = visible_windows[0] if visible_windows else None
+        if window is not None:
+            self.system_tray.setup(window)
+            self.system_tray.set_notifications_enabled(self._push_notifications_enabled)
+            self.system_tray.set_visible(self._tray_enabled)
+        if window is not None and not self._system_tray_signals_connected:
             self.system_tray.showRequested.connect(self._on_tray_show)
             self.system_tray.quitRequested.connect(self._on_tray_quit)
             self.system_tray.startRequested.connect(lambda: self.startConversion(dict(self._last_settings_map)))
             self.system_tray.stopRequested.connect(self.stopConversion)
             self.system_tray.pauseRequested.connect(self.pauseConversion)
+            self._system_tray_signals_connected = True
 
     def _on_tray_show(self) -> None:
         app = QtWidgets.QApplication.instance()
-        if app and app.activeWindow():
-            window = app.activeWindow()
-            window.show()
+        if not app:
+            return
+        window = app.activeWindow()
+        if window is None:
+            visible_windows = [item for item in QtGui.QGuiApplication.topLevelWindows() if item.isVisible()]
+            window = visible_windows[0] if visible_windows else None
+        if window is None:
+            return
+        window.show()
+        if hasattr(window, "raise_"):
             window.raise_()
+        if hasattr(window, "activateWindow"):
             window.activateWindow()
+        elif hasattr(window, "requestActivate"):
+            window.requestActivate()
 
     def _on_tray_quit(self) -> None:
         QtWidgets.QApplication.quit()
+
+    def _send_push_notification(self, title: str, message: str, level: str = "info") -> None:
+        if not self._push_notifications_enabled:
+            return
+        if not self.system_tray.is_available:
+            self.setupSystemTray()
+        icon = QtWidgets.QSystemTrayIcon.Information
+        if level == "error":
+            icon = QtWidgets.QSystemTrayIcon.Critical
+        elif level == "warning":
+            icon = QtWidgets.QSystemTrayIcon.Warning
+        self.system_tray.notify(title, message, icon)
 
     # --- Folder scanning properties ---
 
@@ -890,6 +943,8 @@ class Backend(QtCore.QObject):
             onboarding_completed=True,
             youtube_history=list(self._youtube_history),
             youtube_cookies_path=self._youtube_cookies_path,
+            tray_enabled=self._tray_enabled,
+            push_notifications_enabled=self._push_notifications_enabled,
         )
 
     def _append_log(self, level: str, msg: str) -> None:
@@ -1121,11 +1176,13 @@ class Backend(QtCore.QObject):
             self._append_log("WARN", result.message)
             self._encoder_info = self._tr("backend.ffmpeg_missing")
             self.encoderInfoChanged.emit()
+            self._send_push_notification("FFmpeg", result.message, "warning")
             return
         if result.status == "error":
             self._append_log("ERROR", result.message)
             self._encoder_info = self._tr("backend.ffmpeg_missing")
             self.encoderInfoChanged.emit()
+            self._send_push_notification("FFmpeg", result.message, "error")
             return
         if result.ffmpeg_path:
             self.ffmpegPath = result.ffmpeg_path
@@ -1134,6 +1191,7 @@ class Backend(QtCore.QObject):
             self.media_preview.ffprobe_path = self.ffmpeg_service.ffprobe_path or ""
             self._append_log("OK", f"{result.message} {result.ffmpeg_path}")
             self.toastRequested.emit("FFmpeg готовий")
+            self._send_push_notification("FFmpeg", "FFmpeg готовий до роботи.")
             self.refreshEncoders()
 
     def _detect_encoders_async(self, ffmpeg_path: str) -> None:
@@ -2253,18 +2311,22 @@ class Backend(QtCore.QObject):
                         self._remember_folder(remember_folder)
                     self._add_paths(paths)
                     self.toastRequested.emit(self._tr("youtube.done"))
+                    file_word = "файл" if len(paths) == 1 else "файлів"
+                    self._send_push_notification("YouTube", f"Завантажено {len(paths)} {file_word}.")
                     self._youtube_cancel_event = None
                 elif etype == "youtube_download_cancelled":
                     _, msg = event
                     self._set_youtube_download_state(False, 0.0, self._tr("youtube.cancelled"))
                     self._append_log("WARN", self._tr("youtube.cancelled_detail", error=msg))
                     self.toastRequested.emit(self._tr("youtube.cancelled"))
+                    self._send_push_notification("YouTube", self._tr("youtube.cancelled"), "warning")
                     self._youtube_cancel_event = None
                 elif etype == "youtube_download_failed":
                     _, msg = event
                     self._set_youtube_download_state(False, 0.0, self._tr("youtube.failed"))
                     self._append_log("ERROR", self._tr("youtube.failed_detail", error=msg))
                     self.toastRequested.emit(self._tr("youtube.failed"))
+                    self._send_push_notification("YouTube", str(msg or self._tr("youtube.failed")), "error")
                     self._youtube_cancel_event = None
                 elif etype == "progress":
                     if len(event) >= 8:
@@ -2282,7 +2344,7 @@ class Backend(QtCore.QObject):
                     self._total_progress_text = f"Всього: {int(total_pct * 100):02d}% • ETA {format_time(total_eta)}"
                     self.totalProgressTextChanged.emit()
                     self._set_progress(file_pct or 0.0, total_pct)
-                    if self._tray_enabled:
+                    if self._tray_enabled or self._push_notifications_enabled:
                         self.system_tray.update_progress(total_pct, True)
                     if self._active_task_path and file_pct is not None:
                         self.queue_model.set_task_progress(
@@ -2352,15 +2414,20 @@ class Backend(QtCore.QObject):
                     self.toastRequested.emit(self._tr("backend.stopped") if stopped else self._tr("toast.conversion_done"))
                     self._refresh_session_stats(total_eta=0.0)
                     self._save_state(pending_recovery=False)
-                    # System tray notifications
-                    if self._tray_enabled:
+                    if self._tray_enabled or self._push_notifications_enabled:
                         self.system_tray.update_progress(0.0, False)
+                    if self._push_notifications_enabled:
                         if stopped:
-                            self.system_tray.notify_warning(self._tr("backend.stopped"))
+                            self._send_push_notification("Конвертацію зупинено", self._tr("backend.stopped"), "warning")
                         else:
                             done = self.completedCount
                             failed = self.failedCount
-                            self.system_tray.notify_success(f"Готово: {done} файлів" + (f", помилки: {failed}" if failed else ""))
+                            message = f"Готово: {done} файлів" + (f", помилки: {failed}" if failed else "")
+                            self._send_push_notification(
+                                "Конвертацію завершено",
+                                message,
+                                "error" if failed else "info",
+                            )
                 elif etype == "media_info":
                     _, path, info = event
                     self._probe_pending.discard(path)

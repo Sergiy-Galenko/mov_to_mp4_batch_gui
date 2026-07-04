@@ -67,6 +67,8 @@ QtObject {
         "youtube_quality": "Quality",
         "download_video": "Download video",
         "download_audio": "Download audio",
+        "enable_tray": "Enable tray",
+        "push_notifications": "Push notifications",
         "update_ffmpeg": "Update FFmpeg",
         "selected_file": "Selected file",
         "media_type": "Media type",

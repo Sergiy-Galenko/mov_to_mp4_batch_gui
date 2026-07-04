@@ -1,22 +1,14 @@
-"""System tray integration — minimize to tray, progress in icon, notifications.
-
-Provides:
-  - System tray icon with context menu
-  - Progress overlay on tray icon
-  - Desktop notifications on completion/failure
-  - Minimize to tray / restore from tray
-"""
+"""System tray integration: tray menu, progress icon, and desktop notifications."""
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 
 class SystemTrayService(QtCore.QObject):
-    """Manages system tray icon, menu, and notifications."""
+    """Manages system tray icon, menu, and desktop notifications."""
 
     showRequested = QtCore.Signal()
     quitRequested = QtCore.Signal()
@@ -32,25 +24,28 @@ class SystemTrayService(QtCore.QObject):
         super().__init__(parent)
         self._app_title = app_title
         self._tray: Optional[QtWidgets.QSystemTrayIcon] = None
+        self._default_icon = QtGui.QIcon()
         self._progress = 0.0
         self._is_running = False
         self._enabled = False
+        self._tray_visible = False
         self._notifications_enabled = True
 
     def setup(self, window: QtWidgets.QWidget) -> None:
         """Initialize the system tray icon and menu."""
         if not QtWidgets.QSystemTrayIcon.isSystemTrayAvailable():
             return
+        if self._tray:
+            self._apply_visibility()
+            return
 
         self._window = window
         self._tray = QtWidgets.QSystemTrayIcon(self)
         self._tray.setToolTip(self._app_title)
 
-        # Create default icon
         self._default_icon = self._create_default_icon()
         self._tray.setIcon(self._default_icon)
 
-        # Build context menu
         menu = QtWidgets.QMenu()
         show_action = menu.addAction("Показати вікно")
         show_action.triggered.connect(self._on_show)
@@ -68,6 +63,7 @@ class SystemTrayService(QtCore.QObject):
         self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._on_activated)
         self._enabled = True
+        self._apply_visibility()
 
     def show(self) -> None:
         """Show the tray icon."""
@@ -80,10 +76,8 @@ class SystemTrayService(QtCore.QObject):
             self._tray.hide()
 
     def set_visible(self, visible: bool) -> None:
-        if visible:
-            self.show()
-        else:
-            self.hide()
+        self._tray_visible = bool(visible)
+        self._apply_visibility()
 
     def update_progress(self, progress: float, is_running: bool = True) -> None:
         """Update the tray icon to show conversion progress."""
@@ -96,7 +90,7 @@ class SystemTrayService(QtCore.QObject):
         if is_running:
             icon = self._create_progress_icon(self._progress)
             self._tray.setIcon(icon)
-            self._tray.setToolTip(f"{self._app_title} — {int(self._progress * 100)}%")
+            self._tray.setToolTip(f"{self._app_title} - {int(self._progress * 100)}%")
         else:
             self._tray.setIcon(self._default_icon)
             self._tray.setToolTip(self._app_title)
@@ -113,38 +107,36 @@ class SystemTrayService(QtCore.QObject):
         """Show a desktop notification balloon."""
         if not self._tray or not self._notifications_enabled:
             return
+        self._apply_visibility()
         self._tray.showMessage(title, message, icon, duration_ms)
 
     def notify_success(self, message: str) -> None:
         """Show a success notification."""
-        self.notify(
-            "Конвертація завершена ✅",
-            message,
-            QtWidgets.QSystemTrayIcon.Information,
-        )
+        self.notify("Конвертація завершена", message, QtWidgets.QSystemTrayIcon.Information)
 
     def notify_error(self, message: str) -> None:
         """Show an error notification."""
-        self.notify(
-            "Помилка конвертації ❌",
-            message,
-            QtWidgets.QSystemTrayIcon.Critical,
-        )
+        self.notify("Помилка", message, QtWidgets.QSystemTrayIcon.Critical)
 
     def notify_warning(self, message: str) -> None:
         """Show a warning notification."""
-        self.notify(
-            "Увага ⚠️",
-            message,
-            QtWidgets.QSystemTrayIcon.Warning,
-        )
+        self.notify("Увага", message, QtWidgets.QSystemTrayIcon.Warning)
 
     def set_notifications_enabled(self, enabled: bool) -> None:
-        self._notifications_enabled = enabled
+        self._notifications_enabled = bool(enabled)
+        self._apply_visibility()
 
     @property
     def is_available(self) -> bool:
         return self._enabled and self._tray is not None
+
+    def _apply_visibility(self) -> None:
+        if not self._tray:
+            return
+        if self._tray_visible or self._notifications_enabled:
+            self._tray.show()
+        else:
+            self._tray.hide()
 
     def _on_show(self) -> None:
         self.showRequested.emit()
@@ -168,12 +160,10 @@ class SystemTrayService(QtCore.QObject):
         painter = QtGui.QPainter(pixmap)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
 
-        # Background circle
         painter.setBrush(QtGui.QColor("#3D8EFF"))
         painter.setPen(QtCore.Qt.NoPen)
         painter.drawEllipse(2, 2, 28, 28)
 
-        # M letter
         painter.setPen(QtGui.QPen(QtGui.QColor("white"), 2.5))
         font = QtGui.QFont("Arial", 16, QtGui.QFont.Bold)
         painter.setFont(font)
@@ -188,17 +178,14 @@ class SystemTrayService(QtCore.QObject):
         painter = QtGui.QPainter(pixmap)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
 
-        # Background circle (dark)
         painter.setBrush(QtGui.QColor("#1E2330"))
         painter.setPen(QtCore.Qt.NoPen)
         painter.drawEllipse(2, 2, 28, 28)
 
-        # Progress arc
         span_angle = int(progress * 360 * 16)
         painter.setPen(QtGui.QPen(QtGui.QColor("#3D8EFF"), 3))
         painter.drawArc(4, 4, 24, 24, 90 * 16, -span_angle)
 
-        # Percentage text
         painter.setPen(QtGui.QColor("white"))
         font = QtGui.QFont("Arial", 8, QtGui.QFont.Bold)
         painter.setFont(font)

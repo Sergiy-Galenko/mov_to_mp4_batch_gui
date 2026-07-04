@@ -10,7 +10,10 @@ Rectangle {
     signal filesDropped(var urls)
     signal clicked()
 
+    implicitWidth: compact ? 420 : 620
     implicitHeight: compact ? 140 : 260
+    width: implicitWidth
+    height: implicitHeight
     radius: Theme.radiusLg
     color: dragging ? Theme.accentSoft : Theme.bgSecondary
     border.width: 1
@@ -25,8 +28,10 @@ Rectangle {
         id: dropArea
         anchors.fill: parent
         onDropped: function(drop) {
-            if (drop.hasUrls)
+            if (drop.hasUrls) {
                 root.filesDropped(drop.urls)
+                drop.acceptProposedAction()
+            }
         }
     }
 

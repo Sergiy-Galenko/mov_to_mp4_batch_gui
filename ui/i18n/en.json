@@ -312,6 +312,7 @@
   "enable_tray": "Enable tray",
   "minimize_to_tray": "Minimize to tray",
   "tray_notifications": "Notifications",
+  "push_notifications": "Push notifications",
 
   "folder_filter": "Type filter",
   "folder_exclude": "Exclude patterns",

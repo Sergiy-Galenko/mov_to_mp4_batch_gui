@@ -40,6 +40,32 @@ class SettingsManagerTest(unittest.TestCase):
             reloaded = SettingsManager(state_path)
             self.assertTrue(reloaded.output_dir_configured())
 
+    def test_notification_settings_are_persisted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "state.json"
+            manager = SettingsManager(state_path)
+
+            self.assertTrue(manager.push_notifications_enabled())
+            self.assertFalse(manager.tray_enabled())
+
+            manager.save(
+                recent_folders=[],
+                watch_folder="",
+                output_dir="",
+                output_dir_configured=False,
+                ffmpeg_path="",
+                ui_language="uk",
+                last_settings={},
+                queue_items=[],
+                pending_recovery=False,
+                tray_enabled=True,
+                push_notifications_enabled=False,
+            )
+
+            reloaded = SettingsManager(state_path)
+            self.assertTrue(reloaded.tray_enabled())
+            self.assertFalse(reloaded.push_notifications_enabled())
+
 
 if __name__ == "__main__":
     unittest.main()

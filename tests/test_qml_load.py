@@ -30,6 +30,12 @@ class QmlLoadTest(unittest.TestCase):
         engine.load(QUrl.fromLocalFile(str(main_qml)))
 
         self.assertTrue(engine.rootObjects(), "QML root objects should be created")
+        root = engine.rootObjects()[0]
+        self.assertGreater(
+            root.property("queueDropZoneHeight"),
+            0,
+            "Queue drop zone should have a real drop area",
+        )
 
 
 if __name__ == "__main__":

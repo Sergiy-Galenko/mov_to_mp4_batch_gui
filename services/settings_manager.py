@@ -54,6 +54,12 @@ class SettingsManager:
     def youtube_cookies_path(self) -> str:
         return str(self.state.get("youtube_cookies_path") or "")
 
+    def tray_enabled(self) -> bool:
+        return bool(self.state.get("tray_enabled", False))
+
+    def push_notifications_enabled(self) -> bool:
+        return bool(self.state.get("push_notifications_enabled", True))
+
     def save(
         self,
         *,
@@ -69,6 +75,8 @@ class SettingsManager:
         onboarding_completed: bool = True,
         youtube_history: Optional[List[str]] = None,
         youtube_cookies_path: str = "",
+        tray_enabled: bool = False,
+        push_notifications_enabled: bool = True,
     ) -> None:
         self.state = {
             "recent_folders": recent_folders[:RECENT_FOLDERS_LIMIT],
@@ -84,6 +92,8 @@ class SettingsManager:
             "onboarding_completed": bool(onboarding_completed),
             "youtube_history": list(youtube_history or [])[:20],
             "youtube_cookies_path": str(youtube_cookies_path or ""),
+            "tray_enabled": bool(tray_enabled),
+            "push_notifications_enabled": bool(push_notifications_enabled),
         }
         save_json_state(self.path, self.state)
 

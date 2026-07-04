@@ -32,6 +32,7 @@ ApplicationWindow {
     property bool queueShowThumbnail: true
     property bool queueShowMetrics: true
     property bool queueShowActions: true
+    property real queueDropZoneHeight: 0
     property string toastText: ""
     property string selectedPath: ""
     property int selectedIndex: -1
@@ -357,6 +358,7 @@ ApplicationWindow {
     Component.onCompleted: {
         if (backend) {
             I18n.language = backend.uiLanguage
+            backend.setupSystemTray()
             backend.restoreSession()
             backend.refreshEncoders()
             scheduleSettingsSync()
@@ -459,33 +461,20 @@ ApplicationWindow {
                 PresetsScreen {}
                 FfmpegScreen {}
                 YoutubeScreen {}
-                SettingsHomeScreen {}
-            }
+                ScrollView {
+                    id: settingsScroll
+                    clip: true
+                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-            Rectangle {
-                visible: root.activeSection === 0 || root.activeSection === 5
-                Layout.preferredWidth: visible ? 1 : 0
-                Layout.fillHeight: true
-                color: Theme.borderSubtle
-            }
+                    ColumnLayout {
+                        width: settingsScroll.availableWidth
+                        spacing: Theme.space3
+                        anchors.margins: Theme.space3
 
-            ScrollView {
-                id: settingsScroll
-                visible: root.activeSection === 0 || root.activeSection === 5
-                Layout.preferredWidth: visible ? Math.min(410, Math.max(340, root.width * 0.29)) : 0
-                Layout.maximumWidth: visible ? 430 : 0
-                Layout.fillHeight: true
-                clip: true
-                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                ColumnLayout {
-                    width: settingsScroll.availableWidth
-                    spacing: Theme.space3
-                    anchors.margins: Theme.space3
-
-                    SettingsPanel {
-                        id: settingsPanel
-                        Layout.fillWidth: true
+                        SettingsPanel {
+                            id: settingsPanel
+                            Layout.fillWidth: true
+                        }
                     }
                 }
             }
@@ -916,10 +905,26 @@ ApplicationWindow {
                 border.color: Theme.bgBorder
                 clip: true
 
+                DropArea {
+                    anchors.fill: parent
+                    visible: backend ? backend.queueCount === 0 : true
+                    enabled: visible
+                    z: 10
+                    onDropped: function(drop) {
+                        if (drop.hasUrls) {
+                            backend && backend.addDroppedUrls(drop.urls)
+                            drop.acceptProposedAction()
+                        }
+                    }
+                }
+
                 DropZone {
+                    objectName: "queueDropZone"
                     anchors.centerIn: parent
                     width: Math.min(parent.width - 28, 680)
                     visible: backend ? backend.queueCount === 0 : true
+                    Component.onCompleted: root.queueDropZoneHeight = height
+                    onHeightChanged: root.queueDropZoneHeight = height
                     onFilesDropped: function(urls) { backend && backend.addDroppedUrls(urls) }
                     onClicked: backend && backend.addFiles()
                 }
@@ -1154,61 +1159,6 @@ ApplicationWindow {
             LogPanel {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 260
-            }
-        }
-    }
-
-    component SettingsHomeScreen: Item {
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: Theme.space4
-            radius: Theme.radiusMd
-            color: Theme.bgSecondary
-            border.width: 1
-            border.color: Theme.borderSubtle
-
-            ColumnLayout {
-                anchors.centerIn: parent
-                width: Math.min(parent.width - Theme.space6, 560)
-                spacing: Theme.space3
-
-                Label {
-                    Layout.fillWidth: true
-                    text: I18n.t("settings")
-                    color: Theme.textPrimary
-                    font.pixelSize: Theme.fontSizeXl
-                    font.bold: true
-                    horizontalAlignment: Text.AlignHCenter
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: I18n.t("settings_panel_hint")
-                    color: Theme.textSecondary
-                    font.pixelSize: Theme.fontSizeSm
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
-                }
-
-                RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: Theme.space2
-
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        Layout.preferredWidth: 128
-                        text: I18n.t("add_files")
-                        onClicked: backend && backend.addFiles()
-                    }
-
-                    PrimaryButton {
-                        Layout.fillWidth: false
-                        Layout.preferredWidth: 128
-                        text: I18n.t("start")
-                        enabled: backend ? (backend.queueCount > 0 && !backend.isRunning && formValid) : false
-                        onClicked: root.startIfValid()
-                    }
-                }
             }
         }
     }
@@ -1740,6 +1690,8 @@ ApplicationWindow {
         function sectionY(section) {
             var target = String(section || "run")
             var panel = runPanel
+            if (["smart_convert", "device_profiles", "video_editor", "subtitle_tools", "privacy_security", "cloud_integration", "video", "audio_subtitles", "images_sheets", "watermark_text", "metadata_hooks", "selected_override", "ffmpeg_watch"].indexOf(target) >= 0)
+                advancedToolsSection.expanded = true
             if (target === "smart_convert") panel = smartConvertPanel
             else if (target === "device_profiles") panel = deviceProfilesPanel
             else if (target === "video_editor") panel = videoEditorPanel
@@ -2251,6 +2203,27 @@ ApplicationWindow {
             }
             Label { Layout.fillWidth: true; text: backend ? backend.encoderInfo : ""; color: Theme.textMuted; wrapMode: Text.WordWrap; font.pixelSize: Theme.fontMeta }
             AppTextField { id: watchFolderField; text: backend ? backend.watchFolder : ""; placeholderText: I18n.t("watch_folder"); onEditingFinished: { if (backend) backend.watchFolder = text } }
+            RowLayout {
+                Layout.fillWidth: true
+                AppCheckBox {
+                    id: trayEnabledCheck
+                    text: I18n.t("enable_tray")
+                    checked: backend ? backend.trayEnabled : false
+                    onToggled: {
+                        if (backend)
+                            backend.trayEnabled = checked
+                    }
+                }
+                AppCheckBox {
+                    id: pushNotificationsCheck
+                    text: I18n.t("push_notifications")
+                    checked: backend ? backend.pushNotificationsEnabled : true
+                    onToggled: {
+                        if (backend)
+                            backend.pushNotificationsEnabled = checked
+                    }
+                }
+            }
             RowLayout {
                 Layout.fillWidth: true
                 SecondaryButton { text: I18n.t("choose"); onClicked: backend && backend.pickWatchFolder() }

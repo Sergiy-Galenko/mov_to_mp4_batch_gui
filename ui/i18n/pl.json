@@ -312,6 +312,7 @@
   "enable_tray": "Włącz zasobnik",
   "minimize_to_tray": "Minimalizuj do zasobnika",
   "tray_notifications": "Powiadomienia",
+  "push_notifications": "Powiadomienia push",
 
   "folder_filter": "Filtr typu",
   "folder_exclude": "Wzorce wykluczeń",
