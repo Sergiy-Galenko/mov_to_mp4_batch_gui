@@ -765,6 +765,43 @@ ApplicationWindow {
                 }
             }
 
+            Panel {
+                title: I18n.t("youtube_download")
+                AppTextField {
+                    id: youtubeUrlField
+                    Layout.fillWidth: true
+                    placeholderText: I18n.t("youtube_url")
+                    enabled: backend ? !backend.youtubeDownloadRunning : false
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button {
+                        text: I18n.t("download_video")
+                        enabled: backend && !backend.youtubeDownloadRunning && String(youtubeUrlField.text).trim().length > 0
+                        onClicked: backend.downloadYoutube(youtubeUrlField.text, "video")
+                    }
+                    Button {
+                        text: I18n.t("download_audio")
+                        enabled: backend && !backend.youtubeDownloadRunning && String(youtubeUrlField.text).trim().length > 0
+                        onClicked: backend.downloadYoutube(youtubeUrlField.text, "audio")
+                    }
+                }
+                ProgressBar {
+                    Layout.fillWidth: true
+                    visible: backend ? backend.youtubeDownloadRunning || backend.youtubeDownloadProgress > 0 : false
+                    from: 0
+                    to: 1
+                    value: backend ? backend.youtubeDownloadProgress : 0
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: backend ? backend.youtubeDownloadStatus : ""
+                    color: Theme.textMuted
+                    wrapMode: Text.WordWrap
+                    font.pixelSize: Theme.fontMeta
+                }
+            }
+
             LogPanel {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 220

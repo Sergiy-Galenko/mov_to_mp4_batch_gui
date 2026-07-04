@@ -30,6 +30,7 @@ from services.preset_manager import PresetManager
 from services.queue_manager import QueueManager
 from services.settings_manager import SettingsManager
 from services.watch_service import WatchService
+from services.youtube_download_service import DownloadProgress, YouTubeDownloadError, YouTubeDownloadService
 from ui.models import HistoryModel, LogModel, QueueModel
 from utils.formatting import format_bytes, format_time
 from utils.state import load_json_file, save_json_file
@@ -69,6 +70,7 @@ class Backend(QtCore.QObject):
     codecDistributionChanged = QtCore.Signal(dict)
     resourceHistoryChanged = QtCore.Signal(list)
     sessionStatsChanged = QtCore.Signal()
+    youtubeDownloadChanged = QtCore.Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -128,6 +130,9 @@ class Backend(QtCore.QObject):
         self._total_progress = 0.0
         self._file_progress_text = "Файл: --"
         self._total_progress_text = "Всього: --"
+        self._youtube_download_running = False
+        self._youtube_download_progress = 0.0
+        self._youtube_download_status = "Готово"
         self._is_running = False
         self._is_paused = False
         self._active_task_path = ""
@@ -354,6 +359,18 @@ class Backend(QtCore.QObject):
     @QtCore.Property(str, notify=totalProgressTextChanged)
     def totalProgressText(self) -> str:
         return self._total_progress_text
+
+    @QtCore.Property(bool, notify=youtubeDownloadChanged)
+    def youtubeDownloadRunning(self) -> bool:
+        return self._youtube_download_running
+
+    @QtCore.Property(float, notify=youtubeDownloadChanged)
+    def youtubeDownloadProgress(self) -> float:
+        return self._youtube_download_progress
+
+    @QtCore.Property(str, notify=youtubeDownloadChanged)
+    def youtubeDownloadStatus(self) -> str:
+        return self._youtube_download_status
 
     @QtCore.Property(bool, notify=isRunningChanged)
     def isRunning(self) -> bool:
@@ -856,6 +873,52 @@ class Backend(QtCore.QObject):
             base = Path(folder)
             self._append_log("INFO", f"Сканую папку у фоні: {base}")
             threading.Thread(target=self._collect_folder_async, args=(base,), daemon=True).start()
+
+    @QtCore.Slot(str, str)
+    def downloadYoutube(self, url: str, mode: str) -> None:
+        clean_url = str(url or "").strip()
+        clean_mode = "audio" if str(mode or "").lower() == "audio" else "video"
+        if not clean_url:
+            self._append_log("WARN", self._tr("youtube.empty_url"))
+            return
+        if self._youtube_download_running:
+            self._append_log("WARN", self._tr("youtube.already_running"))
+            return
+
+        output_dir = Path(self.outputDir).expanduser()
+        try:
+            output_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self._append_log("ERROR", self._tr("backend.output_dir_error", error=exc))
+            return
+
+        self._set_youtube_download_state(True, 0.0, self._tr("youtube.downloading"))
+        threading.Thread(
+            target=self._download_youtube_async,
+            args=(clean_url, clean_mode, output_dir),
+            daemon=True,
+        ).start()
+
+    def _download_youtube_async(self, url: str, mode: str, output_dir: Path) -> None:
+        def on_progress(progress: DownloadProgress) -> None:
+            self.event_queue.put(("youtube_download_progress", progress.percent, progress.message))
+
+        try:
+            service = YouTubeDownloadService(self.ffmpegPath or self.ffmpeg_service.ffmpeg_path)
+            output_path = service.download(url, output_dir, mode=mode, progress_callback=on_progress)
+        except YouTubeDownloadError as exc:
+            self.event_queue.put(("youtube_download_failed", str(exc)))
+        except Exception as exc:
+            self.event_queue.put(("youtube_download_failed", str(exc) or exc.__class__.__name__))
+        else:
+            self.event_queue.put(("youtube_download_done", output_path, str(output_dir)))
+
+    def _set_youtube_download_state(self, running: bool, progress: Optional[float], status: str) -> None:
+        self._youtube_download_running = running
+        if progress is not None:
+            self._youtube_download_progress = max(0.0, min(1.0, float(progress)))
+        self._youtube_download_status = status
+        self.youtubeDownloadChanged.emit()
 
     def _collect_folder_async(self, folder: Path) -> None:
         try:
@@ -1654,6 +1717,21 @@ class Backend(QtCore.QObject):
                 elif etype == "status":
                     _, msg = event
                     self._set_status(msg)
+                elif etype == "youtube_download_progress":
+                    _, progress, msg = event
+                    self._set_youtube_download_state(True, progress, str(msg or self._tr("youtube.downloading")))
+                elif etype == "youtube_download_done":
+                    _, output_path, remember_folder = event
+                    path = Path(output_path)
+                    self._set_youtube_download_state(False, 1.0, self._tr("youtube.done"))
+                    self._append_log("OK", self._tr("youtube.added_to_queue", file=path.name))
+                    if remember_folder:
+                        self._remember_folder(remember_folder)
+                    self._add_paths([path])
+                elif etype == "youtube_download_failed":
+                    _, msg = event
+                    self._set_youtube_download_state(False, 0.0, self._tr("youtube.failed"))
+                    self._append_log("ERROR", self._tr("youtube.failed_detail", error=msg))
                 elif etype == "progress":
                     if len(event) >= 8:
                         _, file_pct, out_time, duration, file_eta, total_pct, total_eta, speed = event

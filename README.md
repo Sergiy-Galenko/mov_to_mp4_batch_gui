@@ -12,6 +12,7 @@ Desktop batch media converter for video, audio, images, and subtitles. The app i
 - Queue controls for retry, skip, remove, reorder, multi-select, batch remove, and per-file overrides.
 - Presets for common formats and platform targets.
 - FFmpeg/FFprobe integration for metadata, thumbnails, progress, ETA, and previews.
+- YouTube download support through `yt-dlp`: download a video or extract audio into the queue.
 - Performance profiles: `Quality`, `Balanced`, `Fast`, and `Small file`.
 - Target output size mode with bitrate estimation.
 - GPU-aware parallel conversion when a supported hardware encoder is available.
@@ -25,6 +26,7 @@ Desktop batch media converter for video, audio, images, and subtitles. The app i
 - FFmpeg
 - FFprobe, recommended for metadata, ETA, thumbnails, and analytics
 - PySide6
+- yt-dlp, used for YouTube and other supported video-site downloads
 
 Install dependencies:
 
@@ -53,6 +55,15 @@ Basic workflow:
 4. Right-click a queued file to open Quick convert for that one file.
 5. Watch progress, session stats, logs, and analytics.
 
+## YouTube Downloads
+
+The FFmpeg / Watch screen includes a YouTube download panel. Paste a URL and choose:
+
+- `Download video`: downloads the best practical video and adds it to the queue.
+- `Download audio`: extracts audio, defaults to MP3 behavior in the backend, and adds it to the queue.
+
+Downloaded files are saved to the configured output directory. Audio extraction and some video merges require FFmpeg, so keep the FFmpeg path configured.
+
 ## Quick Convert
 
 Right-click any item in the queue to open a focused conversion panel. The panel shows only the selected file, its media type, and the matching output formats.
@@ -78,6 +89,8 @@ Examples:
 python main.py --cli -i a.mov b.mov -o ./out --preset "Discord - Compact MP4"
 python main.py --cli -i input.mp4 -o ./out --profile "Small file" --target-size-mb 25
 python main.py --cli -i input.mov -o ./out --settings-json settings.json --language en
+python main.py --cli -o ./downloads --download-url "https://youtu.be/VIDEO_ID" --download-mode video
+python main.py --cli -o ./downloads --download-url "https://youtu.be/VIDEO_ID" --download-mode audio --download-audio-format mp3
 ```
 
 Useful CLI arguments:
@@ -89,6 +102,10 @@ Useful CLI arguments:
 - `--cpu-load-limit` and `--gpu-load-limit`: delay new tasks when system load is above the limit.
 - `--ffmpeg` and `--ffprobe`: set explicit binary paths.
 - `--language`: choose `uk`, `en`, `pl`, or `de`.
+- `--download-url`: download a YouTube/video-site URL before conversion, or download only when no `--input` is provided.
+- `--download-mode`: choose `video` or `audio`.
+- `--download-audio-format`: choose `mp3`, `m4a`, `opus`, `wav`, `flac`, or `aac`.
+- `--download-only`: download URL(s) and exit without conversion.
 
 ## Localization
 
@@ -114,7 +131,7 @@ mov_to_mp4_batch_gui/
   requirements-dev.txt
   pytest.ini
   app/                    # config, models, presets, settings
-  services/               # FFmpeg, conversion, transcription, validation
+  services/               # FFmpeg, conversion, YouTube download, transcription, validation
   ui/                     # Python backend and QML UI
     backend.py
     i18n/
@@ -160,7 +177,7 @@ python -m pytest -q
 Current expected result:
 
 ```text
-59 passed
+69 passed
 ```
 
 ## Build

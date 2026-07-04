@@ -17,6 +17,7 @@ from services.converter_service import ConverterService
 from services.ffmpeg_service import FfmpegService
 from services.preset_manager import PresetManager
 from services.queue_manager import QueueManager
+from services.youtube_download_service import DownloadProgress, YouTubeDownloadError, YouTubeDownloadService
 from utils.state import load_json_file
 
 
@@ -64,11 +65,27 @@ def _print_event(event: tuple, language: str) -> None:
         print(translate("backend.stopped" if stopped else "backend.ready", language))
 
 
+def _print_download_progress(progress: DownloadProgress) -> None:
+    if progress.percent is not None:
+        print(f"download {progress.percent * 100:.1f}% | {progress.message}")
+    else:
+        print(f"download {progress.message}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Media Converter CLI")
     parser.add_argument("--cli", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("-i", "--input", action="append", nargs="+", required=True, help="Input file paths")
+    parser.add_argument("-i", "--input", action="append", nargs="+", help="Input file paths")
     parser.add_argument("-o", "--output-dir", required=True, help="Output directory")
+    parser.add_argument("--download-url", action="append", help="Download a YouTube URL into the output directory")
+    parser.add_argument("--download-mode", choices=["video", "audio"], default="video", help="YouTube download mode")
+    parser.add_argument(
+        "--download-audio-format",
+        choices=sorted(YouTubeDownloadService.AUDIO_FORMATS),
+        default="mp3",
+        help="Audio format for --download-mode audio",
+    )
+    parser.add_argument("--download-only", action="store_true", help="Download URL(s) and exit without conversion")
     parser.add_argument("--preset", help="Preset name from the preset store")
     parser.add_argument("--settings-json", help="JSON file with GUI-compatible settings")
     parser.add_argument("--profile", choices=PROFILE_NAMES, help="Performance profile")
@@ -110,6 +127,47 @@ def main(argv: List[str] | None = None) -> int:
         settings_map["gpu_load_limit"] = args.gpu_load_limit
 
     input_paths = _flatten_inputs(args.input or [])
+    if not input_paths and not args.download_url:
+        print(translate("backend.no_tasks", language), file=sys.stderr)
+        return 2
+
+    download_only = args.download_only or bool(args.download_url and not input_paths)
+    ffmpeg_path = args.ffmpeg or find_ffmpeg()
+    ffprobe_path = args.ffprobe or find_ffprobe(ffmpeg_path)
+    if not ffmpeg_path and (not download_only or args.download_mode == "audio"):
+        print(translate("backend.ffmpeg_missing", language), file=sys.stderr)
+        return 2
+
+    out_dir = Path(args.output_dir).expanduser()
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(translate("backend.output_dir_error", language, error=exc), file=sys.stderr)
+        return 2
+
+    downloaded_paths: List[Path] = []
+    if args.download_url:
+        downloader = YouTubeDownloadService(ffmpeg_path)
+        for url in args.download_url:
+            try:
+                print(f"download {args.download_mode}: {url}")
+                downloaded = downloader.download(
+                    url,
+                    out_dir,
+                    mode=args.download_mode,
+                    audio_format=args.download_audio_format,
+                    progress_callback=_print_download_progress,
+                )
+            except YouTubeDownloadError as exc:
+                print(f"YouTube download failed: {exc}", file=sys.stderr)
+                return 2
+            print(f"downloaded: {downloaded}")
+            downloaded_paths.append(downloaded)
+
+    if download_only:
+        return 0
+
+    input_paths.extend(downloaded_paths)
     queue_manager = QueueManager()
     tasks, duplicates, unsupported = queue_manager.build_items(input_paths, [])
     if duplicates:
@@ -120,19 +178,11 @@ def main(argv: List[str] | None = None) -> int:
         print(translate("backend.no_tasks", language), file=sys.stderr)
         return 2
 
-    ffmpeg_path = args.ffmpeg or find_ffmpeg()
-    ffprobe_path = args.ffprobe or find_ffprobe(ffmpeg_path)
-    if not ffmpeg_path:
-        print(translate("backend.ffmpeg_missing", language), file=sys.stderr)
-        return 2
-
     ffmpeg = FfmpegService(ffmpeg_path, ffprobe_path)
     ffmpeg.encoder_caps = ffmpeg.detect_encoders()
     events: "queue.Queue[tuple]" = queue.Queue()
     converter = ConverterService(ffmpeg, events)
     settings = settings_map_to_model(settings_map, defaults=ConversionSettings())
-    out_dir = Path(args.output_dir).expanduser()
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     converter.start(tasks, settings, out_dir)
     while converter.thread and converter.thread.is_alive():
