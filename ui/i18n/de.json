@@ -130,6 +130,7 @@
   "output_folder_required_detail": "Wähle vor dem Start, wo konvertierte Dateien und YouTube-Downloads gespeichert werden.",
   "open": "Öffnen",
   "preview": "Vorschau",
+  "update_ffmpeg": "FFmpeg aktualisieren",
   "template": "Vorlage",
   "platform_profile": "Plattformprofil",
   "performance_profile": "Leistungsprofil",

@@ -31,6 +31,7 @@ def _runtime_roots() -> Iterable[Path]:
     project_root = Path(__file__).resolve().parents[1]
     yield project_root
     yield project_root / "bin"
+    yield APP_DATA_DIR / "ffmpeg" / "current" / "bin"
 
     env_dir = os.environ.get("MEDIA_CONVERTER_FFMPEG_DIR", "").strip()
     if env_dir:

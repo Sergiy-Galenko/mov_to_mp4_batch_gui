@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import queue
+import shutil
 import subprocess
 import threading
 import time
@@ -25,6 +26,7 @@ from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
 from app.performance_profiles import prediction_factor
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
+from services.ffmpeg_auto_installer import FfmpegAutoInstaller, FfmpegAutoInstallResult
 from services.folder_scanner import FolderScanner
 from services.history_store import HistoryStore
 from services.media_preview_service import MediaPreviewService
@@ -101,6 +103,7 @@ class Backend(QtCore.QObject):
         self._validation = None
         self.queue_manager = QueueManager()
         self.settings_manager = SettingsManager()
+        self.ffmpeg_auto_installer = FfmpegAutoInstaller()
         self.preset_manager = PresetManager()
         self.history_store = HistoryStore()
         self.watch_service = WatchService(
@@ -165,6 +168,7 @@ class Backend(QtCore.QObject):
         self._youtube_history = self.settings_manager.youtube_history()
         self._youtube_cookies_path = self.settings_manager.youtube_cookies_path()
         self._youtube_cancel_event: Optional[threading.Event] = None
+        self._ffmpeg_auto_install_running = False
         self._is_running = False
         self._is_paused = False
         self._active_task_path = ""
@@ -1060,17 +1064,77 @@ class Backend(QtCore.QObject):
 
     @QtCore.Slot()
     def refreshEncoders(self) -> None:
-        if self.ffmpegPath:
-            self.ffmpeg_service.ffmpeg_path = self.ffmpegPath
+        candidate = self.ffmpegPath or self.ffmpeg_service.ffmpeg_path or ""
+        if candidate and (Path(candidate).expanduser().exists() or shutil.which(candidate)):
+            self.ffmpeg_service.ffmpeg_path = candidate
+        else:
+            self.ffmpeg_service.ffmpeg_path = ""
         if not self.ffmpeg_service.ffmpeg_path:
-            self._append_log("ERROR", self._tr("backend.ffmpeg_missing"))
+            self._append_log("WARN", "FFmpeg не знайдено. Автоматично завантажую локальну копію...")
+            self._start_ffmpeg_auto_install(force=False)
             return
+        if self.ffmpeg_auto_installer.should_run(self.ffmpeg_service.ffmpeg_path, auto_update=True, force=False):
+            self._start_ffmpeg_auto_install(force=False)
         self._append_log("INFO", "Перевіряю FFmpeg encoder-и...")
         threading.Thread(
             target=self._detect_encoders_async,
             args=(self.ffmpeg_service.ffmpeg_path,),
             daemon=True,
         ).start()
+
+    @QtCore.Slot()
+    def updateFfmpeg(self) -> None:
+        self._start_ffmpeg_auto_install(force=True)
+
+    def _start_ffmpeg_auto_install(self, *, force: bool = False) -> None:
+        if self._ffmpeg_auto_install_running:
+            return
+        current = self.ffmpegPath or self.ffmpeg_service.ffmpeg_path or ""
+        if not self.ffmpeg_auto_installer.should_run(current, auto_update=True, force=force):
+            return
+        self._ffmpeg_auto_install_running = True
+        self._encoder_info = "FFmpeg: завантаження/оновлення..."
+        self.encoderInfoChanged.emit()
+        threading.Thread(
+            target=self._ffmpeg_auto_install_async,
+            args=(current, force),
+            daemon=True,
+        ).start()
+
+    def _ffmpeg_auto_install_async(self, current_path: str, force: bool) -> None:
+        def progress(message: str) -> None:
+            self.event_queue.put(("ffmpeg_auto_progress", message))
+
+        result = self.ffmpeg_auto_installer.ensure(
+            current_path,
+            auto_update=True,
+            force=force,
+            progress_cb=progress,
+        )
+        self.event_queue.put(("ffmpeg_auto_done", result))
+
+    def _apply_ffmpeg_auto_install_result(self, result: FfmpegAutoInstallResult) -> None:
+        self._ffmpeg_auto_install_running = False
+        if result.status in {"external", "current"}:
+            return
+        if result.status == "unsupported":
+            self._append_log("WARN", result.message)
+            self._encoder_info = self._tr("backend.ffmpeg_missing")
+            self.encoderInfoChanged.emit()
+            return
+        if result.status == "error":
+            self._append_log("ERROR", result.message)
+            self._encoder_info = self._tr("backend.ffmpeg_missing")
+            self.encoderInfoChanged.emit()
+            return
+        if result.ffmpeg_path:
+            self.ffmpegPath = result.ffmpeg_path
+            self.ffmpeg_service.set_paths(result.ffmpeg_path, result.ffprobe_path or find_ffprobe(result.ffmpeg_path))
+            self.media_preview.ffmpeg_path = self.ffmpeg_service.ffmpeg_path or ""
+            self.media_preview.ffprobe_path = self.ffmpeg_service.ffprobe_path or ""
+            self._append_log("OK", f"{result.message} {result.ffmpeg_path}")
+            self.toastRequested.emit("FFmpeg готовий")
+            self.refreshEncoders()
 
     def _detect_encoders_async(self, ffmpeg_path: str) -> None:
         ffprobe_path = find_ffprobe(ffmpeg_path)
@@ -2162,6 +2226,13 @@ class Backend(QtCore.QObject):
                 elif etype == "encoder_detection":
                     _, ffmpeg_path, ffprobe_path, caps = event
                     self._apply_encoder_detection(ffmpeg_path, ffprobe_path, caps)
+                elif etype == "ffmpeg_auto_progress":
+                    _, msg = event
+                    self._append_log("INFO", str(msg))
+                    self._set_status(str(msg))
+                elif etype == "ffmpeg_auto_done":
+                    _, result = event
+                    self._apply_ffmpeg_auto_install_result(result)
                 elif etype == "status":
                     _, msg = event
                     self._set_status(msg)

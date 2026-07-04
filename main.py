@@ -1,8 +1,23 @@
-﻿import sys
+import sys
 from pathlib import Path
 
 
+def _bootstrap_dependencies() -> None:
+    base_dir = Path(__file__).resolve().parent
+    try:
+        from app.dependency_bootstrap import ensure_runtime_dependencies
+
+        installed = ensure_runtime_dependencies(base_dir / "requirements.txt")
+        if installed:
+            print("Installed missing Python libraries: " + ", ".join(installed))
+    except Exception as exc:
+        print(f"Dependency bootstrap failed: {exc}", file=sys.stderr)
+        raise
+
+
 def main() -> None:
+    _bootstrap_dependencies()
+
     if "--cli" in sys.argv:
         from cli import main as cli_main
 

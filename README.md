@@ -13,6 +13,8 @@ Desktop batch media converter for video, audio, images, and subtitles. The app i
 - Queue controls for retry, skip, remove, reorder, multi-select, batch remove, and per-file overrides.
 - Presets for common formats and platform targets.
 - FFmpeg/FFprobe integration for metadata, thumbnails, progress, ETA, and previews.
+- Automatic FFmpeg bootstrap on Windows x64: if FFmpeg is missing, the app downloads a local managed copy and checks it for updates on startup.
+- Automatic Python dependency bootstrap: missing runtime libraries from `requirements.txt` are installed on startup with `python -m pip install -r requirements.txt`.
 - YouTube download support through `yt-dlp`: download a video or extract audio into the queue.
 - Device profiles for iPhone/iPad/Apple TV/Android/Samsung TV/consoles/TV sticks/action cameras/DVD/Blu-ray targets.
 - Smart Convert mode for per-file codec/CRF/preset recommendations, remux detection, two-pass target-size encoding, quality checks, and A/B samples.
@@ -42,12 +44,26 @@ Install dependencies:
 python -m pip install -r requirements.txt
 ```
 
+The app also runs this dependency check automatically at startup. To disable automatic Python package installation in managed environments, set:
+
+```bash
+MEDIA_CONVERTER_SKIP_DEP_BOOTSTRAP=1
+```
+
 Check FFmpeg:
 
 ```bash
 ffmpeg -version
 ffprobe -version
 ```
+
+On Windows x64 the GUI can install FFmpeg automatically into the app data folder:
+
+```text
+%LOCALAPPDATA%\MediaConverter\ffmpeg\current
+```
+
+The app does not modify the system `PATH`. If you manually choose an external FFmpeg binary, that path is respected and the app does not overwrite it.
 
 ## Run The GUI
 

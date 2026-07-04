@@ -1117,6 +1117,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     SecondaryButton { text: I18n.t("choose"); onClicked: backend && backend.pickFfmpeg() }
                     SecondaryButton { text: I18n.t("refresh"); onClicked: backend && backend.refreshEncoders() }
+                    SecondaryButton { text: I18n.t("update_ffmpeg"); onClicked: backend && backend.updateFfmpeg() }
                 }
                 Label { Layout.fillWidth: true; text: backend ? backend.encoderInfo : ""; color: Theme.textMuted; wrapMode: Text.WordWrap; font.pixelSize: Theme.fontMeta }
                 AppTextField { id: ffmpegScreenWatchField; text: backend ? backend.watchFolder : ""; placeholderText: I18n.t("watch_folder"); onEditingFinished: { if (backend) backend.watchFolder = text } }
@@ -2246,6 +2247,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 SecondaryButton { text: I18n.t("choose"); onClicked: backend && backend.pickFfmpeg() }
                 SecondaryButton { text: I18n.t("refresh"); onClicked: backend && backend.refreshEncoders() }
+                SecondaryButton { text: I18n.t("update_ffmpeg"); onClicked: backend && backend.updateFfmpeg() }
             }
             Label { Layout.fillWidth: true; text: backend ? backend.encoderInfo : ""; color: Theme.textMuted; wrapMode: Text.WordWrap; font.pixelSize: Theme.fontMeta }
             AppTextField { id: watchFolderField; text: backend ? backend.watchFolder : ""; placeholderText: I18n.t("watch_folder"); onEditingFinished: { if (backend) backend.watchFolder = text } }

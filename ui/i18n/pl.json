@@ -130,6 +130,7 @@
   "output_folder_required_detail": "Przed startem wybierz, gdzie zapisywać konwertowane pliki i pobrania z YouTube.",
   "open": "Otwórz",
   "preview": "Podgląd",
+  "update_ffmpeg": "Aktualizuj FFmpeg",
   "template": "Szablon",
   "platform_profile": "Profil platformy",
   "performance_profile": "Profil wydajności",
