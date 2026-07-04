@@ -80,10 +80,9 @@ Rectangle {
                                 Label {
                                     text: modelData.icon
                                     color: root.activeIndex === index ? Theme.accent : Theme.textSecondary
-                                    font.family: Theme.monoFont
-                                    font.pixelSize: Theme.fontSizeSm
+                                    font.pixelSize: Theme.fontSizeLg
                                     font.bold: root.activeIndex === index
-                                    Layout.preferredWidth: 24
+                                    Layout.preferredWidth: 30
                                     horizontalAlignment: Text.AlignHCenter
                                 }
 
@@ -113,17 +112,17 @@ Rectangle {
 
         SecondaryButton {
             Layout.fillWidth: true
-            text: root.collapsed ? "+" : "+  " + I18n.t("add_files")
+            text: root.collapsed ? "➕" : "➕  " + I18n.t("add_files")
             onClicked: root.addFilesRequested()
         }
         SecondaryButton {
             Layout.fillWidth: true
-            text: root.collapsed ? "F" : "F  " + I18n.t("add_folder")
+            text: root.collapsed ? "📁" : "📁  " + I18n.t("add_folder")
             onClicked: root.addFolderRequested()
         }
         SecondaryButton {
             Layout.fillWidth: true
-            text: root.collapsed ? "D" : "D  " + I18n.t("hash_dedupe")
+            text: root.collapsed ? "🔍" : "🔍  " + I18n.t("hash_dedupe")
             onClicked: root.dedupeRequested()
         }
     }

@@ -49,27 +49,27 @@ ApplicationWindow {
     property string pendingSettingsTarget: ""
     property bool advancedSettingsExpanded: false
     property var navigationItems: [
-        { title: "queue", icon: "Q", page: 0, target: "" },
-        { title: "analytics", icon: "A", page: 1, target: "" },
-        { title: "presets", icon: "P", page: 2, target: "" },
-        { title: "ffmpeg", icon: "F", page: 3, target: "" },
-        { title: "downloads", icon: "D", page: 4, target: "" },
-        { title: "smart_convert", icon: "S", page: 5, target: "smart_convert" },
-        { title: "device_profiles", icon: "DP", page: 5, target: "device_profiles" },
-        { title: "video_editor", icon: "VE", page: 5, target: "video_editor" },
-        { title: "subtitle_tools", icon: "ST", page: 5, target: "subtitle_tools" },
-        { title: "privacy_security", icon: "PS", page: 5, target: "privacy_security" },
-        { title: "cloud_integration", icon: "CL", page: 5, target: "cloud_integration" },
-        { title: "run", icon: "R", page: 5, target: "run" },
-        { title: "core", icon: "C", page: 5, target: "core" },
-        { title: "output", icon: "O", page: 5, target: "output" },
-        { title: "video", icon: "V", page: 5, target: "video" },
-        { title: "audio_subtitles", icon: "AS", page: 5, target: "audio_subtitles" },
-        { title: "images_sheets", icon: "IM", page: 5, target: "images_sheets" },
-        { title: "watermark_text", icon: "WT", page: 5, target: "watermark_text" },
-        { title: "metadata_hooks", icon: "MH", page: 5, target: "metadata_hooks" },
-        { title: "selected_override", icon: "OV", page: 5, target: "selected_override" },
-        { title: "ffmpeg_watch", icon: "FW", page: 5, target: "ffmpeg_watch" }
+        { title: "queue", icon: "📁", page: 0, target: "" },
+        { title: "analytics", icon: "📊", page: 1, target: "" },
+        { title: "presets", icon: "🎛️", page: 2, target: "" },
+        { title: "ffmpeg", icon: "🧰", page: 3, target: "" },
+        { title: "downloads", icon: "⬇️", page: 4, target: "" },
+        { title: "smart_convert", icon: "🧠", page: 5, target: "smart_convert" },
+        { title: "device_profiles", icon: "📱", page: 5, target: "device_profiles" },
+        { title: "video_editor", icon: "✂️", page: 5, target: "video_editor" },
+        { title: "subtitle_tools", icon: "📝", page: 5, target: "subtitle_tools" },
+        { title: "privacy_security", icon: "🔐", page: 5, target: "privacy_security" },
+        { title: "cloud_integration", icon: "☁️", page: 5, target: "cloud_integration" },
+        { title: "run", icon: "🚀", page: 5, target: "run" },
+        { title: "core", icon: "⚙️", page: 5, target: "core" },
+        { title: "output", icon: "📤", page: 5, target: "output" },
+        { title: "video", icon: "🎬", page: 5, target: "video" },
+        { title: "audio_subtitles", icon: "🔊", page: 5, target: "audio_subtitles" },
+        { title: "images_sheets", icon: "🖼️", page: 5, target: "images_sheets" },
+        { title: "watermark_text", icon: "✍️", page: 5, target: "watermark_text" },
+        { title: "metadata_hooks", icon: "🏷️", page: 5, target: "metadata_hooks" },
+        { title: "selected_override", icon: "🧩", page: 5, target: "selected_override" },
+        { title: "ffmpeg_watch", icon: "🛠️", page: 5, target: "ffmpeg_watch" }
     ]
 
     property var operationOptions: ["convert", "audio_only", "auto_subtitle", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet"]
