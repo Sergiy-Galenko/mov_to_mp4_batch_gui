@@ -15,7 +15,7 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic"
 AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".opus", ".ogg", ".wma", ".aiff", ".aif", ".mka"}
 SUBTITLE_EXTS = {".srt", ".ass", ".ssa", ".vtt", ".webvtt"}
 
-OUT_VIDEO_FORMATS = ["mp4", "mkv", "webm", "mov", "avi", "gif"]
+OUT_VIDEO_FORMATS = ["mp4", "mkv", "webm", "mov", "avi", "gif", "mpg", "m2ts"]
 OUT_IMAGE_FORMATS = ["jpg", "png", "webp", "bmp", "tiff"]
 OUT_AUDIO_FORMATS = ["mp3", "m4a", "aac", "wav", "flac", "opus"]
 OUT_SUBTITLE_FORMATS = ["srt", "ass", "vtt"]
@@ -63,6 +63,8 @@ VIDEO_CODEC_OPTIONS = [
     "auto",
     "H.264 (AVC)",
     "H.265 (HEVC)",
+    "ProRes",
+    "MPEG-2",
     "AV1",
     "VP9 (WebM)",
 ]
@@ -72,6 +74,8 @@ VIDEO_CODEC_MAP = {
     "Авто": "auto",
     "H.264 (AVC)": "h264",
     "H.265 (HEVC)": "h265",
+    "ProRes": "prores",
+    "MPEG-2": "mpeg2",
     "AV1": "av1",
     "VP9 (WebM)": "vp9",
 }

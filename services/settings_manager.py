@@ -27,7 +27,10 @@ class SettingsManager:
         return [folder for folder in folders if isinstance(folder, str) and folder][:RECENT_FOLDERS_LIMIT]
 
     def output_dir(self) -> str:
-        return str(self.state.get("output_dir") or DEFAULT_OUTPUT_DIR)
+        return str(self.state.get("output_dir") or "")
+
+    def output_dir_configured(self) -> bool:
+        return bool(self.state.get("output_dir_configured")) and bool(str(self.state.get("output_dir") or "").strip())
 
     def ffmpeg_path(self, fallback: Optional[str]) -> str:
         return str(self.state.get("ffmpeg_path") or fallback or "")
@@ -57,6 +60,7 @@ class SettingsManager:
         recent_folders: List[str],
         watch_folder: str,
         output_dir: str,
+        output_dir_configured: bool,
         ffmpeg_path: str,
         ui_language: str,
         last_settings: Dict[str, Any],
@@ -70,6 +74,7 @@ class SettingsManager:
             "recent_folders": recent_folders[:RECENT_FOLDERS_LIMIT],
             "watch_folder": watch_folder,
             "output_dir": output_dir,
+            "output_dir_configured": bool(output_dir_configured) and bool(str(output_dir or "").strip()),
             "ffmpeg_path": ffmpeg_path,
             "ui_language": normalize_language(ui_language),
             "language": normalize_language(ui_language),

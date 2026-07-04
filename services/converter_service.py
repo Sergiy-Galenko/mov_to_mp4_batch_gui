@@ -12,6 +12,9 @@ from typing import Dict, List, Optional, Tuple
 from app.constants import PROGRESS_THROTTLE_SEC
 from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
 from services.ffmpeg_service import FfmpegService, parse_progress_line
+from services.cloud_upload_service import CloudUploadError, CloudUploadService
+from services.security_service import secure_delete, write_checksum_sidecar
+from services.smart_convert_service import apply_smart_settings, parse_ab_crfs, recommend_settings
 from services.transcription_service import TranscriptionService
 from services.validation_service import operation_supports_media
 from utils.files import build_merge_output_path, build_output_path, sanitize_file_stem
@@ -32,6 +35,7 @@ class ConverterService:
         self.ffmpeg = ffmpeg
         self.queue = event_queue
         self.transcriber = transcriber or TranscriptionService()
+        self.cloud_uploader = CloudUploadService()
         self.stop_event = threading.Event()
         self.pause_event = threading.Event()
         self.skip_event = threading.Event()
@@ -43,6 +47,59 @@ class ConverterService:
         self.media_info: Dict[Path, MediaInfo] = {}
         self.prefetched_media_info: Dict[Path, MediaInfo] = {}
         self.prefetch_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="converter-ffprobe")
+
+    def _result_output_paths(self, result_output: str) -> List[Path]:
+        paths: List[Path] = []
+        for raw in str(result_output or "").split(";"):
+            text = raw.strip()
+            if not text:
+                continue
+            path = Path(text).expanduser()
+            if path.exists() and path.is_file():
+                paths.append(path)
+        return paths
+
+    def _post_process_success(self, task: TaskItem, settings: ConversionSettings, result_output: str) -> None:
+        output_paths = self._result_output_paths(result_output)
+        if not output_paths:
+            return
+        checksum_algorithm = str(settings.checksum_algorithm or "none").lower()
+        for output_path in output_paths:
+            if checksum_algorithm in {"md5", "sha256"}:
+                try:
+                    sidecar = write_checksum_sidecar(output_path, checksum_algorithm)
+                    self._log("OK", f"{checksum_algorithm.upper()} записано: {sidecar.name}")
+                except Exception as exc:
+                    self._log("WARN", f"Не вдалося записати checksum для {output_path.name}: {exc}")
+            if settings.cloud_upload_enabled:
+                try:
+                    self.cloud_uploader.upload(output_path, settings, log_cb=self._log)
+                    self._log("OK", f"Cloud upload готовий: {output_path.name}")
+                except CloudUploadError as exc:
+                    self._log("WARN", f"Cloud upload помилка для {output_path.name}: {exc}")
+            if settings.smart_integrity_check:
+                ok, details = self.ffmpeg.check_media_integrity(output_path)
+                if ok:
+                    self._log("OK", f"Integrity check OK: {output_path.name}")
+                else:
+                    self._log("WARN", f"Integrity check failed for {output_path.name}: {details or 'decode error'}")
+            if task.media_type == "video" and settings.smart_quality_metric in {"ssim", "vmaf"}:
+                ok, score, details = self.ffmpeg.measure_quality(task.path, output_path, settings.smart_quality_metric)
+                label = settings.smart_quality_metric.upper()
+                if ok and score is not None:
+                    self._log("OK", f"{label}: {score:.4f} для {output_path.name}")
+                elif ok:
+                    self._log("OK", f"{label} check завершено для {output_path.name}")
+                else:
+                    self._log("WARN", f"{label} check failed for {output_path.name}: {details or 'metric unavailable'}")
+        if settings.secure_delete_original:
+            try:
+                source = task.path.expanduser()
+                if source.exists() and source.is_file() and all(source.resolve() != path.resolve() for path in output_paths):
+                    secure_delete(source)
+                    self._log("WARN", f"Secure delete виконано для оригіналу: {source.name}")
+            except Exception as exc:
+                self._log("WARN", f"Secure delete не виконано для {task.path.name}: {exc}")
 
     def start(self, tasks: List[TaskItem], settings: ConversionSettings, out_dir: Path) -> None:
         if self.thread and self.thread.is_alive():
@@ -175,7 +232,86 @@ class ConverterService:
         self._emit("task_state", task_path, status, message, output_path)
 
     def _effective_settings(self, task: TaskItem, defaults: ConversionSettings) -> ConversionSettings:
-        return task.resolved_settings or defaults
+        base = task.resolved_settings or defaults
+        info = self.media_info.get(task.path)
+        return apply_smart_settings(base, info, media_type=task.media_type, source_path=task.path)
+
+    def _can_use_two_pass(self, settings: ConversionSettings, cmd: List[str], allow_fast: bool) -> bool:
+        if allow_fast or not settings.smart_two_pass or not settings.target_size_mb:
+            return False
+        joined = " ".join(cmd)
+        if "-b:v" not in cmd or "-c:v" not in cmd:
+            return False
+        unsupported = {"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_qsv", "hevc_qsv", "av1_qsv", "h264_amf", "hevc_amf", "av1_amf", "prores_ks"}
+        return not any(encoder in joined for encoder in unsupported)
+
+    def _cleanup_passlog(self, passlog: Path) -> None:
+        for candidate in passlog.parent.glob(passlog.name + "*"):
+            try:
+                candidate.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    def _run_video_command(
+        self,
+        cmd: List[str],
+        outp: Path,
+        settings: ConversionSettings,
+        duration: Optional[float],
+        done_duration: float,
+        total_duration: float,
+        done_files: int,
+        total_files: int,
+        total_start: float,
+        allow_fast: bool,
+    ) -> int:
+        if not self._can_use_two_pass(settings, cmd, allow_fast):
+            return self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
+        passlog = outp.with_suffix(outp.suffix + ".ffmpeg2pass")
+        pass1, pass2 = self.ffmpeg.build_two_pass_commands(cmd, passlog)
+        self._log("INFO", f"Two-pass encoding: pass 1/2 для {outp.name}")
+        rc = self._run_ffmpeg(pass1, duration, done_duration, total_duration, done_files, total_files, total_start)
+        if rc == 0 and not self.stop_event.is_set():
+            self._log("INFO", f"Two-pass encoding: pass 2/2 для {outp.name}")
+            rc = self._run_ffmpeg(pass2, duration, done_duration, total_duration, done_files, total_files, total_start)
+        self._cleanup_passlog(passlog)
+        return rc
+
+    def _run_ab_samples(self, task: TaskItem, outp: Path, settings: ConversionSettings, info: Optional[MediaInfo]) -> None:
+        if not settings.smart_ab_test or task.media_type != "video":
+            return
+        crfs = parse_ab_crfs(settings.smart_ab_crfs)
+        if not crfs:
+            return
+        sample_duration = max(1, min(120, int(settings.smart_ab_duration)))
+        start = settings.trim_start if settings.trim_start is not None else 0.0
+        end = start + sample_duration
+        self._log("INFO", f"A/B samples: {', '.join(str(crf) for crf in crfs)} CRF, {sample_duration}s")
+        for crf in crfs:
+            if self.stop_event.is_set() or self.skip_event.is_set():
+                return
+            sample_path = outp.with_name(f"{outp.stem}_ab_crf{crf}{outp.suffix}")
+            sample_settings = replace(
+                settings,
+                crf=crf,
+                target_size_mb=None,
+                smart_ab_test=False,
+                smart_two_pass=False,
+                overwrite=True,
+                trim_start=start,
+                trim_end=end,
+            )
+            cmd = self.ffmpeg.build_video_command(task.path, sample_path, sample_settings, info, False, log_cb=self._log)
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=max(60, sample_duration * 30))
+            except Exception as exc:
+                self._log("WARN", f"A/B sample CRF {crf} failed: {exc}")
+                continue
+            if result.returncode == 0 and sample_path.exists():
+                self._log("OK", f"A/B sample готовий: {sample_path.name}")
+            else:
+                details = (result.stderr or result.stdout or "").strip()
+                self._log("WARN", f"A/B sample CRF {crf} failed: {details[-300:]}")
 
     def _task_duration(self, task: TaskItem) -> float:
         info = self.media_info.get(task.path)
@@ -768,10 +904,22 @@ class ConverterService:
                                 info,
                                 filters_used,
                                 audio_processing,
+                                allow_remux=settings_for_task.smart_convert_enabled and settings_for_task.smart_reencode_detection,
                             )
+                            if (
+                                settings_for_task.smart_convert_enabled
+                                and settings_for_task.smart_reencode_detection
+                                and fast_copy_ok
+                                and not self.ffmpeg.source_matches_codec_choice(info, settings_for_task.video_codec, outp.suffix)
+                            ):
+                                fast_copy_ok = False
+                                reason = "Smart Convert обрав інший кодек"
                             allow_fast = settings_for_task.fast_copy and fast_copy_ok
                             if settings_for_task.fast_copy and not fast_copy_ok:
                                 self._log("WARN", f"Fast copy вимкнено для {task.path.name}: {reason}")
+                            if settings_for_task.smart_convert_enabled:
+                                rec = recommend_settings(settings_for_task, info, task.path)
+                                self._log("INFO", f"Smart Convert: {rec.reason} -> {rec.video_codec}, CRF {rec.crf}, preset {rec.preset}")
                             cmd = self.ffmpeg.build_video_command(
                                 task.path,
                                 outp,
@@ -780,6 +928,7 @@ class ConverterService:
                                 allow_fast,
                                 log_cb=self._log,
                             )
+                            self._run_ab_samples(task, outp, settings_for_task, info)
                         elif task.media_type == "image":
                             cmd = self.ffmpeg.build_image_command(task.path, outp, settings_for_task, log_cb=self._log)
                         elif task.media_type == "audio":
@@ -788,7 +937,21 @@ class ConverterService:
                             cmd = self.ffmpeg.build_subtitle_file_command(task.path, outp, settings_for_task)
                         else:
                             raise ValueError(f"Невідомий тип файлу: {task.media_type}")
-                        rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
+                        if task.media_type == "video" and op in {"convert", "subtitle_burn"}:
+                            rc = self._run_video_command(
+                                cmd,
+                                outp,
+                                settings_for_task,
+                                duration,
+                                done_duration,
+                                total_duration,
+                                done_files,
+                                total_files,
+                                total_start,
+                                allow_fast,
+                            )
+                        else:
+                            rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
                         if self.stop_event.is_set():
                             status = TaskStatus.CANCELLED
                             result_message = "Скасовано користувачем"
@@ -909,6 +1072,9 @@ class ConverterService:
                     result_output = ""
                     self._log("WARN", f"Пропущено користувачем: {task.path.name}")
                     self._task_state(task.path, "skipped", result_message)
+
+                if status == TaskStatus.SUCCESS or status == "success":
+                    self._post_process_success(task, settings_for_task, result_output)
 
                 done_files += 1
                 if duration:

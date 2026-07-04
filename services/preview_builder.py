@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from app.models import ConversionSettings, MediaInfo, PreviewItem, PreviewSummary, TaskItem
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
+from services.smart_convert_service import apply_smart_settings
 from services.validation_service import OPERATION_LABELS, operation_supports_media
 from utils.files import build_merge_output_path, build_output_path
 
@@ -38,7 +39,13 @@ class PreviewBuilder:
         resolved_by_path: Dict[Path, ConversionSettings] = {}
         for task in tasks:
             merged_map = merge_settings_maps(settings_map, task.overrides)
-            resolved_by_path[task.path] = settings_map_to_model(merged_map, defaults=ConversionSettings())
+            resolved = settings_map_to_model(merged_map, defaults=ConversionSettings())
+            resolved_by_path[task.path] = apply_smart_settings(
+                resolved,
+                info_cache.get(task.path),
+                media_type=task.media_type,
+                source_path=task.path,
+            )
 
         merge_candidates = [
             task
@@ -159,7 +166,30 @@ class PreviewBuilder:
             op = settings.operation
             if op in {"convert", "subtitle_burn"}:
                 if task.media_type == "video":
-                    cmd = self.ffmpeg.build_video_command(task.path, output_path, settings, info_cache.get(task.path), False)
+                    info = info_cache.get(task.path)
+                    filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(task.path, settings, output_path.suffix)
+                    audio_processing = self.ffmpeg.has_audio_processing(settings) or bool(settings.replace_audio_path.strip())
+                    allow_fast, _ = self.ffmpeg.fast_copy_allowed(
+                        task.path,
+                        output_path.suffix,
+                        info,
+                        filters_used,
+                        audio_processing,
+                        allow_remux=settings.smart_convert_enabled and settings.smart_reencode_detection,
+                    )
+                    if (
+                        settings.smart_convert_enabled
+                        and settings.smart_reencode_detection
+                        and allow_fast
+                        and not self.ffmpeg.source_matches_codec_choice(info, settings.video_codec, output_path.suffix)
+                    ):
+                        allow_fast = False
+                    allow_fast = settings.fast_copy and allow_fast
+                    cmd = self.ffmpeg.build_video_command(task.path, output_path, settings, info, allow_fast)
+                    if settings.smart_two_pass and settings.target_size_mb and not allow_fast:
+                        passlog = output_path.with_suffix(output_path.suffix + ".ffmpeg2pass")
+                        pass1, pass2 = self.ffmpeg.build_two_pass_commands(cmd, passlog)
+                        return self._format_command(pass1) + "\n" + self._format_command(pass2)
                 elif task.media_type == "image":
                     cmd = self.ffmpeg.build_image_command(task.path, output_path, settings)
                 elif task.media_type == "audio":
@@ -305,4 +335,10 @@ class PreviewBuilder:
             params.append("watermark")
         if settings.text_wm:
             params.append("text")
+        if settings.smart_convert_enabled:
+            params.append("smart")
+        if settings.smart_two_pass and settings.target_size_mb:
+            params.append("two-pass")
+        if settings.smart_quality_metric != "none":
+            params.append(settings.smart_quality_metric.upper())
         return params

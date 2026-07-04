@@ -1,5 +1,7 @@
 ﻿import json
 import subprocess
+import os
+import re
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -16,6 +18,29 @@ def escape_drawtext(text: str) -> str:
 
 def escape_filter_path(path: str) -> str:
     return path.replace("\\", "/").replace(":", "\\:")
+
+
+def _ass_color(value: str) -> str:
+    raw = str(value or "").strip()
+    named = {
+        "white": "&H00FFFFFF",
+        "black": "&H00000000",
+        "red": "&H000000FF",
+        "green": "&H0000FF00",
+        "blue": "&H00FF0000",
+        "yellow": "&H0000FFFF",
+    }
+    if raw.lower() in named:
+        return named[raw.lower()]
+    if raw.startswith("#") and len(raw) == 7:
+        try:
+            r = int(raw[1:3], 16)
+            g = int(raw[3:5], 16)
+            b = int(raw[5:7], 16)
+            return f"&H00{b:02X}{g:02X}{r:02X}"
+        except ValueError:
+            return named["white"]
+    return raw or named["white"]
 
 
 def parse_progress_line(line: str) -> Dict[str, str]:
@@ -91,6 +116,10 @@ def _container_supports_codec(ext: str, vcodec: str) -> bool:
     return True
 
 
+def _null_output() -> str:
+    return "NUL" if os.name == "nt" else "/dev/null"
+
+
 def _bitrate_to_kbps(value: str, fallback: int = 192) -> int:
     text = str(value or "").strip().lower()
     if not text:
@@ -103,6 +132,23 @@ def _bitrate_to_kbps(value: str, fallback: int = 192) -> int:
         return max(1, int(float(text) / 1000 if float(text) > 10000 else float(text)))
     except ValueError:
         return fallback
+
+
+def _normalize_video_codec(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"h264", "avc", "libx264"}:
+        return "h264"
+    if normalized in {"hevc", "h265", "libx265"}:
+        return "h265"
+    if "av1" in normalized:
+        return "av1"
+    if "vp9" in normalized:
+        return "vp9"
+    if "mpeg2" in normalized:
+        return "mpeg2"
+    if "prores" in normalized:
+        return "prores"
+    return normalized
 
 
 class FfmpegService:
@@ -309,6 +355,8 @@ class FfmpegService:
         if choice == "auto":
             if out_ext == ".webm":
                 return "vp9"
+            if out_ext == ".mpg":
+                return "mpeg2"
             return "h264"
         if out_ext == ".webm" and choice not in {"vp9", "av1"}:
             if log_cb:
@@ -318,6 +366,10 @@ class FfmpegService:
             if log_cb:
                 log_cb("WARN", "VP9 не сумісний з MP4/MOV/AVI. Перемикаю на H.264.")
             return "h264"
+        if out_ext == ".mpg" and choice != "mpeg2":
+            if log_cb:
+                log_cb("WARN", "MPG профіль використовує MPEG-2.")
+            return "mpeg2"
         return choice
 
     def select_encoder(self, codec: str, hw_pref: str, log_cb=None) -> Tuple[str, bool]:
@@ -327,6 +379,8 @@ class FfmpegService:
             "h265": "libx265",
             "av1": av1_cpu,
             "vp9": "libvpx-vp9",
+            "prores": "prores_ks",
+            "mpeg2": "mpeg2video",
         }
         if codec not in cpu_map:
             return "libx264", False
@@ -337,7 +391,7 @@ class FfmpegService:
             "amd": {"h264": "h264_amf", "h265": "hevc_amf", "av1": "av1_amf"},
         }
 
-        if hw_pref == "cpu":
+        if hw_pref == "cpu" or codec in {"prores", "mpeg2"}:
             encoder = cpu_map[codec]
             if self.encoder_caps and encoder not in self.encoder_caps:
                 if log_cb:
@@ -375,12 +429,41 @@ class FfmpegService:
             return ["-crf", str(crf)]
         if encoder == "libvpx-vp9":
             return ["-crf", str(crf), "-b:v", "0"]
+        if encoder == "prores_ks":
+            return ["-profile:v", "3"]
+        if encoder == "mpeg2video":
+            qscale = max(2, min(31, int(round(2 + (max(0, min(51, int(crf))) / 51.0) * 29))))
+            return ["-q:v", str(qscale)]
         if encoder.endswith("_nvenc"):
             return ["-rc:v", "vbr", "-cq", str(crf), "-b:v", "0"]
         if encoder.endswith("_qsv"):
             return ["-global_quality", str(crf)]
         if encoder.endswith("_amf"):
             return ["-rc", "cqp", "-qp_i", str(crf), "-qp_p", str(crf), "-qp_b", str(crf)]
+        return []
+
+    def video_audio_codec_args(self, settings: ConversionSettings, out_ext: str) -> List[str]:
+        if out_ext == ".webm":
+            return ["-c:a", "libopus", "-b:a", "128k"]
+        requested = str(settings.audio_codec or "auto").strip().lower()
+        if requested == "copy":
+            return ["-c:a", "copy"]
+        codec_map = {
+            "aac": "aac",
+            "ac3": "ac3",
+            "opus": "libopus",
+            "mp3": "libmp3lame",
+        }
+        codec = codec_map.get(requested, "aac")
+        bitrate = settings.audio_bitrate or ("384k" if codec == "ac3" else "192k")
+        return ["-c:a", codec, "-b:a", bitrate]
+
+    def video_profile_args(self, encoder: str, settings: ConversionSettings) -> List[str]:
+        profile = str(settings.video_profile or "").strip().lower()
+        if profile not in {"baseline", "main", "high"}:
+            return []
+        if encoder in {"libx264", "h264_nvenc", "h264_qsv", "h264_amf"}:
+            return ["-profile:v", profile]
         return []
 
     def target_video_bitrate_kbps(self, settings: ConversionSettings, info: Optional[MediaInfo]) -> Optional[int]:
@@ -397,6 +480,13 @@ class FfmpegService:
             return None
         total_kbits = float(settings.target_size_mb) * 8192.0
         return max(32, int(total_kbits * 0.96 / duration))
+
+    def source_matches_codec_choice(self, info: Optional[MediaInfo], codec_choice: str, out_ext: str) -> bool:
+        if not info or not info.vcodec:
+            return False
+        source = _normalize_video_codec(info.vcodec)
+        wanted = _normalize_video_codec(self.resolve_codec(out_ext, codec_choice))
+        return bool(source and wanted and source == wanted)
 
     def build_trim_args(self, settings: ConversionSettings, log_cb=None) -> List[str]:
         args: List[str] = []
@@ -479,7 +569,7 @@ class FfmpegService:
         return bool(self.build_audio_filter(settings))
 
     def build_subtitle_burn_filter(self, inp: Path, settings: ConversionSettings, log_cb=None) -> Optional[str]:
-        should_burn = settings.operation == "subtitle_burn" or settings.subtitle_mode == "burn_in"
+        should_burn = settings.operation == "subtitle_burn" or settings.subtitle_mode in {"burn", "burn_in"}
         if not should_burn:
             return None
         source = settings.subtitle_path.strip()
@@ -489,7 +579,71 @@ class FfmpegService:
                 log_cb("WARN", f"Subtitle файл не знайдено: {source}")
             return None
         stream_idx = max(0, int(settings.subtitle_stream))
-        return f"subtitles='{escape_filter_path(str(subtitle_source.resolve()))}':si={stream_idx}"
+        subtitle_filter = f"subtitles='{escape_filter_path(str(subtitle_source.resolve()))}':si={stream_idx}"
+        if settings.subtitle_style_enabled:
+            style_parts = [
+                f"FontSize={max(6, int(settings.subtitle_font_size))}",
+                f"PrimaryColour={_ass_color(settings.subtitle_primary_color)}",
+                f"Outline={max(0, int(settings.subtitle_outline))}",
+                f"Shadow={max(0, int(settings.subtitle_shadow))}",
+                f"Alignment={max(1, min(9, int(settings.subtitle_alignment)))}",
+            ]
+            if settings.subtitle_font_name.strip():
+                style_parts.append(f"FontName={settings.subtitle_font_name.strip()}")
+            subtitle_filter += f":force_style='{','.join(style_parts)}'"
+        return subtitle_filter
+
+    def build_privacy_blur_filters(self, settings: ConversionSettings, log_cb=None) -> List[str]:
+        filters: List[str] = []
+        raw = settings.privacy_blur_regions.strip()
+        if not raw:
+            return filters
+        for region in raw.split(";"):
+            parts = [part.strip() for part in region.replace(",", ":").split(":") if part.strip()]
+            if len(parts) != 4:
+                if log_cb:
+                    log_cb("WARN", f"Blur region ignored: {region}")
+                continue
+            try:
+                x, y, w, h = [max(0, int(float(part))) for part in parts]
+            except ValueError:
+                if log_cb:
+                    log_cb("WARN", f"Blur region ignored: {region}")
+                continue
+            if w <= 0 or h <= 0:
+                continue
+            filters.append(f"delogo=x={x}:y={y}:w={w}:h={h}:show=0")
+        return filters
+
+    def build_editor_filters(self, settings: ConversionSettings, log_cb=None) -> List[str]:
+        filters: List[str] = []
+        if settings.editor_deinterlace:
+            filters.append("yadif")
+        if settings.editor_stabilize:
+            filters.append("deshake")
+        if settings.editor_denoise == "hqdn3d":
+            filters.append("hqdn3d")
+        elif settings.editor_denoise == "nlmeans":
+            filters.append("nlmeans")
+        eq_parts: List[str] = []
+        if abs(float(settings.editor_brightness)) > 0.001:
+            eq_parts.append(f"brightness={float(settings.editor_brightness):.3f}")
+        if abs(float(settings.editor_contrast) - 1.0) > 0.001:
+            eq_parts.append(f"contrast={float(settings.editor_contrast):.3f}")
+        if abs(float(settings.editor_saturation) - 1.0) > 0.001:
+            eq_parts.append(f"saturation={float(settings.editor_saturation):.3f}")
+        if abs(float(settings.editor_gamma) - 1.0) > 0.001:
+            eq_parts.append(f"gamma={float(settings.editor_gamma):.3f}")
+        if eq_parts:
+            filters.append("eq=" + ":".join(eq_parts))
+        lut_path = settings.editor_lut_path.strip()
+        if lut_path:
+            path = Path(lut_path).expanduser()
+            if path.exists():
+                filters.append(f"lut3d=file='{escape_filter_path(str(path.resolve()))}'")
+            elif log_cb:
+                log_cb("WARN", f"LUT файл не знайдено: {lut_path}")
+        return filters
 
     def build_text_filter(self, settings: ConversionSettings) -> Optional[str]:
         text = settings.text_wm.strip()
@@ -533,6 +687,9 @@ class FfmpegService:
         crop_filter = self._get_crop_filter(settings)
         if crop_filter:
             filters.append(crop_filter)
+
+        filters.extend(self.build_privacy_blur_filters(settings, log_cb=log_cb))
+        filters.extend(self.build_editor_filters(settings, log_cb=log_cb))
 
         rotate_expr = None
         if settings.rotate:
@@ -712,15 +869,16 @@ class FfmpegService:
         info: Optional[MediaInfo],
         filters_used: bool,
         audio_filter_used: bool,
+        allow_remux: bool = False,
     ) -> Tuple[bool, str]:
         if out_ext.lower() == ".gif":
             return False, "GIF потребує перекодування"
         if filters_used or audio_filter_used:
             return False, "Є фільтри/зміна швидкості"
-        if inp.suffix.lower() != out_ext.lower():
-            return False, "Контейнер відрізняється"
         if info and info.vcodec and not _container_supports_codec(out_ext, info.vcodec):
             return False, "Кодек несумісний з контейнером"
+        if inp.suffix.lower() != out_ext.lower() and not allow_remux:
+            return False, "Контейнер відрізняється"
         return True, ""
 
     def merge_copy_allowed(
@@ -778,6 +936,81 @@ class FfmpegService:
                 safe = str(path.resolve()).replace("'", "'\\''")
                 fh.write(f"file '{safe}'\n")
         return tmp.name
+
+    def build_two_pass_commands(self, final_cmd: List[str], passlogfile: Path) -> Tuple[List[str], List[str]]:
+        if not final_cmd:
+            return [], []
+        passlog = str(passlogfile)
+        pass1 = list(final_cmd[:-1])
+        pass1 += ["-pass", "1", "-passlogfile", passlog, "-an", "-sn", "-f", "null", _null_output()]
+        pass2 = list(final_cmd[:-1])
+        pass2 += ["-pass", "2", "-passlogfile", passlog, final_cmd[-1]]
+        return pass1, pass2
+
+    def build_integrity_check_command(self, output_path: Path) -> List[str]:
+        return [self.ffmpeg_path, "-v", "error", "-i", str(output_path), "-map", "0", "-f", "null", _null_output()]
+
+    def check_media_integrity(self, output_path: Path, timeout: int = 300) -> Tuple[bool, str]:
+        if not self.ffmpeg_path:
+            return False, "FFmpeg path is not configured."
+        try:
+            result = subprocess.run(
+                self.build_integrity_check_command(output_path),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return False, "Integrity check timed out."
+        except Exception as exc:
+            return False, str(exc)
+        details = (result.stderr or result.stdout or "").strip()
+        return result.returncode == 0, details
+
+    def build_quality_metric_command(self, source_path: Path, output_path: Path, metric: str) -> List[str]:
+        normalized = str(metric or "").strip().lower()
+        if normalized == "vmaf":
+            lavfi = (
+                "[0:v]scale=640:-2,setpts=PTS-STARTPTS[dist];"
+                "[1:v]scale=640:-2,setpts=PTS-STARTPTS[ref];"
+                "[dist][ref]libvmaf"
+            )
+        else:
+            lavfi = (
+                "[0:v]scale=640:-2,setpts=PTS-STARTPTS[dist];"
+                "[1:v]scale=640:-2,setpts=PTS-STARTPTS[ref];"
+                "[dist][ref]ssim"
+            )
+        return [self.ffmpeg_path, "-v", "info", "-i", str(output_path), "-i", str(source_path), "-lavfi", lavfi, "-f", "null", _null_output()]
+
+    def measure_quality(self, source_path: Path, output_path: Path, metric: str, timeout: int = 300) -> Tuple[bool, Optional[float], str]:
+        normalized = str(metric or "none").strip().lower()
+        if normalized not in {"ssim", "vmaf"}:
+            return True, None, ""
+        if not self.ffmpeg_path:
+            return False, None, "FFmpeg path is not configured."
+        try:
+            result = subprocess.run(
+                self.build_quality_metric_command(source_path, output_path, normalized),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return False, None, f"{normalized.upper()} check timed out."
+        except Exception as exc:
+            return False, None, str(exc)
+        details = "\n".join(part for part in [result.stdout, result.stderr] if part).strip()
+        score: Optional[float] = None
+        if normalized == "ssim":
+            match = re.search(r"All:\s*([0-9.]+)", details)
+            if match:
+                score = float(match.group(1))
+        else:
+            match = re.search(r"VMAF score:\s*([0-9.]+)", details)
+            if match:
+                score = float(match.group(1))
+        return result.returncode == 0, score, details[-600:]
 
     def build_video_command(
         self,
@@ -863,11 +1096,11 @@ class FfmpegService:
             "hevc_amf",
         }:
             cmd += ["-pix_fmt", "yuv420p"]
+        elif encoder == "prores_ks":
+            cmd += ["-pix_fmt", "yuv422p10le"]
 
-        if out_ext == ".webm":
-            cmd += ["-c:a", "libopus", "-b:a", "128k"]
-        else:
-            cmd += ["-c:a", "aac", "-b:a", settings.audio_bitrate or "192k"]
+        cmd += self.video_profile_args(encoder, settings)
+        cmd += self.video_audio_codec_args(settings, out_ext)
 
         if out_ext in {".mp4", ".mov", ".m4v"}:
             cmd += ["-movflags", "+faststart"]
@@ -954,7 +1187,10 @@ class FfmpegService:
             ".vtt": "webvtt",
         }
         codec = codec_map.get(outp.suffix.lower(), "srt")
-        cmd = [self.ffmpeg_path, overwrite, "-i", str(inp), "-c:s", codec]
+        cmd = [self.ffmpeg_path, overwrite]
+        if settings.subtitle_sync_ms:
+            cmd += ["-itsoffset", f"{float(settings.subtitle_sync_ms) / 1000.0:.3f}"]
+        cmd += ["-i", str(inp), "-c:s", codec]
         cmd.append(str(outp))
         return cmd
 
@@ -1102,11 +1338,11 @@ class FfmpegService:
             "hevc_amf",
         }:
             cmd += ["-pix_fmt", "yuv420p"]
+        elif encoder == "prores_ks":
+            cmd += ["-pix_fmt", "yuv422p10le"]
 
-        if out_ext == ".webm":
-            cmd += ["-c:a", "libopus", "-b:a", "128k"]
-        else:
-            cmd += ["-c:a", "aac", "-b:a", settings.audio_bitrate or "192k"]
+        cmd += self.video_profile_args(encoder, settings)
+        cmd += self.video_audio_codec_args(settings, out_ext)
 
         if out_ext in {".mp4", ".mov", ".m4v"}:
             cmd += ["-movflags", "+faststart"]

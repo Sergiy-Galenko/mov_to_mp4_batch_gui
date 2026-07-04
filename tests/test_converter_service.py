@@ -38,7 +38,7 @@ class FakeFfmpegService:
     def build_video_filter_spec(self, inp, settings, out_ext, log_cb=None):
         return None, None, None, [], False
 
-    def fast_copy_allowed(self, inp, out_ext, info, filters_used, audio_filter_used):
+    def fast_copy_allowed(self, inp, out_ext, info, filters_used, audio_filter_used, allow_remux=False):
         return True, ""
 
     def build_video_command(self, inp, outp, settings, info, allow_fast_copy, log_cb=None):
@@ -218,6 +218,26 @@ class ConverterServiceTest(unittest.TestCase):
 
             self.assertTrue((out_dir / "001_first.mp4").exists())
             self.assertTrue((out_dir / "002_second.mp4").exists())
+
+    def test_successful_conversion_writes_checksum_sidecar(self) -> None:
+        fake = FakeFfmpegService()
+        events: "queue.Queue[tuple]" = queue.Queue()
+        service = MockConverterService(fake, events)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            inp = tmp / "input.mp4"
+            out_dir = tmp / "out"
+            out_dir.mkdir()
+            inp.write_text("video", encoding="utf-8")
+
+            task = TaskItem(path=inp, media_type="video")
+            settings = ConversionSettings(out_video_format="mp4", checksum_algorithm="sha256")
+            service._run([task], settings, out_dir)
+
+            sidecar = out_dir / "input.mp4.sha256"
+            self.assertTrue(sidecar.exists())
+            self.assertIn("input.mp4", sidecar.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

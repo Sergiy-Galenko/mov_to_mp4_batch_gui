@@ -115,6 +115,7 @@ class ConversionSettings:
     out_audio_format: str = "mp3"
     out_subtitle_format: str = "srt"
     audio_bitrate: str = "192k"
+    audio_codec: str = "auto"
     audio_track_index: int = 0
     crf: int = 23
     preset: str = "medium"
@@ -129,6 +130,17 @@ class ConversionSettings:
     target_size_mb: Optional[float] = None
     cpu_load_limit: int = 95
     gpu_load_limit: int = 98
+
+    smart_convert_enabled: bool = False
+    smart_content_type: str = "auto"
+    smart_quality_target: str = "balanced"
+    smart_reencode_detection: bool = True
+    smart_two_pass: bool = False
+    smart_integrity_check: bool = False
+    smart_quality_metric: str = "none"
+    smart_ab_test: bool = False
+    smart_ab_crfs: str = "18,23,28"
+    smart_ab_duration: int = 8
 
     trim_start: Optional[float] = None
     trim_end: Optional[float] = None
@@ -151,6 +163,14 @@ class ConversionSettings:
     subtitle_language: str = "auto"
     subtitle_model: str = "base"
     subtitle_engine: str = "auto"
+    subtitle_sync_ms: int = 0
+    subtitle_style_enabled: bool = False
+    subtitle_font_name: str = ""
+    subtitle_font_size: int = 24
+    subtitle_primary_color: str = "white"
+    subtitle_outline: int = 1
+    subtitle_shadow: int = 0
+    subtitle_alignment: int = 2
 
     thumbnail_time: Optional[float] = None
     contact_sheet_cols: int = 4
@@ -174,6 +194,7 @@ class ConversionSettings:
 
     video_codec: str = "auto"
     hw_encoder: str = "auto"
+    video_profile: str = ""
     replace_audio_path: str = ""
     normalize_audio: str = "none"
     audio_peak_limit_db: Optional[float] = None
@@ -195,3 +216,23 @@ class ConversionSettings:
     meta_genre: str = ""
     meta_year: str = ""
     meta_track: str = ""
+
+    device_profile: str = ""
+
+    privacy_blur_regions: str = ""
+    checksum_algorithm: str = "none"
+    secure_delete_original: bool = False
+
+    editor_deinterlace: bool = False
+    editor_stabilize: bool = False
+    editor_denoise: str = "none"
+    editor_brightness: float = 0.0
+    editor_contrast: float = 1.0
+    editor_saturation: float = 1.0
+    editor_gamma: float = 1.0
+    editor_lut_path: str = ""
+
+    cloud_upload_enabled: bool = False
+    cloud_provider: str = "rclone"
+    cloud_rclone_path: str = "rclone"
+    cloud_remote_path: str = ""

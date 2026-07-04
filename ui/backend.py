@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import queue
@@ -25,10 +25,15 @@ from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
 from app.performance_profiles import prediction_factor
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
+from services.folder_scanner import FolderScanner
 from services.history_store import HistoryStore
+from services.media_preview_service import MediaPreviewService
 from services.preset_manager import PresetManager
 from services.queue_manager import QueueManager
 from services.settings_manager import SettingsManager
+from services.shortcut_manager import ShortcutManager
+from services.system_tray_service import SystemTrayService
+from services.theme_manager import ThemeManager
 from services.watch_service import WatchService
 from services.youtube_download_service import (
     DownloadProgress,
@@ -51,6 +56,7 @@ class Backend(QtCore.QObject):
     encoderInfoChanged = QtCore.Signal()
     ffmpegPathChanged = QtCore.Signal()
     outputDirChanged = QtCore.Signal()
+    outputDirConfiguredChanged = QtCore.Signal()
     infoChanged = QtCore.Signal()
     isRunningChanged = QtCore.Signal()
     isPausedChanged = QtCore.Signal()
@@ -78,6 +84,10 @@ class Backend(QtCore.QObject):
     youtubeDownloadChanged = QtCore.Signal()
     youtubeHistoryChanged = QtCore.Signal()
     toastRequested = QtCore.Signal(str)
+    themeChanged = QtCore.Signal()
+    shortcutsChanged = QtCore.Signal()
+    previewGenerated = QtCore.Signal(str, dict)  # path, preview_data
+    trayVisibilityChanged = QtCore.Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -97,6 +107,17 @@ class Backend(QtCore.QObject):
             on_new_files=self._on_watch_files,
             poll_interval_sec=max(WATCH_SCAN_INTERVAL_MS / 1000.0, 0.5),
         )
+        self.theme_manager = ThemeManager()
+        self.shortcut_manager = ShortcutManager()
+        self.media_preview = MediaPreviewService(
+            ffmpeg_path=self.ffmpeg_service.ffmpeg_path or "",
+            ffprobe_path=self.ffmpeg_service.ffprobe_path or "",
+        )
+        self.folder_scanner = FolderScanner()
+        self.system_tray = SystemTrayService(parent=self, app_title=APP_TITLE)
+        self._tray_enabled = False
+        self._folder_type_filter = ""
+        self._folder_exclude_patterns = ""
 
         self.queue_model = QueueModel()
         self.log_model = LogModel()
@@ -111,7 +132,8 @@ class Backend(QtCore.QObject):
         self._watch_running = False
         self._watch_seen: set[Path] = set()
         self._ffmpeg_path = self.settings_manager.ffmpeg_path(self.ffmpeg_service.ffmpeg_path)
-        self._output_dir = self.settings_manager.output_dir()
+        self._output_dir_configured = self.settings_manager.output_dir_configured()
+        self._output_dir = self.settings_manager.output_dir() if self._output_dir_configured else ""
         self._last_settings_map = self.settings_manager.last_settings()
         self._show_onboarding = False
 
@@ -271,13 +293,25 @@ class Backend(QtCore.QObject):
     @outputDir.setter
     def outputDir(self, value: str) -> None:
         value = str(value or "").strip()
+        was_configured = self._output_dir_configured
+        self._output_dir_configured = bool(value)
         if self._output_dir == value:
+            if was_configured != self._output_dir_configured:
+                self.outputDirConfiguredChanged.emit()
+                self._save_state()
             return
         self._output_dir = value
         self.outputDirChanged.emit()
-        self._remember_folder(value)
+        if was_configured != self._output_dir_configured:
+            self.outputDirConfiguredChanged.emit()
+        if value:
+            self._remember_folder(value)
         self._refresh_output_preview(dict(self._last_settings_map))
         self._save_state()
+
+    @QtCore.Property(bool, notify=outputDirConfiguredChanged)
+    def outputDirConfigured(self) -> bool:
+        return self._output_dir_configured
 
     @QtCore.Property(str, notify=watchFolderChanged)
     def watchFolder(self) -> str:
@@ -539,11 +573,311 @@ class Backend(QtCore.QObject):
     def sessionSavedText(self) -> str:
         return self._session_saved_text
 
+    # --- Theme properties ---
+
+    @QtCore.Property(str, notify=themeChanged)
+    def accentColor(self) -> str:
+        return self.theme_manager.accent_color()
+
+    @accentColor.setter
+    def accentColor(self, value: str) -> None:
+        self.theme_manager.set_accent_color(value)
+        self.themeChanged.emit()
+
+    @QtCore.Property(str, notify=themeChanged)
+    def themeMode(self) -> str:
+        return self.theme_manager.theme_mode()
+
+    @themeMode.setter
+    def themeMode(self, value: str) -> None:
+        self.theme_manager.set_theme_mode(value)
+        self.themeChanged.emit()
+
+    @QtCore.Property(str, notify=themeChanged)
+    def layoutMode(self) -> str:
+        return self.theme_manager.layout_mode()
+
+    @layoutMode.setter
+    def layoutMode(self, value: str) -> None:
+        self.theme_manager.set_layout_mode(value)
+        self.themeChanged.emit()
+
+    @QtCore.Property(float, notify=themeChanged)
+    def fontScale(self) -> float:
+        return self.theme_manager.font_scale()
+
+    @fontScale.setter
+    def fontScale(self, value: float) -> None:
+        self.theme_manager.set_font_scale(value)
+        self.themeChanged.emit()
+
+    @QtCore.Property(bool, notify=themeChanged)
+    def beginnerMode(self) -> bool:
+        return self.theme_manager.beginner_mode()
+
+    @beginnerMode.setter
+    def beginnerMode(self, value: bool) -> None:
+        self.theme_manager.set_beginner_mode(value)
+        self.themeChanged.emit()
+
+    @QtCore.Property("QVariantList", notify=themeChanged)
+    def accentPresets(self) -> List[Dict[str, str]]:
+        return self.theme_manager.accent_presets()
+
+    @QtCore.Property("QVariantMap", notify=themeChanged)
+    def layoutConfig(self) -> Dict[str, Any]:
+        return self.theme_manager.layout_config()
+
+    @QtCore.Slot(result=bool)
+    def detectOsDarkMode(self) -> bool:
+        return ThemeManager.detect_os_dark_mode()
+
+    @QtCore.Slot()
+    def autoDetectTheme(self) -> None:
+        is_dark = ThemeManager.detect_os_dark_mode()
+        self.themeMode = "dark" if is_dark else "light"
+
+    @QtCore.Slot("QVariantMap")
+    def importTheme(self, data: Dict[str, Any]) -> None:
+        self.theme_manager.import_theme(dict(data or {}))
+        self.themeChanged.emit()
+        self._append_log("OK", "Тему імпортовано.")
+
+    @QtCore.Slot(result="QVariantMap")
+    def exportTheme(self) -> Dict[str, Any]:
+        return self.theme_manager.export_theme()
+
+    @QtCore.Slot(int, int, int, int)
+    def saveWindowState(self, x: int, y: int, width: int, height: int) -> None:
+        self.theme_manager.set_window_state(x, y, width, height)
+
+    @QtCore.Slot(result="QVariantMap")
+    def loadWindowState(self) -> Dict[str, int]:
+        return self.theme_manager.window_state()
+
+    # --- Shortcut properties ---
+
+    @QtCore.Property("QVariantList", notify=shortcutsChanged)
+    def allShortcuts(self) -> List[Dict[str, str]]:
+        return self.shortcut_manager.all_shortcuts()
+
+    @QtCore.Property("QVariantMap", notify=shortcutsChanged)
+    def shortcutsByCategory(self) -> Dict[str, List[Dict[str, str]]]:
+        return self.shortcut_manager.shortcuts_by_category()
+
+    @QtCore.Slot(str, result=str)
+    def shortcutKey(self, action_id: str) -> str:
+        return self.shortcut_manager.get_key(action_id)
+
+    @QtCore.Slot(str, str)
+    def setShortcutKey(self, action_id: str, key: str) -> None:
+        conflict = self.shortcut_manager.find_conflict(key, exclude_action=action_id)
+        if conflict:
+            self._append_log("WARN", f"Shortcut conflict: {key} already used by {self.shortcut_manager.get_label(conflict)}")
+            return
+        self.shortcut_manager.set_key(action_id, key)
+        self.shortcutsChanged.emit()
+        self._append_log("OK", f"Shortcut set: {action_id} → {key}")
+
+    @QtCore.Slot(str)
+    def resetShortcut(self, action_id: str) -> None:
+        self.shortcut_manager.reset_key(action_id)
+        self.shortcutsChanged.emit()
+
+    @QtCore.Slot()
+    def resetAllShortcuts(self) -> None:
+        self.shortcut_manager.reset_all()
+        self.shortcutsChanged.emit()
+        self._append_log("OK", "All shortcuts reset to defaults.")
+
+    # --- System tray properties ---
+
+    @QtCore.Property(bool, notify=trayVisibilityChanged)
+    def trayEnabled(self) -> bool:
+        return self._tray_enabled
+
+    @trayEnabled.setter
+    def trayEnabled(self, value: bool) -> None:
+        self._tray_enabled = bool(value)
+        self.system_tray.set_visible(self._tray_enabled)
+        self.trayVisibilityChanged.emit()
+
+    @QtCore.Slot()
+    def setupSystemTray(self) -> None:
+        """Initialize system tray (must be called after window is created)."""
+        app = QtWidgets.QApplication.instance()
+        if app and app.activeWindow():
+            self.system_tray.setup(app.activeWindow())
+            self.system_tray.showRequested.connect(self._on_tray_show)
+            self.system_tray.quitRequested.connect(self._on_tray_quit)
+            self.system_tray.startRequested.connect(lambda: self.startConversion(dict(self._last_settings_map)))
+            self.system_tray.stopRequested.connect(self.stopConversion)
+            self.system_tray.pauseRequested.connect(self.pauseConversion)
+
+    def _on_tray_show(self) -> None:
+        app = QtWidgets.QApplication.instance()
+        if app and app.activeWindow():
+            window = app.activeWindow()
+            window.show()
+            window.raise_()
+            window.activateWindow()
+
+    def _on_tray_quit(self) -> None:
+        QtWidgets.QApplication.quit()
+
+    # --- Folder scanning properties ---
+
+    @QtCore.Property(str, notify=queueStatsChanged)
+    def folderTypeFilter(self) -> str:
+        return self._folder_type_filter
+
+    @folderTypeFilter.setter
+    def folderTypeFilter(self, value: str) -> None:
+        self._folder_type_filter = str(value or "").strip()
+        self.folder_scanner.type_filter = self._folder_type_filter if self._folder_type_filter else None
+
+    @QtCore.Property(str, notify=queueStatsChanged)
+    def folderExcludePatterns(self) -> str:
+        return self._folder_exclude_patterns
+
+    @folderExcludePatterns.setter
+    def folderExcludePatterns(self, value: str) -> None:
+        self._folder_exclude_patterns = str(value or "").strip()
+        if self._folder_exclude_patterns:
+            patterns = {p.strip() for p in self._folder_exclude_patterns.split(",") if p.strip()}
+            self.folder_scanner.exclude_patterns = patterns
+        else:
+            from services.folder_scanner import _DEFAULT_EXCLUDES
+            self.folder_scanner.exclude_patterns = set(_DEFAULT_EXCLUDES)
+
+    @QtCore.Slot()
+    def addFolderFiltered(self) -> None:
+        """Add folder with current type filter and exclude patterns."""
+        folder = QtWidgets.QFileDialog.getExistingDirectory(None, "Додати папку (з фільтрами)")
+        if not folder:
+            return
+        base = Path(folder)
+        self._append_log("INFO", f"Сканую папку з фільтрами: {base}")
+        threading.Thread(
+            target=self._collect_folder_filtered_async,
+            args=(base,),
+            daemon=True,
+        ).start()
+
+    def _collect_folder_filtered_async(self, folder: Path) -> None:
+        try:
+            stats = self.folder_scanner.scan_with_stats(folder)
+            files = stats["files"]
+            excluded = stats["excluded"]
+            type_filtered = stats["type_filtered"]
+        except Exception as exc:
+            self.event_queue.put(("log", "ERROR", f"Не вдалося просканувати папку {folder}: {exc}"))
+            return
+        self.event_queue.put(("add_paths", files, str(folder)))
+        if excluded or type_filtered:
+            self.event_queue.put(("log", "INFO", f"Скановано: {stats['total_scanned']} файлів, виключено: {excluded}, по типу: {type_filtered}"))
+
+    # --- Clipboard paste ---
+
+    @QtCore.Slot()
+    def pasteFromClipboard(self) -> None:
+        """Add files/URLs from clipboard text."""
+        clipboard = QtWidgets.QApplication.clipboard()
+        text = clipboard.text() or ""
+        if not text.strip():
+            self._append_log("INFO", "Буфер обміну порожній.")
+            return
+
+        paths: List[Path] = []
+        urls: List[str] = []
+        for line in text.strip().splitlines():
+            line = line.strip().strip('"').strip("'")
+            if not line:
+                continue
+            if line.startswith(("http://", "https://")):
+                urls.append(line)
+            else:
+                path = Path(line)
+                if path.exists():
+                    paths.append(path)
+
+        if paths:
+            self._add_paths(paths)
+            self._append_log("OK", f"Додано з буферу: {len(paths)} файлів")
+        if urls:
+            self._append_log("INFO", f"URL з буферу: {len(urls)} (використай YouTube для завантаження)")
+        if not paths and not urls:
+            self._append_log("WARN", "Не знайдено дійсних шляхів або URL у буфері обміну.")
+
+    # --- Queue save / load ---
+
+    @QtCore.Slot()
+    def saveQueueToFile(self) -> None:
+        """Save current queue to a JSON file."""
+        default_path = Path(self.outputDir).expanduser() / "queue-export.json"
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            None, "Зберегти чергу", str(default_path), "JSON (*.json)"
+        )
+        if not path:
+            return
+        payload = {
+            "version": 1,
+            "type": "queue",
+            "items": [self.queue_manager.serialize_task(item) for item in self.queue_model.items()],
+        }
+        save_json_file(Path(path), payload)
+        self._append_log("OK", f"Чергу збережено: {path}")
+
+    @QtCore.Slot()
+    def loadQueueFromFile(self) -> None:
+        """Load queue from a JSON file (appends to existing queue)."""
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            None, "Завантажити чергу", "", "JSON (*.json)"
+        )
+        if not path:
+            return
+        payload = load_json_file(Path(path))
+        if not isinstance(payload, dict) or payload.get("type") != "queue":
+            QtWidgets.QMessageBox.warning(None, "Черга", "Некоректний файл черги.")
+            return
+        items = self.queue_manager.deserialize_tasks(
+            payload.get("items", []), pending_recovery=False
+        )
+        if items:
+            self.queue_model.add_items(items)
+            self._notify_queue_stats()
+            self._refresh_output_preview(dict(self._last_settings_map))
+            self._save_state()
+            self._append_log("OK", f"Завантажено з файлу: {len(items)} елементів")
+        else:
+            self._append_log("WARN", "Файл черги порожній.")
+
+    # --- Media preview ---
+
+    @QtCore.Slot(str, str)
+    def generateMediaPreview(self, path_text: str, media_kind: str) -> None:
+        """Generate preview (thumbnails/waveform) for a media file in background."""
+        path = Path(str(path_text or "").strip())
+        if not path.exists():
+            return
+        threading.Thread(
+            target=self._generate_preview_async,
+            args=(path, media_kind),
+            daemon=True,
+        ).start()
+
+    def _generate_preview_async(self, path: Path, media_kind: str) -> None:
+        self.media_preview.ffmpeg_path = self.ffmpeg_service.ffmpeg_path or ""
+        self.media_preview.ffprobe_path = self.ffmpeg_service.ffprobe_path or ""
+        preview_data = self.media_preview.generate_preview(path, media_kind)
+        self.event_queue.put(("preview_generated", str(path), preview_data))
+
     def _save_state(self, *, pending_recovery: Optional[bool] = None) -> None:
         self.settings_manager.save(
             recent_folders=self._recent_folders[:RECENT_FOLDERS_LIMIT],
             watch_folder=self._watch_folder,
             output_dir=self._output_dir,
+            output_dir_configured=self._output_dir_configured,
             ffmpeg_path=self._ffmpeg_path,
             ui_language=self._ui_language,
             last_settings=self._last_settings_map,
@@ -779,9 +1113,28 @@ class Backend(QtCore.QObject):
 
     @QtCore.Slot()
     def pickOutputDir(self) -> None:
-        folder = QtWidgets.QFileDialog.getExistingDirectory(None, "Папка виводу", self.outputDir)
+        start_dir = self.outputDir or str(Path.home())
+        folder = QtWidgets.QFileDialog.getExistingDirectory(None, self._tr("choose_output_folder"), start_dir)
         if folder:
             self.outputDir = folder
+
+    @QtCore.Slot(result=bool)
+    def ensureOutputDirSelected(self) -> bool:
+        return self._ensure_output_dir_selected(prompt=True)
+
+    def _ensure_output_dir_selected(self, *, prompt: bool = False) -> bool:
+        if self._output_dir_configured and self.outputDir:
+            return True
+        if not prompt:
+            return False
+        start_dir = self.outputDir or str(Path.home())
+        folder = QtWidgets.QFileDialog.getExistingDirectory(None, self._tr("choose_output_folder"), start_dir)
+        if folder:
+            self.outputDir = folder
+            return True
+        self._append_log("WARN", self._tr("backend.output_dir_required"))
+        self.toastRequested.emit(self._tr("backend.output_dir_required"))
+        return False
 
     @QtCore.Slot()
     def dismissOnboarding(self) -> None:
@@ -914,6 +1267,8 @@ class Backend(QtCore.QObject):
             return
         if self._youtube_download_running:
             self._append_log("WARN", self._tr("youtube.already_running"))
+            return
+        if not self._ensure_output_dir_selected(prompt=True):
             return
 
         output_dir = Path(self.outputDir).expanduser()
@@ -1554,6 +1909,8 @@ class Backend(QtCore.QObject):
     ) -> None:
         if self.runner.is_running:
             return
+        if not self._ensure_output_dir_selected(prompt=True):
+            return
         if self.ffmpegPath:
             self.ffmpeg_service.ffmpeg_path = self.ffmpegPath
             self.ffmpeg_service.ffprobe_path = find_ffprobe(self.ffmpeg_service.ffmpeg_path)
@@ -1854,6 +2211,8 @@ class Backend(QtCore.QObject):
                     self._total_progress_text = f"Всього: {int(total_pct * 100):02d}% • ETA {format_time(total_eta)}"
                     self.totalProgressTextChanged.emit()
                     self._set_progress(file_pct or 0.0, total_pct)
+                    if self._tray_enabled:
+                        self.system_tray.update_progress(total_pct, True)
                     if self._active_task_path and file_pct is not None:
                         self.queue_model.set_task_progress(
                             Path(self._active_task_path),
@@ -1922,6 +2281,15 @@ class Backend(QtCore.QObject):
                     self.toastRequested.emit(self._tr("backend.stopped") if stopped else self._tr("toast.conversion_done"))
                     self._refresh_session_stats(total_eta=0.0)
                     self._save_state(pending_recovery=False)
+                    # System tray notifications
+                    if self._tray_enabled:
+                        self.system_tray.update_progress(0.0, False)
+                        if stopped:
+                            self.system_tray.notify_warning(self._tr("backend.stopped"))
+                        else:
+                            done = self.completedCount
+                            failed = self.failedCount
+                            self.system_tray.notify_success(f"Готово: {done} файлів" + (f", помилки: {failed}" if failed else ""))
                 elif etype == "media_info":
                     _, path, info = event
                     self._probe_pending.discard(path)
@@ -1973,5 +2341,8 @@ class Backend(QtCore.QObject):
                     _, summary = event
                     if isinstance(summary, dict):
                         self._record_history(summary)
+                elif etype == "preview_generated":
+                    _, path_text, preview_data = event
+                    self.previewGenerated.emit(str(path_text), dict(preview_data or {}))
         except queue.Empty:
             return

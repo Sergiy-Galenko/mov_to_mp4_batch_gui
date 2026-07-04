@@ -14,6 +14,7 @@ from app.constants import (
     VIDEO_CODEC_MAP,
 )
 from app.models import ConversionSettings
+from app.device_profiles import DEVICE_PROFILE_NAMES, apply_device_profile
 from app.performance_profiles import apply_performance_profile, normalize_profile
 from utils.formatting import parse_float, parse_int, parse_time_to_seconds
 
@@ -25,6 +26,7 @@ SETTINGS_SCHEMA = {
     "out_audio_fmt": (str, "mp3"),
     "out_subtitle_fmt": (str, "srt"),
     "audio_bitrate": (str, "192k"),
+    "audio_codec": (str, "auto"),
     "audio_track_index": (int, 0),
     "crf": (int, 23),
     "preset": (str, "medium"),
@@ -37,6 +39,12 @@ SETTINGS_SCHEMA = {
     "target_size_mb": (float, 0.0),
     "cpu_load_limit": (int, 95),
     "gpu_load_limit": (int, 98),
+    "smart_convert_enabled": (bool, False),
+    "smart_reencode_detection": (bool, True),
+    "smart_two_pass": (bool, False),
+    "smart_integrity_check": (bool, False),
+    "smart_ab_test": (bool, False),
+    "smart_ab_duration": (int, 8),
     "merge": (bool, False),
     "subtitle_stream": (int, 0),
     "contact_sheet_cols": (int, 4),
@@ -54,6 +62,12 @@ SETTINGS_SCHEMA = {
     "split_chapters": (bool, False),
     "strip_metadata": (bool, False),
     "copy_metadata": (bool, False),
+    "sanitize_metadata": (bool, False),
+    "secure_delete_original": (bool, False),
+    "editor_deinterlace": (bool, False),
+    "editor_stabilize": (bool, False),
+    "subtitle_style_enabled": (bool, False),
+    "cloud_upload_enabled": (bool, False),
     "language": (str, "uk"),
 }
 
@@ -158,6 +172,8 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
         settings.subtitle_out_format = out_subtitle_format
 
     settings.audio_bitrate = str(settings_map.get("audio_bitrate") or settings.audio_bitrate).strip() or settings.audio_bitrate
+    audio_codec = str(settings_map.get("audio_codec") or settings.audio_codec).strip().lower()
+    settings.audio_codec = audio_codec if audio_codec in {"auto", "aac", "ac3", "opus", "mp3", "copy"} else "auto"
     settings.audio_track_index = _coerce_int(settings_map.get("audio_track_index"), settings.audio_track_index, minimum=0)
     settings.crf = _coerce_int(settings_map.get("crf"), settings.crf, minimum=0, maximum=51)
     settings.preset = str(settings_map.get("preset") or settings.preset).strip()
@@ -175,6 +191,23 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     gpu_limit = parse_int(str(settings_map.get("gpu_load_limit", settings.gpu_load_limit)))
     settings.cpu_load_limit = max(1, min(100, cpu_limit if cpu_limit is not None else settings.cpu_load_limit))
     settings.gpu_load_limit = max(1, min(100, gpu_limit if gpu_limit is not None else settings.gpu_load_limit))
+
+    settings.smart_convert_enabled = _coerce_bool(settings_map.get("smart_convert_enabled"), settings.smart_convert_enabled)
+    content_type = str(settings_map.get("smart_content_type") or settings.smart_content_type).strip().lower()
+    settings.smart_content_type = content_type if content_type in {"auto", "animation", "live_action", "screencast"} else "auto"
+    quality_target = str(settings_map.get("smart_quality_target") or settings.smart_quality_target).strip().lower()
+    settings.smart_quality_target = quality_target if quality_target in {"small", "balanced", "quality"} else "balanced"
+    settings.smart_reencode_detection = _coerce_bool(
+        settings_map.get("smart_reencode_detection"),
+        settings.smart_reencode_detection,
+    )
+    settings.smart_two_pass = _coerce_bool(settings_map.get("smart_two_pass"), settings.smart_two_pass)
+    settings.smart_integrity_check = _coerce_bool(settings_map.get("smart_integrity_check"), settings.smart_integrity_check)
+    quality_metric = str(settings_map.get("smart_quality_metric") or settings.smart_quality_metric).strip().lower()
+    settings.smart_quality_metric = quality_metric if quality_metric in {"none", "ssim", "vmaf"} else "none"
+    settings.smart_ab_test = _coerce_bool(settings_map.get("smart_ab_test"), settings.smart_ab_test)
+    settings.smart_ab_crfs = str(settings_map.get("smart_ab_crfs") or settings.smart_ab_crfs).strip() or "18,23,28"
+    settings.smart_ab_duration = _coerce_int(settings_map.get("smart_ab_duration"), settings.smart_ab_duration, minimum=1, maximum=120)
 
     settings.trim_start = parse_time_to_seconds(str(settings_map.get("trim_start", "")))
     settings.trim_end = parse_time_to_seconds(str(settings_map.get("trim_end", "")))
@@ -200,6 +233,14 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.subtitle_language = str(settings_map.get("subtitle_language") or settings.subtitle_language).strip() or "auto"
     settings.subtitle_model = str(settings_map.get("subtitle_model") or settings.subtitle_model).strip() or "base"
     settings.subtitle_engine = str(settings_map.get("subtitle_engine") or settings.subtitle_engine).strip() or "auto"
+    settings.subtitle_sync_ms = _coerce_int(settings_map.get("subtitle_sync_ms"), settings.subtitle_sync_ms, minimum=-600000, maximum=600000)
+    settings.subtitle_style_enabled = _coerce_bool(settings_map.get("subtitle_style_enabled"), settings.subtitle_style_enabled)
+    settings.subtitle_font_name = str(settings_map.get("subtitle_font_name") or settings.subtitle_font_name).strip()
+    settings.subtitle_font_size = _coerce_int(settings_map.get("subtitle_font_size"), settings.subtitle_font_size, minimum=6, maximum=200)
+    settings.subtitle_primary_color = str(settings_map.get("subtitle_primary_color") or settings.subtitle_primary_color).strip() or "white"
+    settings.subtitle_outline = _coerce_int(settings_map.get("subtitle_outline"), settings.subtitle_outline, minimum=0, maximum=20)
+    settings.subtitle_shadow = _coerce_int(settings_map.get("subtitle_shadow"), settings.subtitle_shadow, minimum=0, maximum=20)
+    settings.subtitle_alignment = _coerce_int(settings_map.get("subtitle_alignment"), settings.subtitle_alignment, minimum=1, maximum=9)
     subtitle_out_format = str(settings_map.get("subtitle_out_fmt") or settings.subtitle_out_format).strip().lower()
     if subtitle_out_format in OUT_SUBTITLE_FORMATS:
         settings.subtitle_out_format = subtitle_out_format
@@ -231,6 +272,8 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
 
     _apply_video_codec(settings, settings_map.get("codec"))
     _apply_hw_encoder(settings, settings_map.get("hw"))
+    video_profile = str(settings_map.get("video_profile") or settings.video_profile).strip().lower()
+    settings.video_profile = video_profile if video_profile in {"baseline", "main", "high"} else ""
 
     settings.replace_audio_path = str(settings_map.get("replace_audio_path") or settings.replace_audio_path).strip()
     settings.normalize_audio = str(settings_map.get("normalize_audio") or settings.normalize_audio).strip() or "none"
@@ -247,7 +290,9 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.after_hook = str(settings_map.get("after_hook") or settings.after_hook).strip()
 
     settings.copy_metadata = _coerce_bool(settings_map.get("copy_metadata"), settings.copy_metadata)
-    settings.strip_metadata = _coerce_bool(settings_map.get("strip_metadata"), settings.strip_metadata)
+    settings.strip_metadata = _coerce_bool(settings_map.get("strip_metadata"), settings.strip_metadata) or _coerce_bool(
+        settings_map.get("sanitize_metadata"), False
+    )
     settings.meta_title = str(settings_map.get("meta_title", settings.meta_title))
     settings.meta_comment = str(settings_map.get("meta_comment", settings.meta_comment))
     settings.meta_author = str(settings_map.get("meta_author", settings.meta_author))
@@ -256,6 +301,31 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.meta_genre = str(settings_map.get("meta_genre", settings.meta_genre))
     settings.meta_year = str(settings_map.get("meta_year", settings.meta_year))
     settings.meta_track = str(settings_map.get("meta_track", settings.meta_track))
+
+    device_profile = str(settings_map.get("device_profile") or "").strip()
+    if device_profile in DEVICE_PROFILE_NAMES:
+        settings.device_profile = "" if device_profile == "None" else device_profile
+
+    settings.privacy_blur_regions = str(settings_map.get("privacy_blur_regions") or settings.privacy_blur_regions).strip()
+    checksum_algorithm = str(settings_map.get("checksum_algorithm") or settings.checksum_algorithm).strip().lower()
+    settings.checksum_algorithm = checksum_algorithm if checksum_algorithm in {"none", "md5", "sha256"} else "none"
+    settings.secure_delete_original = _coerce_bool(settings_map.get("secure_delete_original"), settings.secure_delete_original)
+
+    settings.editor_deinterlace = _coerce_bool(settings_map.get("editor_deinterlace"), settings.editor_deinterlace)
+    settings.editor_stabilize = _coerce_bool(settings_map.get("editor_stabilize"), settings.editor_stabilize)
+    denoise = str(settings_map.get("editor_denoise") or settings.editor_denoise).strip().lower()
+    settings.editor_denoise = denoise if denoise in {"none", "hqdn3d", "nlmeans"} else "none"
+    settings.editor_brightness = _coerce_float(settings_map.get("editor_brightness"), settings.editor_brightness) or 0.0
+    settings.editor_contrast = _coerce_float(settings_map.get("editor_contrast"), settings.editor_contrast) or 1.0
+    settings.editor_saturation = _coerce_float(settings_map.get("editor_saturation"), settings.editor_saturation) or 1.0
+    settings.editor_gamma = _coerce_float(settings_map.get("editor_gamma"), settings.editor_gamma) or 1.0
+    settings.editor_lut_path = str(settings_map.get("editor_lut_path") or settings.editor_lut_path).strip()
+
+    settings.cloud_upload_enabled = _coerce_bool(settings_map.get("cloud_upload_enabled"), settings.cloud_upload_enabled)
+    settings.cloud_provider = str(settings_map.get("cloud_provider") or settings.cloud_provider).strip() or "rclone"
+    settings.cloud_rclone_path = str(settings_map.get("cloud_rclone_path") or settings.cloud_rclone_path).strip() or "rclone"
+    settings.cloud_remote_path = str(settings_map.get("cloud_remote_path") or settings.cloud_remote_path).strip()
+
     settings = apply_performance_profile(settings)
     if _has_setting_value(settings_map, "crf"):
         settings.crf = _coerce_int(settings_map.get("crf"), settings.crf, minimum=0, maximum=51)
@@ -265,6 +335,8 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
         _apply_video_codec(settings, settings_map.get("codec"))
     if _has_setting_value(settings_map, "hw"):
         _apply_hw_encoder(settings, settings_map.get("hw"))
+    if settings.device_profile:
+        settings = apply_device_profile(settings, settings.device_profile)
     return settings
 
 

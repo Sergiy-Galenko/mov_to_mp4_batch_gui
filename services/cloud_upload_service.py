@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+from typing import Callable, Optional
+
+from app.models import ConversionSettings
+
+
+LogCallback = Callable[[str, str], None]
+
+
+class CloudUploadError(RuntimeError):
+    pass
+
+
+class CloudUploadService:
+    def upload(self, output_path: Path, settings: ConversionSettings, log_cb: Optional[LogCallback] = None) -> None:
+        if not settings.cloud_upload_enabled:
+            return
+        remote = str(settings.cloud_remote_path or "").strip()
+        if not remote:
+            raise CloudUploadError("Cloud remote path is empty.")
+        tool = str(settings.cloud_rclone_path or "rclone").strip() or "rclone"
+        provider = str(settings.cloud_provider or "rclone").strip()
+        if provider != "rclone" and log_cb:
+            log_cb("INFO", f"Cloud provider '{provider}' uses rclone remote path: {remote}")
+        cmd = [tool, "copy", str(output_path), remote, "--progress"]
+        if log_cb:
+            log_cb("INFO", f"Cloud upload: {' '.join(cmd)}")
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        except FileNotFoundError as exc:
+            raise CloudUploadError("rclone not found. Set the rclone path or install rclone.") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise CloudUploadError("Cloud upload timed out.") from exc
+        if result.returncode != 0:
+            details = (result.stderr or result.stdout or "").strip()
+            raise CloudUploadError(details or f"Cloud upload failed with code {result.returncode}.")

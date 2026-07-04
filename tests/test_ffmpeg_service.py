@@ -46,6 +46,17 @@ class FfmpegServiceTest(unittest.TestCase):
         self.assertFalse(allowed)
         self.assertIn("Контейнер", reason)
 
+        allowed, reason = self.service.fast_copy_allowed(
+            Path("/tmp/input.mov"),
+            ".mp4",
+            info,
+            False,
+            False,
+            allow_remux=True,
+        )
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "")
+
         allowed, reason = self.service.fast_copy_allowed(Path("/tmp/input.mp4"), ".mp4", info, True, False)
         self.assertFalse(allowed)
         self.assertIn("фільтри", reason)
@@ -177,6 +188,119 @@ class FfmpegServiceTest(unittest.TestCase):
         joined = " ".join(cmd)
         self.assertIn("0:a:1?", joined)
         self.assertIn("-c copy", joined)
+
+    def test_video_command_supports_privacy_editor_filters_and_audio_codec(self) -> None:
+        settings = ConversionSettings(
+            out_video_format="mkv",
+            video_codec="H.264 (AVC)",
+            hw_encoder="cpu",
+            privacy_blur_regions="10:20:30:40",
+            editor_deinterlace=True,
+            editor_stabilize=True,
+            editor_denoise="hqdn3d",
+            editor_brightness=0.1,
+            editor_contrast=1.2,
+            editor_saturation=0.9,
+            editor_gamma=1.1,
+            audio_codec="ac3",
+            audio_bitrate="384k",
+            video_profile="baseline",
+        )
+        cmd = self.service.build_video_command(
+            Path("/tmp/input.mp4"),
+            Path("/tmp/output.mkv"),
+            settings,
+            MediaInfo(vcodec="h264", acodec="aac"),
+            allow_fast_copy=False,
+        )
+        joined = " ".join(cmd)
+        self.assertIn("delogo=x=10:y=20:w=30:h=40:show=0", joined)
+        self.assertIn("yadif", joined)
+        self.assertIn("deshake", joined)
+        self.assertIn("hqdn3d", joined)
+        self.assertIn("eq=brightness=0.100:contrast=1.200:saturation=0.900:gamma=1.100", joined)
+        self.assertIn("-profile:v baseline", joined)
+        self.assertIn("-c:a ac3", joined)
+        self.assertIn("-b:a 384k", joined)
+
+    def test_subtitle_style_and_sync_are_applied(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subtitle = Path(tmpdir) / "input.srt"
+            subtitle.write_text("1\n00:00:00,000 --> 00:00:01,000\nHi\n", encoding="utf-8")
+            settings = ConversionSettings(
+                subtitle_mode="burn",
+                subtitle_path=str(subtitle),
+                subtitle_style_enabled=True,
+                subtitle_font_name="Arial",
+                subtitle_font_size=42,
+                subtitle_primary_color="#112233",
+                subtitle_outline=3,
+                subtitle_shadow=2,
+                subtitle_alignment=8,
+                subtitle_sync_ms=-250,
+            )
+
+            subtitle_filter = self.service.build_subtitle_burn_filter(Path("/tmp/input.mp4"), settings)
+            assert subtitle_filter is not None
+            self.assertIn("force_style=", subtitle_filter)
+            self.assertIn("FontName=Arial", subtitle_filter)
+            self.assertIn("PrimaryColour=&H00332211", subtitle_filter)
+            self.assertIn("Alignment=8", subtitle_filter)
+
+            cmd = self.service.build_subtitle_file_command(subtitle, Path("/tmp/output.vtt"), settings)
+            self.assertIn("-itsoffset", cmd)
+            self.assertIn("-0.250", cmd)
+
+    def test_device_codecs_generate_prores_and_mpeg2_commands(self) -> None:
+        self.service.encoder_caps = {"prores_ks", "mpeg2video", "libx264"}
+
+        prores = ConversionSettings(out_video_format="mov", video_codec="ProRes", hw_encoder="auto")
+        prores_cmd = self.service.build_video_command(
+            Path("/tmp/input.mp4"),
+            Path("/tmp/output.mov"),
+            prores,
+            MediaInfo(vcodec="h264", acodec="aac"),
+            allow_fast_copy=False,
+        )
+        self.assertIn("-c:v prores_ks", " ".join(prores_cmd))
+        self.assertIn("yuv422p10le", prores_cmd)
+        self.assertIn("-profile:v 3", " ".join(prores_cmd))
+
+        dvd = ConversionSettings(out_video_format="mpg", video_codec="MPEG-2", audio_codec="ac3", audio_bitrate="192k")
+        dvd_cmd = self.service.build_video_command(
+            Path("/tmp/input.mp4"),
+            Path("/tmp/output.mpg"),
+            dvd,
+            MediaInfo(vcodec="h264", acodec="aac"),
+            allow_fast_copy=False,
+        )
+        joined = " ".join(dvd_cmd)
+        self.assertIn("-c:v mpeg2video", joined)
+        self.assertIn("-q:v", dvd_cmd)
+        self.assertIn("-c:a ac3", joined)
+
+    def test_two_pass_and_quality_commands_are_built(self) -> None:
+        final_cmd = ["ffmpeg", "-i", "in.mp4", "-c:v", "libx264", "-b:v", "1200k", "out.mp4"]
+        pass1, pass2 = self.service.build_two_pass_commands(final_cmd, Path("/tmp/passlog"))
+        self.assertIn("-pass", pass1)
+        self.assertIn("1", pass1)
+        self.assertIn("-f", pass1)
+        self.assertIn("null", pass1)
+        self.assertEqual(pass2[-1], "out.mp4")
+        self.assertIn("2", pass2)
+
+        integrity = self.service.build_integrity_check_command(Path("/tmp/out.mp4"))
+        self.assertIn("-f", integrity)
+        self.assertIn("null", integrity)
+
+        ssim = " ".join(self.service.build_quality_metric_command(Path("/tmp/in.mp4"), Path("/tmp/out.mp4"), "ssim"))
+        self.assertIn("ssim", ssim)
+        vmaf = " ".join(self.service.build_quality_metric_command(Path("/tmp/in.mp4"), Path("/tmp/out.mp4"), "vmaf"))
+        self.assertIn("libvmaf", vmaf)
+
+    def test_source_matches_codec_choice(self) -> None:
+        self.assertTrue(self.service.source_matches_codec_choice(MediaInfo(vcodec="h264"), "H.264 (AVC)", ".mp4"))
+        self.assertFalse(self.service.source_matches_codec_choice(MediaInfo(vcodec="hevc"), "H.264 (AVC)", ".mp4"))
 
 
 if __name__ == "__main__":

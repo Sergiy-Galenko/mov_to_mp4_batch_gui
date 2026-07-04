@@ -53,6 +53,12 @@ ApplicationWindow {
         { title: "presets", icon: "🎛️", page: 2, target: "" },
         { title: "ffmpeg", icon: "🧰", page: 3, target: "" },
         { title: "downloads", icon: "▶️", page: 4, target: "" },
+        { title: "smart_convert", icon: "🧠", page: 5, target: "smart_convert" },
+        { title: "device_profiles", icon: "📱", page: 5, target: "device_profiles" },
+        { title: "video_editor", icon: "✂️", page: 5, target: "video_editor" },
+        { title: "subtitle_tools", icon: "📝", page: 5, target: "subtitle_tools" },
+        { title: "privacy_security", icon: "🔐", page: 5, target: "privacy_security" },
+        { title: "cloud_integration", icon: "☁️", page: 5, target: "cloud_integration" },
         { title: "run", icon: "🚀", page: 5, target: "run" },
         { title: "core", icon: "⚙️", page: 5, target: "core" },
         { title: "output", icon: "📤", page: 5, target: "output" },
@@ -66,13 +72,18 @@ ApplicationWindow {
     ]
 
     property var operationOptions: ["convert", "audio_only", "auto_subtitle", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet"]
-    property var videoFormats: ["mp4", "mkv", "webm", "mov", "avi", "gif"]
+    property var videoFormats: ["mp4", "mkv", "webm", "mov", "avi", "gif", "mpg", "m2ts"]
     property var imageFormats: ["jpg", "png", "webp", "bmp", "tiff"]
     property var audioFormats: ["mp3", "m4a", "aac", "wav", "flac", "opus"]
     property var subtitleFormats: ["srt", "ass", "vtt"]
-    property var codecOptions: ["auto", "H.264 (AVC)", "H.265 (HEVC)", "AV1", "VP9 (WebM)"]
+    property var codecOptions: ["auto", "H.264 (AVC)", "H.265 (HEVC)", "ProRes", "MPEG-2", "AV1", "VP9 (WebM)"]
+    property var audioCodecOptions: ["auto", "aac", "ac3", "opus", "mp3", "copy"]
+    property var smartContentTypes: ["auto", "live_action", "animation", "screencast"]
+    property var smartQualityTargets: ["small", "balanced", "quality"]
+    property var smartQualityMetrics: ["none", "ssim", "vmaf"]
     property var hwOptions: ["auto", "cpu", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"]
     property var performanceProfiles: ["Quality", "Balanced", "Fast", "Small file"]
+    property var deviceProfiles: ["None", "iPhone 14/15/16", "iPad Pro", "Apple TV 4K HDR", "Android H.264 baseline", "Samsung TV", "PlayStation 5", "Xbox Series X", "Chromecast / Fire TV", "GoPro import", "DJI Drone import", "Steam Deck", "DVD compatible", "Blu-ray compatible"]
     property var rotateOptions: ["0", "90° вправо", "90° вліво", "180°"]
     property var portraitOptions: ["Вимкнено", "9:16 (1080x1920) - crop", "9:16 (1080x1920) - blur", "9:16 (720x1280) - crop", "9:16 (720x1280) - blur"]
     property var positionOptions: ["Верх-ліворуч", "Верх-праворуч", "Низ-ліворуч", "Низ-праворуч", "Центр"]
@@ -98,6 +109,10 @@ ApplicationWindow {
     }
 
     function startIfValid() {
+        if (!backend)
+            return
+        if (!backend.ensureOutputDirSelected())
+            return
         if (!validateForm())
             return
         backend.startConversion(collectSettings())
@@ -165,6 +180,8 @@ ApplicationWindow {
 
     function convertQuickFile() {
         if (!backend || root.quickConvertPath.length === 0 || root.quickConvertFormat.length === 0)
+            return
+        if (!backend.ensureOutputDirSelected())
             return
         var settings = quickSettingsMap(root.quickConvertFormat)
         backend.updateTaskOverrideByPath(root.quickConvertPath, quickOverrideMap(root.quickConvertFormat))
@@ -660,8 +677,34 @@ ApplicationWindow {
                     Layout.fillWidth: false
                     Layout.preferredWidth: 132
                     text: I18n.t("convert_all")
-                    enabled: backend ? (backend.queueCount > 0 && !backend.isRunning && formValid) : false
+                    enabled: backend ? (backend.queueCount > 0 && !backend.isRunning) : false
                     onClicked: root.startIfValid()
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: backend && !backend.outputDirConfigured ? 56 : 0
+                visible: backend ? !backend.outputDirConfigured : false
+                radius: Theme.radiusPanel
+                color: Theme.warningSoft
+                border.width: 1
+                border.color: Theme.accentWarn
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 10
+                    Label {
+                        Layout.fillWidth: true
+                        text: I18n.t("output_folder_required_detail")
+                        color: Theme.textPrimary
+                        font.pixelSize: Theme.fontSmall
+                        wrapMode: Text.WordWrap
+                    }
+                    Button {
+                        text: I18n.t("choose_output_folder")
+                        onClicked: backend && backend.ensureOutputDirSelected()
+                    }
                 }
             }
 
@@ -978,6 +1021,8 @@ ApplicationWindow {
         function startDownload(mode) {
             if (!backend)
                 return
+            if (!backend.ensureOutputDirSelected())
+                return
             backend.downloadYoutubeAdvanced({
                 url: youtubeUrlField.text,
                 mode: mode,
@@ -986,6 +1031,33 @@ ApplicationWindow {
                 subtitles: youtubeSubtitlesCheck.checked,
                 cookies_file: youtubeCookiesField.text
             })
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: backend && !backend.outputDirConfigured ? 56 : 0
+            visible: backend ? !backend.outputDirConfigured : false
+            radius: Theme.radiusPanel
+            color: Theme.warningSoft
+            border.width: 1
+            border.color: Theme.accentWarn
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 10
+                Label {
+                    Layout.fillWidth: true
+                    text: I18n.t("output_folder_required_detail")
+                    color: Theme.textPrimary
+                    font.pixelSize: Theme.fontSmall
+                    wrapMode: Text.WordWrap
+                }
+                Button {
+                    text: I18n.t("choose_output_folder")
+                    enabled: backend ? !backend.youtubeDownloadRunning : false
+                    onClicked: backend && backend.ensureOutputDirSelected()
+                }
+            }
         }
 
         RowLayout {
@@ -1210,6 +1282,7 @@ ApplicationWindow {
             if (preset.out_audio_fmt) root.setComboText(outAudioFmt, preset.out_audio_fmt)
             if (preset.out_subtitle_fmt) root.setComboText(outSubtitleFmt, preset.out_subtitle_fmt)
             if (preset.audio_bitrate) audioBitrateField.text = preset.audio_bitrate
+            if (preset.audio_codec) root.setComboText(audioCodecCombo, preset.audio_codec)
             if (preset.audio_track_index !== undefined) audioTrackSpin.value = Number(preset.audio_track_index) + 1
             if (preset.crf !== undefined) crfSpin.value = Number(preset.crf)
             if (preset.preset) root.setComboText(presetCombo, preset.preset)
@@ -1217,6 +1290,16 @@ ApplicationWindow {
             targetSizeField.text = preset.target_size_mb || ""
             if (preset.cpu_load_limit !== undefined) cpuLimitSpin.value = Number(preset.cpu_load_limit)
             if (preset.gpu_load_limit !== undefined) gpuLimitSpin.value = Number(preset.gpu_load_limit)
+            smartConvertCheck.checked = !!preset.smart_convert_enabled
+            root.setComboText(smartContentTypeCombo, preset.smart_content_type || "auto")
+            root.setComboText(smartQualityTargetCombo, preset.smart_quality_target || "balanced")
+            smartReencodeCheck.checked = preset.smart_reencode_detection === undefined ? true : !!preset.smart_reencode_detection
+            smartTwoPassCheck.checked = !!preset.smart_two_pass
+            smartIntegrityCheck.checked = !!preset.smart_integrity_check
+            root.setComboText(smartQualityMetricCombo, preset.smart_quality_metric || "none")
+            smartAbTestCheck.checked = !!preset.smart_ab_test
+            smartAbCrfsField.text = preset.smart_ab_crfs || "18,23,28"
+            if (preset.smart_ab_duration !== undefined) smartAbDurationSpin.value = Number(preset.smart_ab_duration)
             if (preset.portrait) root.setComboText(portraitCombo, preset.portrait)
             if (preset.img_quality !== undefined) imgQualitySpin.value = Number(preset.img_quality)
             overwriteCheck.checked = !!preset.overwrite
@@ -1281,6 +1364,30 @@ ApplicationWindow {
             metaGenreField.text = preset.meta_genre || ""
             metaYearField.text = preset.meta_year || ""
             metaTrackField.text = preset.meta_track || ""
+            if (preset.device_profile) root.setComboText(deviceProfileCombo, preset.device_profile)
+            privacyBlurRegionsField.text = preset.privacy_blur_regions || ""
+            checksumCombo.currentIndex = Math.max(0, checksumCombo.find(preset.checksum_algorithm || "none"))
+            secureDeleteCheck.checked = !!preset.secure_delete_original
+            subtitleSyncField.text = preset.subtitle_sync_ms || ""
+            subtitleStyleCheck.checked = !!preset.subtitle_style_enabled
+            subtitleFontNameField.text = preset.subtitle_font_name || ""
+            if (preset.subtitle_font_size !== undefined) subtitleFontSizeSpin.value = Number(preset.subtitle_font_size)
+            subtitlePrimaryColorField.text = preset.subtitle_primary_color || "white"
+            if (preset.subtitle_outline !== undefined) subtitleOutlineSpin.value = Number(preset.subtitle_outline)
+            if (preset.subtitle_shadow !== undefined) subtitleShadowSpin.value = Number(preset.subtitle_shadow)
+            if (preset.subtitle_alignment !== undefined) subtitleAlignmentSpin.value = Number(preset.subtitle_alignment)
+            editorDeinterlaceCheck.checked = !!preset.editor_deinterlace
+            editorStabilizeCheck.checked = !!preset.editor_stabilize
+            root.setComboText(editorDenoiseCombo, preset.editor_denoise || "none")
+            editorBrightnessField.text = preset.editor_brightness || ""
+            editorContrastField.text = preset.editor_contrast || ""
+            editorSaturationField.text = preset.editor_saturation || ""
+            editorGammaField.text = preset.editor_gamma || ""
+            editorLutPathField.text = preset.editor_lut_path || ""
+            cloudUploadCheck.checked = !!preset.cloud_upload_enabled
+            root.setComboText(cloudProviderCombo, preset.cloud_provider || "rclone")
+            cloudRclonePathField.text = preset.cloud_rclone_path || "rclone"
+            cloudRemotePathField.text = preset.cloud_remote_path || ""
             root.scheduleSettingsSync()
         }
 
@@ -1292,6 +1399,7 @@ ApplicationWindow {
                 out_audio_fmt: outAudioFmt.currentText,
                 out_subtitle_fmt: outSubtitleFmt.currentText,
                 audio_bitrate: audioBitrateField.text,
+                audio_codec: audioCodecCombo.currentText,
                 audio_track_index: audioTrackSpin.value - 1,
                 crf: crfSpin.value,
                 preset: presetCombo.currentText,
@@ -1299,6 +1407,16 @@ ApplicationWindow {
                 target_size_mb: targetSizeField.text,
                 cpu_load_limit: cpuLimitSpin.value,
                 gpu_load_limit: gpuLimitSpin.value,
+                smart_convert_enabled: smartConvertCheck.checked,
+                smart_content_type: smartContentTypeCombo.currentText,
+                smart_quality_target: smartQualityTargetCombo.currentText,
+                smart_reencode_detection: smartReencodeCheck.checked,
+                smart_two_pass: smartTwoPassCheck.checked,
+                smart_integrity_check: smartIntegrityCheck.checked,
+                smart_quality_metric: smartQualityMetricCombo.currentText,
+                smart_ab_test: smartAbTestCheck.checked,
+                smart_ab_crfs: smartAbCrfsField.text,
+                smart_ab_duration: smartAbDurationSpin.value,
                 portrait: portraitCombo.currentText,
                 img_quality: imgQualitySpin.value,
                 overwrite: overwriteCheck.checked,
@@ -1363,7 +1481,32 @@ ApplicationWindow {
                 meta_album: metaAlbumField.text,
                 meta_genre: metaGenreField.text,
                 meta_year: metaYearField.text,
-                meta_track: metaTrackField.text
+                meta_track: metaTrackField.text,
+                device_profile: deviceProfileCombo.currentText,
+                privacy_blur_regions: privacyBlurRegionsField.text,
+                sanitize_metadata: stripMetadataCheck.checked,
+                checksum_algorithm: checksumCombo.currentText,
+                secure_delete_original: secureDeleteCheck.checked,
+                subtitle_sync_ms: subtitleSyncField.text,
+                subtitle_style_enabled: subtitleStyleCheck.checked,
+                subtitle_font_name: subtitleFontNameField.text,
+                subtitle_font_size: subtitleFontSizeSpin.value,
+                subtitle_primary_color: subtitlePrimaryColorField.text,
+                subtitle_outline: subtitleOutlineSpin.value,
+                subtitle_shadow: subtitleShadowSpin.value,
+                subtitle_alignment: subtitleAlignmentSpin.value,
+                editor_deinterlace: editorDeinterlaceCheck.checked,
+                editor_stabilize: editorStabilizeCheck.checked,
+                editor_denoise: editorDenoiseCombo.currentText,
+                editor_brightness: editorBrightnessField.text,
+                editor_contrast: editorContrastField.text,
+                editor_saturation: editorSaturationField.text,
+                editor_gamma: editorGammaField.text,
+                editor_lut_path: editorLutPathField.text,
+                cloud_upload_enabled: cloudUploadCheck.checked,
+                cloud_provider: cloudProviderCombo.currentText,
+                cloud_rclone_path: cloudRclonePathField.text,
+                cloud_remote_path: cloudRemotePathField.text
             }
         }
 
@@ -1400,7 +1543,13 @@ ApplicationWindow {
         function sectionY(section) {
             var target = String(section || "run")
             var panel = runPanel
-            if (target === "core") panel = corePanel
+            if (target === "smart_convert") panel = smartConvertPanel
+            else if (target === "device_profiles") panel = deviceProfilesPanel
+            else if (target === "video_editor") panel = videoEditorPanel
+            else if (target === "subtitle_tools") panel = subtitleToolsPanel
+            else if (target === "privacy_security") panel = privacySecurityPanel
+            else if (target === "cloud_integration") panel = cloudIntegrationPanel
+            else if (target === "core") panel = corePanel
             else if (target === "output") panel = outputPanel
             else if (target === "video") panel = videoPanel
             else if (target === "audio_subtitles") panel = audioSubtitlesPanel
@@ -1444,6 +1593,59 @@ ApplicationWindow {
                 Button { text: I18n.t("load"); onClicked: { root.selectedPreset = savedPresetCombo.currentText; backend && backend.loadPreset(savedPresetCombo.currentText) } }
                 Button { text: I18n.t("save"); onClicked: backend && backend.savePreset(savedPresetCombo.currentText || "Custom", collectSettings()) }
                 Button { text: I18n.t("delete"); onClicked: backend && backend.deletePreset(savedPresetCombo.currentText) }
+            }
+        }
+
+        Panel {
+            id: smartConvertPanel
+            title: I18n.t("smart_convert")
+            AppCheckBox { id: smartConvertCheck; text: I18n.t("smart_convert_enabled"); onToggled: scheduleSettingsSync() }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 8
+                columnSpacing: 8
+                FieldLabel { text: I18n.t("smart_content_type") }
+                AppComboBox { id: smartContentTypeCombo; model: root.smartContentTypes; currentIndex: 0; onActivated: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("smart_quality_target") }
+                AppComboBox { id: smartQualityTargetCombo; model: root.smartQualityTargets; currentIndex: 1; onActivated: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("smart_quality_metric") }
+                AppComboBox { id: smartQualityMetricCombo; model: root.smartQualityMetrics; currentIndex: 0; onActivated: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("smart_ab_crfs") }
+                AppTextField { id: smartAbCrfsField; text: "18,23,28"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("smart_ab_duration") }
+                AppSpinBox { id: smartAbDurationSpin; from: 1; to: 120; value: 8; onValueChanged: scheduleSettingsSync() }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                AppCheckBox { id: smartReencodeCheck; text: I18n.t("smart_reencode_detection"); checked: true; onToggled: scheduleSettingsSync() }
+                AppCheckBox { id: smartTwoPassCheck; text: I18n.t("smart_two_pass"); onToggled: scheduleSettingsSync() }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                AppCheckBox { id: smartIntegrityCheck; text: I18n.t("smart_integrity_check"); onToggled: scheduleSettingsSync() }
+                AppCheckBox { id: smartAbTestCheck; text: I18n.t("smart_ab_test"); onToggled: scheduleSettingsSync() }
+            }
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("smart_convert_hint")
+                color: Theme.textMuted
+                font.pixelSize: Theme.fontMeta
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        Panel {
+            id: deviceProfilesPanel
+            title: I18n.t("device_profiles")
+            FieldLabel { text: I18n.t("device_profile") }
+            AppComboBox { id: deviceProfileCombo; model: root.deviceProfiles; currentIndex: 0; onActivated: scheduleSettingsSync() }
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("device_profile_hint")
+                color: Theme.textMuted
+                font.pixelSize: Theme.fontMeta
+                wrapMode: Text.WordWrap
             }
         }
 
@@ -1493,7 +1695,7 @@ ApplicationWindow {
         Panel {
             id: outputPanel
             title: I18n.t("output")
-            AppTextField { id: outputDirField; text: backend ? backend.outputDir : ""; onEditingFinished: { if (backend) backend.outputDir = text; scheduleSettingsSync() } }
+            AppTextField { id: outputDirField; text: backend ? backend.outputDir : ""; placeholderText: I18n.t("output_folder_required"); onEditingFinished: { if (backend) backend.outputDir = text; scheduleSettingsSync() } }
             RowLayout {
                 Layout.fillWidth: true
                 Button { text: I18n.t("choose"); onClicked: backend && backend.pickOutputDir() }
@@ -1555,6 +1757,34 @@ ApplicationWindow {
         }
 
         Panel {
+            id: videoEditorPanel
+            title: I18n.t("video_editor")
+            RowLayout {
+                Layout.fillWidth: true
+                AppCheckBox { id: editorDeinterlaceCheck; text: I18n.t("editor_deinterlace"); onToggled: scheduleSettingsSync() }
+                AppCheckBox { id: editorStabilizeCheck; text: I18n.t("editor_stabilize"); onToggled: scheduleSettingsSync() }
+            }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 8
+                columnSpacing: 8
+                FieldLabel { text: I18n.t("editor_denoise") }
+                AppComboBox { id: editorDenoiseCombo; model: ["none", "hqdn3d", "nlmeans"]; currentIndex: 0; onActivated: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("brightness") }
+                AppTextField { id: editorBrightnessField; placeholderText: "0.0"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("contrast") }
+                AppTextField { id: editorContrastField; placeholderText: "1.0"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("saturation") }
+                AppTextField { id: editorSaturationField; placeholderText: "1.0"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("gamma") }
+                AppTextField { id: editorGammaField; placeholderText: "1.0"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("lut_path") }
+                AppTextField { id: editorLutPathField; placeholderText: ".cube / .3dl"; onEditingFinished: scheduleSettingsSync() }
+            }
+        }
+
+        Panel {
             id: audioSubtitlesPanel
             title: I18n.t("audio_subtitles")
             GridLayout {
@@ -1564,6 +1794,8 @@ ApplicationWindow {
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("bitrate") }
                 AppTextField { id: audioBitrateField; text: "192k"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("audio_codec") }
+                AppComboBox { id: audioCodecCombo; model: root.audioCodecOptions; currentIndex: 0; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("track") }
                 AppSpinBox { id: audioTrackSpin; from: 1; to: 32; value: 1; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("normalize") }
@@ -1615,6 +1847,32 @@ ApplicationWindow {
                 AppTextField { id: coverArtField; placeholderText: I18n.t("cover_art"); onEditingFinished: scheduleSettingsSync() }
                 Button { text: "..."; Layout.preferredWidth: 42; onClicked: backend && backend.pickCoverArt() }
             }
+        }
+
+        Panel {
+            id: subtitleToolsPanel
+            title: I18n.t("subtitle_tools")
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 8
+                columnSpacing: 8
+                FieldLabel { text: I18n.t("subtitle_sync_ms") }
+                AppTextField { id: subtitleSyncField; placeholderText: "0"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("subtitle_font_name") }
+                AppTextField { id: subtitleFontNameField; placeholderText: "Arial"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("subtitle_font_size") }
+                AppSpinBox { id: subtitleFontSizeSpin; from: 6; to: 200; value: 24; onValueChanged: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("subtitle_primary_color") }
+                AppTextField { id: subtitlePrimaryColorField; text: "white"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("subtitle_outline") }
+                AppSpinBox { id: subtitleOutlineSpin; from: 0; to: 20; value: 1; onValueChanged: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("subtitle_shadow") }
+                AppSpinBox { id: subtitleShadowSpin; from: 0; to: 20; value: 0; onValueChanged: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("subtitle_alignment") }
+                AppSpinBox { id: subtitleAlignmentSpin; from: 1; to: 9; value: 2; onValueChanged: scheduleSettingsSync() }
+            }
+            AppCheckBox { id: subtitleStyleCheck; text: I18n.t("subtitle_style_enabled"); onToggled: scheduleSettingsSync() }
         }
 
         Panel {
@@ -1694,6 +1952,58 @@ ApplicationWindow {
             AppTextField { id: metaTrackField; placeholderText: I18n.t("track_meta"); onEditingFinished: scheduleSettingsSync() }
             AppTextField { id: beforeHookField; placeholderText: I18n.t("before_hook"); onEditingFinished: scheduleSettingsSync() }
             AppTextField { id: afterHookField; placeholderText: I18n.t("after_hook"); onEditingFinished: scheduleSettingsSync() }
+        }
+
+        Panel {
+            id: privacySecurityPanel
+            title: I18n.t("privacy_security")
+            FieldLabel { text: I18n.t("blur_regions") }
+            AppTextField { id: privacyBlurRegionsField; placeholderText: "x:y:w:h; x:y:w:h"; onEditingFinished: scheduleSettingsSync() }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 8
+                columnSpacing: 8
+                FieldLabel { text: I18n.t("checksum_algorithm") }
+                AppComboBox { id: checksumCombo; model: ["none", "md5", "sha256"]; currentIndex: 0; onActivated: scheduleSettingsSync() }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                AppCheckBox { id: secureDeleteCheck; text: I18n.t("secure_delete_original"); onToggled: scheduleSettingsSync() }
+                AppCheckBox { text: I18n.t("sanitize_metadata"); checked: stripMetadataCheck.checked; onToggled: { stripMetadataCheck.checked = checked; scheduleSettingsSync() } }
+            }
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("privacy_security_hint")
+                color: Theme.accentWarn
+                font.pixelSize: Theme.fontMeta
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        Panel {
+            id: cloudIntegrationPanel
+            title: I18n.t("cloud_integration")
+            AppCheckBox { id: cloudUploadCheck; text: I18n.t("cloud_upload_enabled"); onToggled: scheduleSettingsSync() }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 8
+                columnSpacing: 8
+                FieldLabel { text: I18n.t("cloud_provider") }
+                AppComboBox { id: cloudProviderCombo; model: ["rclone", "Google Drive", "OneDrive", "Dropbox", "S3/MinIO", "FTP/SFTP"]; currentIndex: 0; onActivated: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("cloud_rclone_path") }
+                AppTextField { id: cloudRclonePathField; text: "rclone"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("cloud_remote_path") }
+                AppTextField { id: cloudRemotePathField; placeholderText: "remote:path"; onEditingFinished: scheduleSettingsSync() }
+            }
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("cloud_hint")
+                color: Theme.textMuted
+                font.pixelSize: Theme.fontMeta
+                wrapMode: Text.WordWrap
+            }
         }
 
         Panel {

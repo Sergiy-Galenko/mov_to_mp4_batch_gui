@@ -77,6 +77,12 @@ class ValidationService:
 
         if settings.trim_start is not None and settings.trim_end is not None and settings.trim_end <= settings.trim_start:
             add_error("trim_end", "Кінець обрізання має бути більшим за початок.")
+        if settings.smart_two_pass and not settings.target_size_mb:
+            add_warning("Smart two-pass працює тільки коли задано цільовий розмір.")
+        if settings.smart_quality_metric == "vmaf":
+            add_warning("VMAF потребує FFmpeg із фільтром libvmaf; якщо фільтра немає, буде warning після конвертації.")
+        if settings.smart_ab_test and not settings.smart_ab_crfs.strip():
+            add_warning("A/B тест увімкнено, але список CRF порожній.")
 
         if include_queue:
             self._validate_ffmpeg(ffmpeg_path, add_error, add_warning)
