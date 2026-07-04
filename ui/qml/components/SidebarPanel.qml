@@ -7,7 +7,8 @@ Rectangle {
     id: root
     property bool collapsed: false
     property int activeIndex: 0
-    signal sectionRequested(int index)
+    property var navigationItems: []
+    signal sectionRequested(int pageIndex, string target, int navIndex)
     signal addFilesRequested()
     signal addFolderRequested()
     signal dedupeRequested()
@@ -33,53 +34,75 @@ Rectangle {
             font.pixelSize: Theme.fontMeta
         }
 
-        Repeater {
-            model: [
-                { title: "queue", icon: "Q" },
-                { title: "analytics", icon: "A" },
-                { title: "presets", icon: "P" },
-                { title: "ffmpeg", icon: "F" },
-                { title: "settings", icon: "S" }
-            ]
-            delegate: Rectangle {
+        ScrollView {
+            id: navScroll
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+            ColumnLayout {
+                width: navScroll.availableWidth
                 Layout.fillWidth: true
-                Layout.preferredHeight: 36
-                radius: Theme.radiusButton
-                color: root.activeIndex === index ? Theme.bgElevated : (mouse.containsMouse ? Qt.rgba(1, 1, 1, 0.04) : "transparent")
-                border.width: root.activeIndex === index ? 1 : 0
-                border.color: Theme.bgBorder
+                spacing: 4
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 8
-                    spacing: 9
-
-                    Label {
-                        text: modelData.icon
-                        color: root.activeIndex === index ? Theme.accentPrimary : Theme.textSecondary
-                        font.family: Theme.monoFont
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        Layout.preferredWidth: 18
-                        horizontalAlignment: Text.AlignHCenter
-                    }
-
-                    Label {
-                        visible: !root.collapsed
+                Repeater {
+                    model: root.navigationItems
+                    delegate: ColumnLayout {
                         Layout.fillWidth: true
-                        text: I18n.t(modelData.title)
-                        color: root.activeIndex === index ? Theme.textPrimary : Theme.textSecondary
-                        font.pixelSize: Theme.fontSmall
-                        elide: Text.ElideRight
-                    }
-                }
+                        spacing: 4
 
-                MouseArea {
-                    id: mouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: root.sectionRequested(index)
+                        Label {
+                            visible: !root.collapsed && index === 5
+                            Layout.fillWidth: true
+                            Layout.topMargin: 6
+                            text: I18n.t("settings")
+                            color: Theme.textMuted
+                            font.family: Theme.monoFont
+                            font.pixelSize: Theme.fontMeta
+                            elide: Text.ElideRight
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 36
+                            radius: Theme.radiusButton
+                            color: root.activeIndex === index ? Theme.bgElevated : (mouse.containsMouse ? Qt.rgba(1, 1, 1, 0.04) : "transparent")
+                            border.width: root.activeIndex === index ? 1 : 0
+                            border.color: Theme.bgBorder
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 8
+                                spacing: 9
+
+                                Label {
+                                    text: modelData.icon
+                                    color: root.activeIndex === index ? Theme.accentPrimary : Theme.textSecondary
+                                    font.pixelSize: Theme.fontSmall
+                                    Layout.preferredWidth: 22
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+
+                                Label {
+                                    visible: !root.collapsed
+                                    Layout.fillWidth: true
+                                    text: I18n.t(modelData.title)
+                                    color: root.activeIndex === index ? Theme.textPrimary : Theme.textSecondary
+                                    font.pixelSize: Theme.fontSmall
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            MouseArea {
+                                id: mouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: root.sectionRequested(modelData.page, modelData.target || "", index)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -101,7 +124,5 @@ Rectangle {
             text: root.collapsed ? "🔎" : "🔎  " + I18n.t("hash_dedupe")
             onClicked: root.dedupeRequested()
         }
-
-        Item { Layout.fillHeight: true }
     }
 }

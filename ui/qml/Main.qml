@@ -39,6 +39,25 @@ ApplicationWindow {
     property string quickConvertName: ""
     property string quickConvertMediaType: "video"
     property string quickConvertFormat: ""
+    property int activeNavIndex: 0
+    property string pendingSettingsTarget: ""
+    property var navigationItems: [
+        { title: "queue", icon: "📁", page: 0, target: "" },
+        { title: "analytics", icon: "📊", page: 1, target: "" },
+        { title: "presets", icon: "🎛️", page: 2, target: "" },
+        { title: "ffmpeg", icon: "🧰", page: 3, target: "" },
+        { title: "youtube_download", icon: "▶️", page: 4, target: "" },
+        { title: "run", icon: "🚀", page: 5, target: "run" },
+        { title: "core", icon: "⚙️", page: 5, target: "core" },
+        { title: "output", icon: "📤", page: 5, target: "output" },
+        { title: "video", icon: "🎬", page: 5, target: "video" },
+        { title: "audio_subtitles", icon: "🔊", page: 5, target: "audio_subtitles" },
+        { title: "images_sheets", icon: "🖼️", page: 5, target: "images_sheets" },
+        { title: "watermark_text", icon: "✍️", page: 5, target: "watermark_text" },
+        { title: "metadata_hooks", icon: "🏷️", page: 5, target: "metadata_hooks" },
+        { title: "selected_override", icon: "🧩", page: 5, target: "selected_override" },
+        { title: "ffmpeg_watch", icon: "🛠️", page: 5, target: "ffmpeg_watch" }
+    ]
 
     property var operationOptions: ["convert", "audio_only", "auto_subtitle", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet"]
     property var videoFormats: ["mp4", "mkv", "webm", "mov", "avi", "gif"]
@@ -213,6 +232,26 @@ ApplicationWindow {
             backend.selectQueuePath(path)
     }
 
+    function navIndexFor(pageIndex, target) {
+        for (var i = 0; i < navigationItems.length; ++i) {
+            var item = navigationItems[i]
+            if (item.page === pageIndex && String(item.target || "") === String(target || ""))
+                return i
+        }
+        return -1
+    }
+
+    function openSidebarSection(pageIndex, target, navIndex) {
+        root.activeSection = pageIndex
+        var resolvedNav = navIndex >= 0 ? navIndex : navIndexFor(pageIndex, target)
+        if (resolvedNav >= 0)
+            root.activeNavIndex = resolvedNav
+        if (pageIndex === 5) {
+            root.pendingSettingsTarget = target || "run"
+            settingsScrollTargetTimer.restart()
+        }
+    }
+
     Timer {
         id: settingsSyncTimer
         interval: 260
@@ -221,6 +260,16 @@ ApplicationWindow {
             validateForm()
             if (backend)
                 backend.refreshOutputPreview(collectSettings())
+        }
+    }
+
+    Timer {
+        id: settingsScrollTargetTimer
+        interval: 40
+        repeat: false
+        onTriggered: {
+            if (settingsPanel && settingsScroll && root.activeSection === 5)
+                settingsScroll.contentItem.contentY = settingsPanel.sectionY(root.pendingSettingsTarget)
         }
     }
 
@@ -317,8 +366,9 @@ ApplicationWindow {
             SidebarPanel {
                 Layout.fillHeight: true
                 collapsed: root.sidebarCollapsed
-                activeIndex: root.activeSection
-                onSectionRequested: function(index) { root.activeSection = index }
+                activeIndex: root.activeNavIndex
+                navigationItems: root.navigationItems
+                onSectionRequested: function(pageIndex, target, navIndex) { root.openSidebarSection(pageIndex, target, navIndex) }
                 onAddFilesRequested: backend && backend.addFiles()
                 onAddFolderRequested: backend && backend.addFolder()
                 onDedupeRequested: backend && backend.deduplicateQueueByHash()
@@ -335,6 +385,7 @@ ApplicationWindow {
                 AnalyticsScreen {}
                 PresetsScreen {}
                 FfmpegScreen {}
+                YoutubeScreen {}
                 ScrollView {
                     id: settingsScroll
                     clip: true
@@ -533,7 +584,7 @@ ApplicationWindow {
                 Button {
                     text: I18n.t("batch_override")
                     visible: root.selectedPaths.length > 1
-                    onClicked: root.activeSection = 4
+                    onClicked: root.openSidebarSection(5, "selected_override", -1)
                 }
                 Button { text: I18n.t("add"); onClicked: backend && backend.addFiles() }
                 Button { text: I18n.t("folder"); onClicked: backend && backend.addFolder() }
@@ -605,7 +656,7 @@ ApplicationWindow {
                         onOverrideRequested: function(path) {
                             root.selectedPath = path
                             root.selectedIndex = index
-                            root.activeSection = 4
+                            root.openSidebarSection(5, "selected_override", -1)
                             if (backend)
                                 backend.selectQueuePath(path)
                         }
@@ -765,47 +816,65 @@ ApplicationWindow {
                 }
             }
 
-            Panel {
-                title: I18n.t("youtube_download")
-                AppTextField {
-                    id: youtubeUrlField
-                    Layout.fillWidth: true
-                    placeholderText: I18n.t("youtube_url")
-                    enabled: backend ? !backend.youtubeDownloadRunning : false
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    Button {
-                        text: I18n.t("download_video")
-                        enabled: backend && !backend.youtubeDownloadRunning && String(youtubeUrlField.text).trim().length > 0
-                        onClicked: backend.downloadYoutube(youtubeUrlField.text, "video")
-                    }
-                    Button {
-                        text: I18n.t("download_audio")
-                        enabled: backend && !backend.youtubeDownloadRunning && String(youtubeUrlField.text).trim().length > 0
-                        onClicked: backend.downloadYoutube(youtubeUrlField.text, "audio")
-                    }
-                }
-                ProgressBar {
-                    Layout.fillWidth: true
-                    visible: backend ? backend.youtubeDownloadRunning || backend.youtubeDownloadProgress > 0 : false
-                    from: 0
-                    to: 1
-                    value: backend ? backend.youtubeDownloadProgress : 0
-                }
-                Label {
-                    Layout.fillWidth: true
-                    text: backend ? backend.youtubeDownloadStatus : ""
-                    color: Theme.textMuted
-                    wrapMode: Text.WordWrap
-                    font.pixelSize: Theme.fontMeta
-                }
-            }
-
             LogPanel {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 220
             }
+        }
+    }
+
+    component YoutubeScreen: ScrollView {
+        id: youtubeScreen
+        clip: true
+
+        ColumnLayout {
+            width: youtubeScreen.availableWidth
+            spacing: 12
+            anchors.margins: 12
+
+            YoutubeDownloadPanel {}
+
+            LogPanel {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 260
+            }
+        }
+    }
+
+    component YoutubeDownloadPanel: Panel {
+        title: I18n.t("youtube_download")
+        AppTextField {
+            id: youtubeUrlField
+            Layout.fillWidth: true
+            placeholderText: I18n.t("youtube_url")
+            enabled: backend ? !backend.youtubeDownloadRunning : false
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            Button {
+                text: I18n.t("download_video")
+                enabled: backend && !backend.youtubeDownloadRunning && String(youtubeUrlField.text).trim().length > 0
+                onClicked: backend.downloadYoutube(youtubeUrlField.text, "video")
+            }
+            Button {
+                text: I18n.t("download_audio")
+                enabled: backend && !backend.youtubeDownloadRunning && String(youtubeUrlField.text).trim().length > 0
+                onClicked: backend.downloadYoutube(youtubeUrlField.text, "audio")
+            }
+        }
+        ProgressBar {
+            Layout.fillWidth: true
+            visible: backend ? backend.youtubeDownloadRunning || backend.youtubeDownloadProgress > 0 : false
+            from: 0
+            to: 1
+            value: backend ? backend.youtubeDownloadProgress : 0
+        }
+        Label {
+            Layout.fillWidth: true
+            text: backend ? backend.youtubeDownloadStatus : ""
+            color: Theme.textMuted
+            wrapMode: Text.WordWrap
+            font.pixelSize: Theme.fontMeta
         }
     }
 
@@ -1101,7 +1170,23 @@ ApplicationWindow {
             overrideAudioBitrateField.text = data.audio_bitrate || ""
         }
 
+        function sectionY(section) {
+            var target = String(section || "run")
+            var panel = runPanel
+            if (target === "core") panel = corePanel
+            else if (target === "output") panel = outputPanel
+            else if (target === "video") panel = videoPanel
+            else if (target === "audio_subtitles") panel = audioSubtitlesPanel
+            else if (target === "images_sheets") panel = imagesSheetsPanel
+            else if (target === "watermark_text") panel = watermarkTextPanel
+            else if (target === "metadata_hooks") panel = metadataHooksPanel
+            else if (target === "selected_override") panel = selectedOverridePanel
+            else if (target === "ffmpeg_watch") panel = ffmpegWatchPanel
+            return Math.max(0, panel.y - 12)
+        }
+
         Panel {
+            id: runPanel
             title: I18n.t("run")
             FieldLabel { text: I18n.t("language") }
             LanguageSwitcher {
@@ -1124,6 +1209,7 @@ ApplicationWindow {
         }
 
         Panel {
+            id: presetsSettingsPanel
             title: I18n.t("presets")
             AppComboBox { id: savedPresetCombo; model: backend ? backend.presetsModel : null }
             RowLayout {
@@ -1135,6 +1221,7 @@ ApplicationWindow {
         }
 
         Panel {
+            id: corePanel
             title: I18n.t("core")
             FieldLabel { text: I18n.t("operation") }
             AppComboBox { id: operationCombo; model: root.operationOptions; onActivated: scheduleSettingsSync() }
@@ -1177,6 +1264,7 @@ ApplicationWindow {
         }
 
         Panel {
+            id: outputPanel
             title: I18n.t("output")
             AppTextField { id: outputDirField; text: backend ? backend.outputDir : ""; onEditingFinished: { if (backend) backend.outputDir = text; scheduleSettingsSync() } }
             RowLayout {
@@ -1202,6 +1290,7 @@ ApplicationWindow {
         }
 
         Panel {
+            id: videoPanel
             title: I18n.t("video")
             GridLayout {
                 Layout.fillWidth: true
@@ -1239,6 +1328,7 @@ ApplicationWindow {
         }
 
         Panel {
+            id: audioSubtitlesPanel
             title: I18n.t("audio_subtitles")
             GridLayout {
                 Layout.fillWidth: true
@@ -1301,6 +1391,7 @@ ApplicationWindow {
         }
 
         Panel {
+            id: imagesSheetsPanel
             title: I18n.t("images_sheets")
             GridLayout {
                 Layout.fillWidth: true
@@ -1321,6 +1412,7 @@ ApplicationWindow {
         }
 
         Panel {
+            id: watermarkTextPanel
             title: I18n.t("watermark_text")
             RowLayout {
                 Layout.fillWidth: true
@@ -1358,6 +1450,7 @@ ApplicationWindow {
         }
 
         Panel {
+            id: metadataHooksPanel
             title: I18n.t("metadata_hooks")
             RowLayout {
                 Layout.fillWidth: true
@@ -1377,6 +1470,7 @@ ApplicationWindow {
         }
 
         Panel {
+            id: selectedOverridePanel
             title: I18n.t("selected_override")
             AppTextField { id: overrideOutputTemplateField; placeholderText: I18n.t("output_template_override") }
             AppSpinBox { id: overrideCrfSpin; from: 0; to: 51; value: 23 }
@@ -1406,6 +1500,7 @@ ApplicationWindow {
         }
 
         Panel {
+            id: ffmpegWatchPanel
             title: I18n.t("ffmpeg_watch")
             AppTextField { id: ffmpegPathField; text: backend ? backend.ffmpegPath : ""; onEditingFinished: { if (backend) backend.ffmpegPath = text } }
             RowLayout {
