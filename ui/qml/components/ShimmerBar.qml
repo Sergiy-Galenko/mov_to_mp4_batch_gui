@@ -8,7 +8,7 @@ Item {
     property bool highLoadMode: false
     property real shimmerPhase: 0
     property color fillColor: Theme.accentPrimary
-    property color trackColor: "#0F131B"
+    property color trackColor: Theme.progressTrack
 
     implicitHeight: 10
     clip: true
@@ -18,7 +18,7 @@ Item {
         radius: height / 2
         color: root.trackColor
         border.width: 1
-        border.color: Theme.bgBorder
+        border.color: Theme.borderSubtle
     }
 
     Rectangle {
@@ -38,20 +38,15 @@ Item {
     }
 
     Rectangle {
-        id: shimmer
+        id: marker
         visible: root.active && !root.highLoadMode && fill.width > 12
-        x: -width + (fill.width + width * 2) * root.shimmerPhase
-        y: 0
-        width: Math.max(48, root.width * 0.34)
-        height: parent.height
+        x: Math.min(fill.width - width, Math.max(0, (fill.width - width) * root.shimmerPhase))
+        y: 1
+        width: Math.min(42, Math.max(12, fill.width * 0.22))
+        height: parent.height - 2
         radius: height / 2
         clip: true
-        opacity: 0.9
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
-            GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.08) }
-            GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
-        }
+        color: Theme.progressHighlight
+        opacity: 0.38
     }
 }

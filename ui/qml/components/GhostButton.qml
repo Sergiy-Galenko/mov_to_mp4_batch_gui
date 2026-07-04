@@ -14,14 +14,12 @@ Button {
     opacity: enabled ? 1 : 0.68
 
     background: Rectangle {
-        radius: Theme.radiusInput
-        color: control.enabled ? (control.down ? Qt.rgba(1, 1, 1, 0.09) : control.hovered ? Qt.rgba(1, 1, 1, 0.05) : "transparent") : "transparent"
+        radius: Theme.radiusSm
+        color: control.enabled ? (control.down ? Theme.overlayPressed : control.hovered ? Theme.overlayHover : Theme.transparent) : Theme.transparent
         border.width: 1
-        border.color: control.activeFocus ? Theme.focusRing : control.hovered ? Theme.border : "transparent"
-        scale: control.down ? 0.988 : control.hovered ? 1.006 : 1
+        border.color: control.activeFocus ? Theme.focusRing : control.hovered ? Theme.border : Theme.transparent
 
         Behavior on color { ColorAnimation { duration: 120 } }
-        Behavior on scale { NumberAnimation { duration: 120 } }
     }
 
     contentItem: Label {
@@ -30,7 +28,7 @@ Button {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         font.weight: Font.Medium
-        font.pixelSize: 13
+        font.pixelSize: Theme.fontSizeSm
         elide: Text.ElideRight
         clip: true
     }

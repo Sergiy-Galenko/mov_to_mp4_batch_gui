@@ -17,7 +17,7 @@ CheckBox {
         y: Math.round((control.availableHeight - height) / 2)
         width: Theme.checkboxSize
         height: Theme.checkboxSize
-        radius: 6
+        radius: Theme.radiusSm
         color: control.checked ? Theme.accent : control.hovered ? Theme.inputHover : Theme.input
         border.width: 1
         border.color: control.checked ? Theme.accent2 : (control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border)
@@ -27,7 +27,7 @@ CheckBox {
             height: 9
             radius: 2
             anchors.centerIn: parent
-            color: "#FFFFFF"
+            color: Theme.textOnAccent
             visible: control.checked
         }
 
@@ -43,7 +43,7 @@ CheckBox {
         rightPadding: 0
         topPadding: 0
         bottomPadding: 0
-        font.pixelSize: 13
+        font.pixelSize: Theme.fontSizeSm
         wrapMode: Text.WordWrap
     }
 }

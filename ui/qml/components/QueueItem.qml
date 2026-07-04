@@ -91,11 +91,11 @@ Rectangle {
     }
 
     width: ListView.view ? ListView.view.width : 720
-    implicitHeight: details.visible ? 172 : 128
-    radius: Theme.radiusPanel
-    color: selected ? "#1B2637" : (mouse.containsMouse ? Theme.bgElevated : Theme.bgSurface)
+    implicitHeight: details.visible ? 174 : 126
+    radius: Theme.radiusMd
+    color: selected ? Theme.selection : (mouse.containsMouse ? Theme.bgElevated : Theme.bgSecondary)
     border.width: 1
-    border.color: selected ? Theme.accentPrimary : Theme.bgBorder
+    border.color: selected ? Theme.accent : Theme.borderSubtle
     opacity: canonicalStatus() === "pending" ? 0.76 : 1
     clip: true
     layer.enabled: false
@@ -131,10 +131,10 @@ Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: 3
-        color: canonicalStatus() === "done" ? Theme.accentSuccess
-             : canonicalStatus() === "failed" ? Theme.accentError
-             : canonicalStatus() === "processing" ? Theme.accentPrimary
-             : "transparent"
+        color: canonicalStatus() === "done" ? Theme.statusSuccess
+             : canonicalStatus() === "failed" ? Theme.statusError
+             : canonicalStatus() === "processing" ? Theme.statusRunning
+             : Theme.transparent
     }
 
     MouseArea {
@@ -152,9 +152,9 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
-        anchors.leftMargin: 14
-        spacing: 8
+        anchors.margins: Theme.space3
+        anchors.leftMargin: Theme.space4
+        spacing: Theme.space2
 
         RowLayout {
             Layout.fillWidth: true
@@ -173,10 +173,10 @@ Rectangle {
                 visible: root.showThumbnail
                 Layout.preferredWidth: 38
                 Layout.preferredHeight: 38
-                radius: 8
-                color: "#10141C"
+                radius: Theme.radiusSm
+                color: Theme.input
                 border.width: 1
-                border.color: Theme.bgBorder
+                border.color: Theme.borderSubtle
                 clip: true
 
                 Image {
@@ -213,7 +213,7 @@ Rectangle {
                         text: root.fileName
                         color: canonicalStatus() === "skipped" ? Theme.textMuted : Theme.textPrimary
                         font.family: Theme.bodyFont
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontSizeMd
                         font.strikeout: canonicalStatus() === "skipped"
                         elide: Text.ElideMiddle
                     }
@@ -229,7 +229,7 @@ Rectangle {
                     Label {
                         visible: root.showMetrics
                         text: root.sizeText + (root.durationText ? " / " + root.durationText : "")
-                        color: Theme.textMuted
+                        color: Theme.textDisabled
                         font.family: Theme.monoFont
                         font.pixelSize: Theme.fontMeta
                     }
@@ -238,31 +238,19 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 1
-                    color: Theme.bgBorder
+                    color: Theme.borderSubtle
                 }
             }
 
-            Rectangle {
-                Layout.preferredWidth: 78
-                Layout.preferredHeight: 24
-                radius: Theme.radiusButton
-                color: Qt.rgba(1, 1, 1, 0.03)
-                border.width: 1
-                border.color: Theme.statusColor(root.status)
-                Label {
-                    anchors.centerIn: parent
-                    text: root.statusLabel()
-                    color: Theme.statusColor(root.status)
-                    font.family: Theme.monoFont
-                    font.pixelSize: Theme.fontMeta
-                    elide: Text.ElideRight
-                }
+            StatusBadge {
+                Layout.preferredWidth: 96
+                status: root.status
+                label: root.statusLabel()
             }
         }
 
-        ShimmerBar {
+        ProgressRow {
             Layout.fillWidth: true
-            Layout.preferredHeight: 10
             visible: canonicalStatus() !== "pending"
             value: canonicalStatus() === "done" ? 1 : root.progress
             active: canonicalStatus() === "processing"
@@ -270,8 +258,10 @@ Rectangle {
             shimmerPhase: root.shimmerPhase
             fillColor: canonicalStatus() === "done" ? Theme.accentSuccess
                      : canonicalStatus() === "failed" ? Theme.accentError
-                     : canonicalStatus() === "skipped" ? Theme.textMuted
+                     : canonicalStatus() === "skipped" ? Theme.textDisabled
                      : Theme.accentPrimary
+            etaText: root.etaText ? I18n.t("eta") + " " + root.etaText : ""
+            speedText: root.speedText || ""
         }
 
         RowLayout {
@@ -283,7 +273,7 @@ Rectangle {
                 color: Theme.textSecondary
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
-                visible: root.showMetrics && canonicalStatus() !== "pending"
+                visible: false
             }
 
             Label {
@@ -291,7 +281,7 @@ Rectangle {
                 color: Theme.accentWarn
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
-                visible: root.showMetrics && canonicalStatus() === "processing"
+                visible: false
             }
 
             Label {
@@ -299,12 +289,12 @@ Rectangle {
                 color: Theme.textSecondary
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
-                visible: root.showMetrics && canonicalStatus() === "processing"
+                visible: false
             }
 
             Label {
                 text: root.predictedSizeText ? I18n.t("predicted_size") + " " + root.predictedSizeText : ""
-                color: Theme.textMuted
+                color: Theme.textDisabled
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
                 visible: root.showMetrics && root.predictedSizeText.length > 0 && canonicalStatus() !== "processing"
@@ -312,7 +302,7 @@ Rectangle {
 
             Label {
                 text: root.compressionText ? I18n.t("compression") + " " + root.compressionText : ""
-                color: Theme.accentSuccess
+                color: Theme.statusSuccess
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fontMeta
                 visible: root.showMetrics && root.compressionText.length > 0
@@ -320,28 +310,32 @@ Rectangle {
 
             Item { Layout.fillWidth: true }
 
-            Button {
+            GhostButton {
                 text: root.hasOverride ? I18n.t("override") + " *" : I18n.t("override")
                 visible: root.showActions
+                Layout.fillWidth: false
                 flat: true
                 onClicked: root.overrideRequested(root.filePath)
             }
-            Button {
+            GhostButton {
                 text: I18n.t("retry")
                 visible: root.showActions && canonicalStatus() === "failed"
+                Layout.fillWidth: false
                 flat: true
                 onClicked: root.retryRequested(root.filePath)
             }
-            Button {
+            GhostButton {
                 text: I18n.t("skip")
                 visible: root.showActions
                 enabled: canonicalStatus() === "processing"
+                Layout.fillWidth: false
                 flat: true
                 onClicked: root.skipRequested(root.filePath)
             }
-            Button {
+            GhostButton {
                 text: I18n.t("remove")
                 visible: root.showActions
+                Layout.fillWidth: false
                 flat: true
                 onClicked: root.removeRequested(root.filePath)
             }
@@ -352,8 +346,8 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 44
             visible: canonicalStatus() === "failed" && root.selected
-            radius: Theme.radiusButton
-            color: "#10141C"
+            radius: Theme.radiusSm
+            color: Theme.input
             border.width: 1
             border.color: Theme.dangerSoft
 
@@ -371,9 +365,9 @@ Rectangle {
                     elide: Text.ElideRight
                 }
 
-                Button { text: I18n.t("retry"); onClicked: root.retryRequested(root.filePath) }
-                Button { text: I18n.t("change"); onClicked: root.overrideRequested(root.filePath) }
-                Button { text: I18n.t("skip"); onClicked: root.skipRequested(root.filePath) }
+                SecondaryButton { Layout.fillWidth: false; text: I18n.t("retry"); onClicked: root.retryRequested(root.filePath) }
+                SecondaryButton { Layout.fillWidth: false; text: I18n.t("change"); onClicked: root.overrideRequested(root.filePath) }
+                SecondaryButton { Layout.fillWidth: false; text: I18n.t("skip"); onClicked: root.skipRequested(root.filePath) }
             }
         }
     }

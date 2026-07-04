@@ -5,12 +5,12 @@ import App 1.0
 
 TextArea {
     id: control
-    font.pixelSize: 13
+    font.pixelSize: Theme.fontSizeSm
     color: Theme.text
     padding: 13
     Layout.fillWidth: true
     selectionColor: Theme.accent
-    selectedTextColor: "#FFFFFF"
+    selectedTextColor: Theme.textOnAccent
     hoverEnabled: true
 
     background: Rectangle {

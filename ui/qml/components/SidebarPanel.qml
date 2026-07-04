@@ -13,25 +13,25 @@ Rectangle {
     signal addFolderRequested()
     signal dedupeRequested()
 
-    width: collapsed ? 56 : Theme.sidebarWidth
-    color: Theme.bgSurface
+    width: collapsed ? 58 : Theme.sidebarWidth
+    color: Theme.bgSecondary
     border.width: 1
-    border.color: Theme.bgBorder
+    border.color: Theme.borderSubtle
     clip: true
 
     Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 10
-        spacing: 10
+        anchors.margins: Theme.space3
+        spacing: Theme.space3
 
         Label {
             visible: !root.collapsed
             text: I18n.t("mode")
-            color: Theme.textMuted
+            color: Theme.textDisabled
             font.family: Theme.monoFont
-            font.pixelSize: Theme.fontMeta
+            font.pixelSize: Theme.fontSizeXs
         }
 
         ScrollView {
@@ -44,44 +44,46 @@ Rectangle {
             ColumnLayout {
                 width: navScroll.availableWidth
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: Theme.space1
 
                 Repeater {
                     model: root.navigationItems
                     delegate: ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 4
+                        spacing: Theme.space1
 
                         Label {
                             visible: !root.collapsed && index === 5
                             Layout.fillWidth: true
-                            Layout.topMargin: 6
+                            Layout.topMargin: Theme.space2
                             text: I18n.t("settings")
-                            color: Theme.textMuted
+                            color: Theme.textDisabled
                             font.family: Theme.monoFont
-                            font.pixelSize: Theme.fontMeta
+                            font.pixelSize: Theme.fontSizeXs
                             elide: Text.ElideRight
                         }
 
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 36
-                            radius: Theme.radiusButton
-                            color: root.activeIndex === index ? Theme.bgElevated : (mouse.containsMouse ? Qt.rgba(1, 1, 1, 0.04) : "transparent")
-                            border.width: root.activeIndex === index ? 1 : 0
-                            border.color: Theme.bgBorder
+                            Layout.preferredHeight: Theme.buttonHeight
+                            radius: Theme.radiusSm
+                            color: root.activeIndex === index ? Theme.bgElevated : (mouse.containsMouse ? Theme.overlayHover : Theme.transparent)
+                            border.width: root.activeIndex === index || mouse.containsMouse ? 1 : 0
+                            border.color: root.activeIndex === index ? Theme.borderStrong : Theme.borderSubtle
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 8
-                                spacing: 9
+                                anchors.leftMargin: Theme.space3
+                                anchors.rightMargin: Theme.space2
+                                spacing: Theme.space2
 
                                 Label {
                                     text: modelData.icon
-                                    color: root.activeIndex === index ? Theme.accentPrimary : Theme.textSecondary
-                                    font.pixelSize: Theme.fontSmall
-                                    Layout.preferredWidth: 22
+                                    color: root.activeIndex === index ? Theme.accent : Theme.textSecondary
+                                    font.family: Theme.monoFont
+                                    font.pixelSize: Theme.fontSizeSm
+                                    font.bold: root.activeIndex === index
+                                    Layout.preferredWidth: 24
                                     horizontalAlignment: Text.AlignHCenter
                                 }
 
@@ -90,7 +92,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     text: I18n.t(modelData.title)
                                     color: root.activeIndex === index ? Theme.textPrimary : Theme.textSecondary
-                                    font.pixelSize: Theme.fontSmall
+                                    font.pixelSize: Theme.fontSizeSm
                                     elide: Text.ElideRight
                                 }
                             }
@@ -107,21 +109,21 @@ Rectangle {
             }
         }
 
-        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.bgBorder }
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.borderSubtle }
 
-        Button {
+        SecondaryButton {
             Layout.fillWidth: true
-            text: root.collapsed ? "📄" : "📄  " + I18n.t("add_files")
+            text: root.collapsed ? "+" : "+  " + I18n.t("add_files")
             onClicked: root.addFilesRequested()
         }
-        Button {
+        SecondaryButton {
             Layout.fillWidth: true
-            text: root.collapsed ? "📁" : "📁  " + I18n.t("add_folder")
+            text: root.collapsed ? "F" : "F  " + I18n.t("add_folder")
             onClicked: root.addFolderRequested()
         }
-        Button {
+        SecondaryButton {
             Layout.fillWidth: true
-            text: root.collapsed ? "🔎" : "🔎  " + I18n.t("hash_dedupe")
+            text: root.collapsed ? "D" : "D  " + I18n.t("hash_dedupe")
             onClicked: root.dedupeRequested()
         }
     }

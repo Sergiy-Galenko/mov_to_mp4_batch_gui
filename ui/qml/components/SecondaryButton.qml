@@ -14,14 +14,12 @@ Button {
     opacity: enabled ? 1 : 0.72
 
     background: Rectangle {
-        radius: Theme.radiusInput
-        color: control.enabled ? (control.down ? Theme.hover : control.hovered ? Theme.panelHover : Theme.panelAlt) : Theme.disabledBg
+        radius: Theme.radiusSm
+        color: control.enabled ? (control.down ? Theme.overlayPressed : control.hovered ? Theme.overlayHover : Theme.bgElevated) : Theme.disabledBg
         border.width: 1
         border.color: control.enabled ? (control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border) : Theme.border
-        scale: control.down ? 0.986 : control.hovered ? 1.008 : 1
 
         Behavior on color { ColorAnimation { duration: 120 } }
-        Behavior on scale { NumberAnimation { duration: 120 } }
     }
 
     contentItem: Label {
@@ -30,7 +28,7 @@ Button {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         font.weight: Font.Medium
-        font.pixelSize: 13
+        font.pixelSize: Theme.fontSizeSm
         elide: Text.ElideRight
         clip: true
     }

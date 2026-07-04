@@ -14,19 +14,21 @@ Button {
     opacity: enabled ? 1 : 0.65
 
     background: Rectangle {
-        radius: Theme.radiusInput
-        color: !control.enabled ? Theme.disabledBg : control.down ? Theme.accentHover : control.hovered ? Theme.accentHover : Theme.accent
+        radius: Theme.radiusSm
+        color: !control.enabled ? Theme.disabledBg : control.down ? Theme.accentPressed : control.hovered ? Theme.accentHover : Theme.accent
         border.width: 1
-        border.color: control.activeFocus ? Theme.focusRing : "transparent"
+        border.color: control.activeFocus ? Theme.focusRing : Theme.transparent
+
+        Behavior on color { ColorAnimation { duration: 120 } }
     }
 
     contentItem: Label {
         text: control.text
-        color: control.enabled ? "#FFFFFF" : Theme.disabledText
+        color: control.enabled ? Theme.textOnAccent : Theme.disabledText
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         font.weight: Font.DemiBold
-        font.pixelSize: 12
+        font.pixelSize: Theme.fontSizeSm
         elide: Text.ElideRight
         clip: true
     }

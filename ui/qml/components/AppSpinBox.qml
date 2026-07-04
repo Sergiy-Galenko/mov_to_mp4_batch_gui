@@ -7,7 +7,7 @@ SpinBox {
     id: control
     property int stepperWidth: 34
 
-    font.pixelSize: 13
+    font.pixelSize: Theme.fontSizeSm
     implicitHeight: Theme.inputHeight
     leftPadding: 13
     rightPadding: stepperWidth + 12
@@ -20,7 +20,7 @@ SpinBox {
         text: ""
         color: control.enabled ? Theme.text : Theme.disabledText
         selectionColor: Theme.accent
-        selectedTextColor: "#FFFFFF"
+        selectedTextColor: Theme.textOnAccent
         horizontalAlignment: Text.AlignLeft
         verticalAlignment: Text.AlignVCenter
         readOnly: !control.editable
@@ -46,7 +46,7 @@ SpinBox {
         width: control.stepperWidth
         height: Math.floor((control.availableHeight - 8) / 2)
         radius: 9
-        color: control.up.pressed ? Theme.hover : control.up.hovered ? Theme.panelHover : Theme.panelAlt
+        color: control.up.pressed ? Theme.overlayPressed : control.up.hovered ? Theme.overlayHover : Theme.bgElevated
         border.width: 1
         border.color: control.up.hovered ? Theme.borderStrong : Theme.border
 
@@ -65,7 +65,7 @@ SpinBox {
         width: control.stepperWidth
         height: Math.floor((control.availableHeight - 8) / 2)
         radius: 9
-        color: control.down.pressed ? Theme.hover : control.down.hovered ? Theme.panelHover : Theme.panelAlt
+        color: control.down.pressed ? Theme.overlayPressed : control.down.hovered ? Theme.overlayHover : Theme.bgElevated
         border.width: 1
         border.color: control.down.hovered ? Theme.borderStrong : Theme.border
 

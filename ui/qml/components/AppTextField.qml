@@ -6,14 +6,14 @@ import App 1.0
 TextField {
     id: control
     property bool invalid: false
-    font.pixelSize: 13
+    font.pixelSize: Theme.fontSizeSm
     color: Theme.text
     padding: 13
     implicitHeight: Theme.inputHeight
     Layout.fillWidth: true
     placeholderTextColor: Theme.subtleText
     selectionColor: Theme.accent
-    selectedTextColor: "#FFFFFF"
+    selectedTextColor: Theme.textOnAccent
     hoverEnabled: true
 
     background: Rectangle {
@@ -29,7 +29,7 @@ TextField {
             anchors.right: parent.right
             anchors.top: parent.top
             height: 1
-            color: Qt.rgba(1, 1, 1, 0.06)
+            color: Theme.borderSubtle
         }
     }
 }

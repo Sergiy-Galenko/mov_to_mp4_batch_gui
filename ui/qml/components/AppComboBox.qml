@@ -5,7 +5,7 @@ import App 1.0
 
 ComboBox {
     id: control
-    font.pixelSize: 13
+    font.pixelSize: Theme.fontSizeSm
     implicitHeight: Theme.inputHeight
     leftPadding: 13
     rightPadding: 34
@@ -30,9 +30,9 @@ ComboBox {
 
         Text {
             anchors.centerIn: parent
-            text: "▾"
+            text: "v"
             color: Theme.muted
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSizeXs
         }
     }
 
@@ -57,8 +57,8 @@ ComboBox {
         }
 
         background: Rectangle {
-            color: highlighted ? Theme.hover : "transparent"
-            radius: 10
+            color: highlighted ? Theme.hover : Theme.transparent
+            radius: Theme.radiusSm
         }
     }
 

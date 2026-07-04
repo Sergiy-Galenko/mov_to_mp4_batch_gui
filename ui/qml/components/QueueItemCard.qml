@@ -1,5 +1,5 @@
 import QtQuick 2.15
 
-EmptyStateDropZone {
+QueueItem {
     id: root
 }

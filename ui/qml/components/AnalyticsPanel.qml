@@ -11,10 +11,10 @@ Rectangle {
     property var resourceHistory: []
     property int activeTab: 0
 
-    radius: Theme.radiusPanel
-    color: Theme.bgSurface
+    radius: Theme.radiusMd
+    color: Theme.bgSecondary
     border.width: 1
-    border.color: Theme.bgBorder
+    border.color: Theme.borderSubtle
     clip: true
 
     function timingMax() {
@@ -25,10 +25,10 @@ Rectangle {
     }
 
     function statusColor(status) {
-        if (status === "success" || status === "done") return Theme.accentSuccess
-        if (status === "failed") return Theme.accentError
-        if (status === "running" || status === "processing") return Theme.accentWarn
-        return Theme.textMuted
+        if (status === "success" || status === "done") return Theme.statusSuccess
+        if (status === "failed") return Theme.statusError
+        if (status === "running" || status === "processing") return Theme.statusRunning
+        return Theme.textDisabled
     }
 
     ColumnLayout {
@@ -54,16 +54,16 @@ Rectangle {
                 delegate: Rectangle {
                     width: Math.max(82, tabLabel.implicitWidth + 18)
                     height: 28
-                    radius: Theme.radiusButton
-                    color: root.activeTab === index ? Theme.accentPrimary : (mouse.containsMouse ? Theme.bgElevated : "transparent")
+                    radius: Theme.radiusSm
+                    color: root.activeTab === index ? Theme.accent : (mouse.containsMouse ? Theme.bgElevated : Theme.transparent)
                     border.width: 1
-                    border.color: root.activeTab === index ? Theme.accentPrimary : Theme.bgBorder
+                    border.color: root.activeTab === index ? Theme.accent : Theme.borderSubtle
 
                     Label {
                         id: tabLabel
                         anchors.centerIn: parent
                         text: I18n.t(modelData)
-                        color: root.activeTab === index ? "#FFFFFF" : Theme.textSecondary
+                        color: root.activeTab === index ? Theme.textOnAccent : Theme.textSecondary
                         font.pixelSize: Theme.fontMeta
                         font.family: Theme.monoFont
                     }
@@ -97,7 +97,7 @@ Rectangle {
                         var padB = 28
                         var w = width - padL - padR
                         var h = height - padT - padB
-                        ctx.strokeStyle = Theme.bgBorder
+                        ctx.strokeStyle = Theme.borderSubtle
                         ctx.lineWidth = 1
                         ctx.setLineDash([4, 5])
                         for (var g = 0; g <= 4; ++g) {
@@ -108,12 +108,12 @@ Rectangle {
                             ctx.stroke()
                         }
                         ctx.setLineDash([])
-                        ctx.fillStyle = Theme.textMuted
+                        ctx.fillStyle = Theme.textDisabled
                         ctx.font = Theme.fontMeta + "px " + Theme.monoFont
                         ctx.fillText(I18n.t("speed_x"), 6, padT + 8)
                         var data = root.speedHistory || []
                         if (data.length < 2) {
-                            ctx.fillStyle = Theme.textMuted
+                            ctx.fillStyle = Theme.textDisabled
                             ctx.fillText(I18n.t("waiting_speed"), padL, padT + h / 2)
                             return
                         }
@@ -123,26 +123,23 @@ Rectangle {
                             maxS = Math.max(maxS, Number(data[i].speed || 0))
                         function px(point) { return padL + (Number(point.time || 0) / maxT) * w }
                         function py(point) { return padT + h - (Number(point.speed || 0) / maxS) * h }
-                        var fill = ctx.createLinearGradient(0, padT, 0, padT + h)
-                        fill.addColorStop(0, Qt.rgba(0.239, 0.557, 1.0, 0.26))
-                        fill.addColorStop(1, Qt.rgba(0.239, 0.557, 1.0, 0.0))
                         ctx.beginPath()
                         ctx.moveTo(px(data[0]), padT + h)
                         for (i = 0; i < data.length; ++i)
                             ctx.lineTo(px(data[i]), py(data[i]))
                         ctx.lineTo(px(data[data.length - 1]), padT + h)
                         ctx.closePath()
-                        ctx.fillStyle = fill
+                        ctx.fillStyle = Theme.accentSoft
                         ctx.fill()
                         ctx.beginPath()
                         for (i = 0; i < data.length; ++i) {
                             if (i === 0) ctx.moveTo(px(data[i]), py(data[i]))
                             else ctx.lineTo(px(data[i]), py(data[i]))
                         }
-                        ctx.strokeStyle = Theme.accentPrimary
+                        ctx.strokeStyle = Theme.accent
                         ctx.lineWidth = 2
                         ctx.stroke()
-                        ctx.fillStyle = Theme.accentPrimary
+                        ctx.fillStyle = Theme.accent
                         for (i = 0; i < data.length; ++i) {
                             ctx.beginPath()
                             ctx.arc(px(data[i]), py(data[i]), 3.5, 0, Math.PI * 2)
@@ -176,9 +173,9 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 10
                                 radius: 5
-                                color: "#10141C"
+                                color: Theme.progressTrack
                                 border.width: 1
-                                border.color: Theme.bgBorder
+                                border.color: Theme.borderSubtle
 
                                 Rectangle {
                                     id: bar
@@ -193,7 +190,7 @@ Rectangle {
                             Label {
                                 Layout.preferredWidth: 54
                                 text: Number(modelData.duration || 0).toFixed(1) + "s"
-                                color: Theme.textMuted
+                                color: Theme.textDisabled
                                 font.family: Theme.monoFont
                                 font.pixelSize: Theme.fontMeta
                                 horizontalAlignment: Text.AlignRight
@@ -205,7 +202,7 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         visible: !root.fileTimings || root.fileTimings.length === 0
                         text: I18n.t("no_timings")
-                        color: Theme.textMuted
+                        color: Theme.textDisabled
                         font.pixelSize: Theme.fontMeta
                     }
                 }
@@ -235,14 +232,14 @@ Rectangle {
                             var cy = height / 2
                             var outer = Math.min(width, height) * 0.38
                             var inner = outer * 0.4
-                            var colors = [Theme.accentPrimary, Theme.accentPurple, Theme.accentSuccess, Theme.accentWarn, "#EC4899", "#14B8A6"]
+                            var colors = [Theme.accent, Theme.statusWarning, Theme.statusSuccess, Theme.statusError, Theme.textSecondary, Theme.borderStrong]
                             if (total <= 0) {
-                                ctx.strokeStyle = Theme.bgBorder
+                                ctx.strokeStyle = Theme.borderSubtle
                                 ctx.lineWidth = outer - inner
                                 ctx.beginPath()
                                 ctx.arc(cx, cy, (outer + inner) / 2, 0, Math.PI * 2)
                                 ctx.stroke()
-                                ctx.fillStyle = Theme.textMuted
+                                ctx.fillStyle = Theme.textDisabled
                                 ctx.font = Theme.fontMeta + "px " + Theme.monoFont
                                 ctx.textAlign = "center"
                                 ctx.fillText("0 " + I18n.t("files"), cx, cy + 4)
@@ -266,7 +263,7 @@ Rectangle {
                             ctx.arc(cx, cy, inner, 0, Math.PI * 2)
                             ctx.fill()
                             ctx.globalCompositeOperation = "source-over"
-                            ctx.fillStyle = Theme.bgSurface
+                            ctx.fillStyle = Theme.bgSecondary
                             ctx.beginPath()
                             ctx.arc(cx, cy, inner - 1, 0, Math.PI * 2)
                             ctx.fill()
@@ -274,7 +271,7 @@ Rectangle {
                             ctx.font = "bold " + Theme.fontTitle + "px " + Theme.monoFont
                             ctx.textAlign = "center"
                             ctx.fillText(String(total), cx, cy - 2)
-                            ctx.fillStyle = Theme.textMuted
+                            ctx.fillStyle = Theme.textDisabled
                             ctx.font = Theme.fontMeta + "px " + Theme.monoFont
                                 ctx.fillText(I18n.t("files"), cx, cy + 15)
                         }
@@ -323,7 +320,7 @@ Rectangle {
                                     width: 10
                                     height: 10
                                     radius: 2
-                                    color: [Theme.accentPrimary, Theme.accentPurple, Theme.accentSuccess, Theme.accentWarn, "#EC4899", "#14B8A6"][index % 6]
+                                    color: [Theme.accent, Theme.statusWarning, Theme.statusSuccess, Theme.statusError, Theme.textSecondary, Theme.borderStrong][index % 6]
                                 }
                                 Label {
                                     Layout.fillWidth: true
@@ -352,7 +349,7 @@ Rectangle {
                         var padB = 28
                         var w = width - padL - padR
                         var h = height - padT - padB
-                        ctx.strokeStyle = Theme.bgBorder
+                        ctx.strokeStyle = Theme.borderSubtle
                         ctx.lineWidth = 1
                         ctx.setLineDash([4, 5])
                         for (var g = 0; g <= 4; ++g) {

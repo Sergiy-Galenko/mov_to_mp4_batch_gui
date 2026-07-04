@@ -47,50 +47,14 @@ Item {
         cacheBuffer: 180
         reuseItems: true
 
-        delegate: Rectangle {
+        delegate: PresetChip {
             id: chip
-            property string presetName: model.display || modelData || ""
-            width: Math.max(92, label.implicitWidth + 44)
-            height: 32
-            radius: Theme.radiusPill
-            color: root.activePreset === presetName ? Theme.accentPrimary : (mouse.containsMouse ? Theme.bgElevated : "transparent")
-            border.width: 1
-            border.color: root.activePreset === presetName ? Theme.accentPrimary : Theme.bgBorder
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
-                spacing: 7
-
-                Label {
-                    text: root.iconFor(chip.presetName)
-                    color: root.activePreset === chip.presetName ? "#FFFFFF" : Theme.accentPrimary
-                    font.family: Theme.monoFont
-                    font.pixelSize: Theme.fontMeta
-                    font.bold: true
-                }
-
-                Label {
-                    id: label
-                    Layout.fillWidth: true
-                    text: chip.presetName
-                    color: root.activePreset === chip.presetName ? "#FFFFFF" : Theme.textSecondary
-                    font.pixelSize: Theme.fontMeta
-                    elide: Text.ElideRight
-                }
-            }
-
-            MouseArea {
-                id: mouse
-                anchors.fill: parent
-                hoverEnabled: true
-                onClicked: root.presetSelected(chip.presetName)
-            }
-
-            ToolTip.visible: mouse.containsMouse
-            ToolTip.delay: 350
-            ToolTip.text: root.detailsFor(chip.presetName)
+            property string presetValue: model.display || modelData || ""
+            presetName: chip.presetValue
+            shortLabel: root.iconFor(chip.presetValue)
+            details: root.detailsFor(chip.presetValue)
+            active: root.activePreset === chip.presetValue
+            onClicked: root.presetSelected(chip.presetValue)
         }
     }
 }
