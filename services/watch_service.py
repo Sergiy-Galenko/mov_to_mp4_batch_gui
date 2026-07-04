@@ -29,7 +29,7 @@ class WatchService:
 
         self._folder: Optional[Path] = None
         self._seen: Set[Path] = set()
-        self._pending: dict[Path, float] = {}
+        self._pending: dict[Path, tuple[float, int]] = {}
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -77,17 +77,29 @@ class WatchService:
         now = time.time()
         stable: List[Path] = []
         for p in new_paths:
-            self._pending[p] = now
+            self._pending[p] = (now, self._file_size(p))
 
-        still_pending: dict[Path, float] = {}
-        for p, first_seen in self._pending.items():
+        still_pending: dict[Path, tuple[float, int]] = {}
+        for p, (first_seen, last_size) in self._pending.items():
+            if not p.exists():
+                continue
+            current_size = self._file_size(p)
+            if current_size != last_size:
+                still_pending[p] = (now, current_size)
+                continue
             if now - first_seen >= self.debounce_sec:
                 stable.append(p)
             else:
-                still_pending[p] = first_seen
+                still_pending[p] = (first_seen, current_size)
         self._pending = still_pending
 
         return stable
+
+    def _file_size(self, path: Path) -> int:
+        try:
+            return path.stat().st_size
+        except OSError:
+            return -1
 
     def _poll_loop(self) -> None:
         while not self._stop_event.is_set():

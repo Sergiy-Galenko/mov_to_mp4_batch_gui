@@ -90,6 +90,28 @@ def _coerce_float(value: Any, default: Optional[float] = None) -> Optional[float
     return parsed if parsed is not None else default
 
 
+def _has_setting_value(settings_map: Mapping[str, Any], key: str) -> bool:
+    return key in settings_map and settings_map.get(key) not in (None, "")
+
+
+def _apply_video_codec(settings: ConversionSettings, value: Any) -> None:
+    codec = value or settings.video_codec
+    if codec in VIDEO_CODEC_MAP and VIDEO_CODEC_MAP[codec] == "auto":
+        codec = "auto"
+    if codec in VIDEO_CODEC_OPTIONS:
+        settings.video_codec = str(codec)
+
+
+def _apply_hw_encoder(settings: ConversionSettings, value: Any) -> None:
+    hw = value or settings.hw_encoder
+    if hw in HW_ENCODER_MAP and HW_ENCODER_MAP[hw] == "auto":
+        hw = "auto"
+    elif hw in HW_ENCODER_MAP and HW_ENCODER_MAP[hw] == "cpu":
+        hw = "cpu"
+    if hw in HW_ENCODER_OPTIONS:
+        settings.hw_encoder = str(hw)
+
+
 def coerce_settings(raw: Mapping[str, Any]) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
     for key, (typ, default) in SETTINGS_SCHEMA.items():
@@ -207,18 +229,8 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.text_box_opacity = _coerce_int(settings_map.get("text_box_opacity"), settings.text_box_opacity, minimum=0, maximum=100)
     settings.text_font = str(settings_map.get("text_font", settings.text_font))
 
-    codec = settings_map.get("codec") or settings.video_codec
-    if codec in VIDEO_CODEC_MAP and VIDEO_CODEC_MAP[codec] == "auto":
-        codec = "auto"
-    if codec in VIDEO_CODEC_OPTIONS:
-        settings.video_codec = codec
-    hw = settings_map.get("hw") or settings.hw_encoder
-    if hw in HW_ENCODER_MAP and HW_ENCODER_MAP[hw] == "auto":
-        hw = "auto"
-    elif hw in HW_ENCODER_MAP and HW_ENCODER_MAP[hw] == "cpu":
-        hw = "cpu"
-    if hw in HW_ENCODER_OPTIONS:
-        settings.hw_encoder = hw
+    _apply_video_codec(settings, settings_map.get("codec"))
+    _apply_hw_encoder(settings, settings_map.get("hw"))
 
     settings.replace_audio_path = str(settings_map.get("replace_audio_path") or settings.replace_audio_path).strip()
     settings.normalize_audio = str(settings_map.get("normalize_audio") or settings.normalize_audio).strip() or "none"
@@ -245,6 +257,14 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.meta_year = str(settings_map.get("meta_year", settings.meta_year))
     settings.meta_track = str(settings_map.get("meta_track", settings.meta_track))
     settings = apply_performance_profile(settings)
+    if _has_setting_value(settings_map, "crf"):
+        settings.crf = _coerce_int(settings_map.get("crf"), settings.crf, minimum=0, maximum=51)
+    if _has_setting_value(settings_map, "preset"):
+        settings.preset = str(settings_map.get("preset") or settings.preset).strip()
+    if _has_setting_value(settings_map, "codec"):
+        _apply_video_codec(settings, settings_map.get("codec"))
+    if _has_setting_value(settings_map, "hw"):
+        _apply_hw_encoder(settings, settings_map.get("hw"))
     return settings
 
 

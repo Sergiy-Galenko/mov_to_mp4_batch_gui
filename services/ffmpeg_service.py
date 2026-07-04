@@ -106,6 +106,9 @@ def _bitrate_to_kbps(value: str, fallback: int = 192) -> int:
 
 
 class FfmpegService:
+    DETECT_TIMEOUT_SEC = 15
+    PROBE_TIMEOUT_SEC = 30
+
     def __init__(self, ffmpeg_path: Optional[str], ffprobe_path: Optional[str]):
         self.ffmpeg_path = ffmpeg_path
         self.ffprobe_path = ffprobe_path
@@ -123,6 +126,7 @@ class FfmpegService:
                 [self.ffmpeg_path, "-hide_banner", "-encoders"],
                 capture_output=True,
                 text=True,
+                timeout=self.DETECT_TIMEOUT_SEC,
             )
         except Exception:
             return set()
@@ -151,7 +155,7 @@ class FfmpegService:
             str(path),
         ]
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=self.PROBE_TIMEOUT_SEC)
         except Exception:
             return None
         if result.returncode != 0:
@@ -194,7 +198,7 @@ class FfmpegService:
             str(path),
         ]
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=self.PROBE_TIMEOUT_SEC)
         except Exception:
             return None
         if result.returncode != 0:

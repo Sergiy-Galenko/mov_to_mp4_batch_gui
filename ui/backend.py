@@ -29,6 +29,7 @@ from services.history_store import HistoryStore
 from services.preset_manager import PresetManager
 from services.queue_manager import QueueManager
 from services.settings_manager import SettingsManager
+from services.watch_service import WatchService
 from ui.models import HistoryModel, LogModel, QueueModel
 from utils.formatting import format_bytes, format_time
 from utils.state import load_json_file, save_json_file
@@ -83,6 +84,10 @@ class Backend(QtCore.QObject):
         self.settings_manager = SettingsManager()
         self.preset_manager = PresetManager()
         self.history_store = HistoryStore()
+        self.watch_service = WatchService(
+            on_new_files=self._on_watch_files,
+            poll_interval_sec=max(WATCH_SCAN_INTERVAL_MS / 1000.0, 0.5),
+        )
 
         self.queue_model = QueueModel()
         self.log_model = LogModel()
@@ -686,12 +691,28 @@ class Backend(QtCore.QObject):
     def refreshEncoders(self) -> None:
         if self.ffmpegPath:
             self.ffmpeg_service.ffmpeg_path = self.ffmpegPath
-        self.ffmpeg_service.ffprobe_path = find_ffprobe(self.ffmpeg_service.ffmpeg_path)
         if not self.ffmpeg_service.ffmpeg_path:
             self._append_log("ERROR", self._tr("backend.ffmpeg_missing"))
             return
-        self.ffmpeg_service.encoder_caps = self.ffmpeg_service.detect_encoders()
-        caps = self.ffmpeg_service.encoder_caps
+        self._append_log("INFO", "Перевіряю FFmpeg encoder-и...")
+        threading.Thread(
+            target=self._detect_encoders_async,
+            args=(self.ffmpeg_service.ffmpeg_path,),
+            daemon=True,
+        ).start()
+
+    def _detect_encoders_async(self, ffmpeg_path: str) -> None:
+        ffprobe_path = find_ffprobe(ffmpeg_path)
+        service = FfmpegService(ffmpeg_path, ffprobe_path)
+        caps = service.detect_encoders()
+        self.event_queue.put(("encoder_detection", ffmpeg_path, ffprobe_path, caps))
+
+    def _apply_encoder_detection(self, ffmpeg_path: str, ffprobe_path: Optional[str], caps: set[str]) -> None:
+        if self.ffmpegPath and str(ffmpeg_path) != self.ffmpegPath:
+            return
+        self.ffmpeg_service.ffmpeg_path = ffmpeg_path
+        self.ffmpeg_service.ffprobe_path = ffprobe_path
+        self.ffmpeg_service.encoder_caps = set(caps)
         summary = []
         if {"h264_nvenc", "hevc_nvenc", "av1_nvenc"} & caps:
             summary.append("NVENC")
@@ -1004,18 +1025,28 @@ class Backend(QtCore.QObject):
         if not self.watchFolder or not folder.exists():
             QtWidgets.QMessageBox.warning(None, "Watch folder", "Обери існуючу папку для моніторингу.")
             return
-        self._watch_seen = {path.resolve() for path in folder.rglob("*") if path.is_file()}
+        try:
+            self.watch_service.start(folder)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(None, "Watch folder", str(exc))
+            return
+        self._watch_seen = set()
         self._watch_running = True
         self.watchRunningChanged.emit()
-        self._watch_timer.start()
         self._append_log("OK", f"Watch folder активовано: {folder}")
 
     @QtCore.Slot()
     def stopWatching(self) -> None:
+        self.watch_service.stop()
         self._watch_running = False
         self.watchRunningChanged.emit()
         self._watch_timer.stop()
         self._append_log("INFO", "Watch folder зупинено")
+
+    def _on_watch_files(self, paths: List[Path]) -> None:
+        folder = self.watch_service.folder
+        self.event_queue.put(("add_paths", list(paths), str(folder) if folder else ""))
+        self.event_queue.put(("log", "INFO", f"Watch folder додав файлів: {len(paths)}"))
 
     def _scan_watch_folder(self) -> None:
         if not self._watch_running or not self.watchFolder:
@@ -1024,12 +1055,10 @@ class Backend(QtCore.QObject):
         if not base.exists():
             self.stopWatching()
             return
-        current = {path.resolve() for path in base.rglob("*") if path.is_file()}
-        new_paths = sorted(current - self._watch_seen)
+        new_paths = self.watch_service.scan_once()
         if new_paths:
             self._add_paths(new_paths)
             self._append_log("INFO", f"Watch folder додав файлів: {len(new_paths)}")
-        self._watch_seen = current
 
     @QtCore.Slot(int)
     def selectQueueIndex(self, index: int) -> None:
@@ -1619,6 +1648,9 @@ class Backend(QtCore.QObject):
                 if etype == "log":
                     _, level, msg = event
                     self._append_log(level, msg)
+                elif etype == "encoder_detection":
+                    _, ffmpeg_path, ffprobe_path, caps = event
+                    self._apply_encoder_detection(ffmpeg_path, ffprobe_path, caps)
                 elif etype == "status":
                     _, msg = event
                     self._set_status(msg)

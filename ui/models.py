@@ -44,6 +44,8 @@ class QueueModel(QtCore.QAbstractListModel):
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole):
         if not index.isValid():
             return None
+        if index.row() < 0 or index.row() >= len(self._items):
+            return None
         item = self._items[index.row()]
         if role == QtCore.Qt.DisplayRole or role == self.DisplayRole:
             return f"{item.path.name}  [{item.media_type}]"
@@ -321,6 +323,8 @@ class LogModel(QtCore.QAbstractListModel):
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole):
         if not index.isValid():
             return None
+        if index.row() < 0 or index.row() >= len(self._items):
+            return None
         item = self._items[index.row()]
         if role == self.TimeRole:
             return item.get("time", "")
@@ -379,6 +383,8 @@ class HistoryModel(QtCore.QAbstractListModel):
 
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole):
         if not index.isValid():
+            return None
+        if index.row() < 0 or index.row() >= len(self._entries):
             return None
         entry = self._entries[index.row()]
         results = entry.get("results", [])

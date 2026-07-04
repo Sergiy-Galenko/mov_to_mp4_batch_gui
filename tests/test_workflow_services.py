@@ -96,6 +96,66 @@ class WorkflowServicesTest(unittest.TestCase):
         self.assertTrue(str(summary.items[0].output_path).endswith(".webp"))
         self.assertFalse(str(summary.items[0].output_path).endswith(".mp4"))
 
+    def test_merge_preview_uses_single_merged_output(self) -> None:
+        ffmpeg = FfmpegService("ffmpeg", None)
+        builder = PreviewBuilder(ffmpeg)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            first = tmp / "first.mp4"
+            second = tmp / "second.mp4"
+            first.write_text("video", encoding="utf-8")
+            second.write_text("video", encoding="utf-8")
+
+            summary = builder.build(
+                {
+                    "operation": "convert",
+                    "merge": True,
+                    "merge_name": "joined",
+                    "out_video_fmt": "mp4",
+                    "output_template": "{stem}_individual",
+                },
+                tasks=[
+                    TaskItem(path=first, media_type="video"),
+                    TaskItem(path=second, media_type="video"),
+                ],
+                output_dir=tmpdir,
+            )
+
+        self.assertEqual({item.output_path.name for item in summary.items}, {"joined.mp4"})
+        self.assertIn("Merge (2", summary.text)
+        self.assertIn("concat", summary.selected_command)
+
+    def test_merge_validation_checks_merged_output_path(self) -> None:
+        service = ValidationService(FfmpegService(sys.executable, None))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            first = tmp / "first.mp4"
+            second = tmp / "second.mp4"
+            merged = tmp / "joined.mp4"
+            first.write_text("video", encoding="utf-8")
+            second.write_text("video", encoding="utf-8")
+            merged.write_text("existing", encoding="utf-8")
+
+            result = service.validate(
+                {
+                    "operation": "convert",
+                    "merge": True,
+                    "merge_name": "joined",
+                    "out_video_fmt": "mp4",
+                    "output_template": "{stem}_individual",
+                },
+                tasks=[
+                    TaskItem(path=first, media_type="video"),
+                    TaskItem(path=second, media_type="video"),
+                ],
+                output_dir=tmpdir,
+                ffmpeg_path=sys.executable,
+                include_queue=True,
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(any("joined.mp4" in warning for warning in result["warnings"]))
+
 
 if __name__ == "__main__":
     unittest.main()

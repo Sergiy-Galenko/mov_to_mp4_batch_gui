@@ -8,7 +8,7 @@ from app.models import ConversionSettings, MediaInfo, PreviewItem, PreviewSummar
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
 from services.validation_service import OPERATION_LABELS, operation_supports_media
-from utils.files import build_output_path
+from utils.files import build_merge_output_path, build_output_path
 
 
 class PreviewBuilder:
@@ -34,40 +34,81 @@ class PreviewBuilder:
         lines: List[str] = []
         selected = Path(selected_path).expanduser() if selected_path else None
         selected_item: Optional[PreviewItem] = None
-
-        for index, task in enumerate(tasks, start=1):
+        base_settings = settings_map_to_model(settings_map, defaults=ConversionSettings())
+        resolved_by_path: Dict[Path, ConversionSettings] = {}
+        for task in tasks:
             merged_map = merge_settings_maps(settings_map, task.overrides)
-            resolved = settings_map_to_model(merged_map, defaults=ConversionSettings())
-            out_ext = self.ffmpeg.output_extension_for(task.media_type, resolved)
-            desired_path = build_output_path(
+            resolved_by_path[task.path] = settings_map_to_model(merged_map, defaults=ConversionSettings())
+
+        merge_candidates = [
+            task
+            for task in tasks
+            if task.media_type == "video" and resolved_by_path[task.path].operation == "convert"
+        ]
+        merge_enabled = base_settings.merge and len(merge_candidates) >= 2
+        merge_paths = {task.path for task in merge_candidates} if merge_enabled else set()
+        merge_desired_path: Optional[Path] = None
+        merge_preview_path: Optional[Path] = None
+        merge_command = ""
+        if merge_enabled:
+            merge_desired_path = build_merge_output_path(
                 out_dir,
-                task.path,
-                out_ext,
-                template=resolved.output_template,
-                index=index,
-                operation=resolved.operation,
-                media_type_name=task.media_type,
+                base_settings.merge_name,
+                base_settings.out_video_format,
                 overwrite=True,
                 skip_existing=True,
             )
-            preview_path = build_output_path(
+            merge_preview_path = build_merge_output_path(
                 out_dir,
-                task.path,
-                out_ext,
-                template=resolved.output_template,
-                index=index,
-                operation=resolved.operation,
-                media_type_name=task.media_type,
-                overwrite=resolved.overwrite,
-                skip_existing=resolved.skip_existing,
+                base_settings.merge_name,
+                base_settings.out_video_format,
+                overwrite=base_settings.overwrite,
+                skip_existing=base_settings.skip_existing,
             )
-            warnings = self._warnings_for(task, resolved, desired_path, preview_path)
-            command = self.build_command(task, resolved, preview_path, info_cache)
+            merge_command = self.build_merge_command(merge_candidates, base_settings, merge_preview_path, info_cache)
+
+        for index, task in enumerate(tasks, start=1):
+            resolved = resolved_by_path[task.path]
+            if merge_enabled and task.path in merge_paths and merge_desired_path and merge_preview_path:
+                desired_path = merge_desired_path
+                preview_path = merge_preview_path
+                warnings = self._warnings_for(task, base_settings, desired_path, preview_path)
+                command = merge_command
+                operation = f"Merge ({len(merge_candidates)} файлів)"
+                parameters = self._parameter_summary("merge", base_settings)
+            else:
+                out_ext = self.ffmpeg.output_extension_for(task.media_type, resolved)
+                desired_path = build_output_path(
+                    out_dir,
+                    task.path,
+                    out_ext,
+                    template=resolved.output_template,
+                    index=index,
+                    operation=resolved.operation,
+                    media_type_name=task.media_type,
+                    overwrite=True,
+                    skip_existing=True,
+                )
+                preview_path = build_output_path(
+                    out_dir,
+                    task.path,
+                    out_ext,
+                    template=resolved.output_template,
+                    index=index,
+                    operation=resolved.operation,
+                    media_type_name=task.media_type,
+                    overwrite=resolved.overwrite,
+                    skip_existing=resolved.skip_existing,
+                )
+                warnings = self._warnings_for(task, resolved, desired_path, preview_path)
+                command = self.build_command(task, resolved, preview_path, info_cache)
+                operation = OPERATION_LABELS.get(resolved.operation, resolved.operation)
+                parameters = self._parameter_summary(task.media_type, resolved)
             preview = PreviewItem(
                 source_path=task.path,
                 output_path=preview_path,
-                operation=OPERATION_LABELS.get(resolved.operation, resolved.operation),
-                parameters=self._parameter_summary(task.media_type, resolved),
+                operation=operation,
+                parameters=parameters,
                 warnings=warnings,
                 command=command,
             )
@@ -153,6 +194,54 @@ class PreviewBuilder:
         except Exception as exc:
             return f"Не вдалося зібрати dry-run команду: {exc}"
 
+    def build_merge_command(
+        self,
+        tasks: List[TaskItem],
+        settings: ConversionSettings,
+        output_path: Path,
+        media_info: Optional[Dict[Path, MediaInfo]] = None,
+    ) -> str:
+        if not self.ffmpeg.ffmpeg_path:
+            return "FFmpeg не задано"
+        if len(tasks) < 2:
+            return "Merge потребує щонайменше 2 відео"
+        list_path = ""
+        try:
+            info_cache = media_info or {}
+            paths = [task.path for task in tasks]
+            allow_fast = False
+            if settings.fast_copy:
+                filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
+                    paths[0],
+                    settings,
+                    output_path.suffix,
+                )
+                trim_args = self.ffmpeg.build_trim_args(settings)
+                allow_fast, _ = self.ffmpeg.merge_copy_allowed(
+                    paths,
+                    output_path.suffix,
+                    info_cache,
+                    filters_used,
+                    self.ffmpeg.has_audio_processing(settings),
+                    trim_args,
+                )
+            cmd, list_path = self.ffmpeg.build_merge_command(
+                paths,
+                output_path,
+                settings,
+                info_cache,
+                allow_fast,
+            )
+            return self._format_command(cmd)
+        except Exception as exc:
+            return f"Не вдалося зібрати merge dry-run команду: {exc}"
+        finally:
+            if list_path:
+                try:
+                    Path(list_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
     def _format_command(self, cmd: List[Any]) -> str:
         return subprocess.list2cmdline([str(part) for part in cmd])
 
@@ -177,6 +266,12 @@ class PreviewBuilder:
 
     def _parameter_summary(self, media_type_name: str, settings: ConversionSettings) -> List[str]:
         params: List[str] = []
+        if media_type_name == "merge":
+            params.append(settings.out_video_format)
+            params.append(settings.video_codec)
+            params.append(settings.performance_profile)
+            params.append(f"target {settings.target_size_mb:g} MB" if settings.target_size_mb else f"CRF {settings.crf}")
+            return params
         if settings.operation in {"convert", "subtitle_burn"}:
             if media_type_name == "video":
                 params.append(settings.out_video_format)

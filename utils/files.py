@@ -130,3 +130,22 @@ def build_output_path(
     if overwrite or skip_existing:
         return desired
     return safe_output_path(desired)
+
+
+def build_merge_output_path(
+    out_dir: Path,
+    merge_name: str,
+    out_video_format: str,
+    *,
+    overwrite: bool,
+    skip_existing: bool,
+) -> Path:
+    name = str(merge_name or "").strip() or "merged"
+    out_path = Path(name)
+    if not out_path.suffix:
+        out_path = out_dir / f"{name}.{out_video_format.lstrip('.')}"
+    else:
+        out_path = out_dir / out_path.name
+    if overwrite or skip_existing:
+        return out_path
+    return safe_output_path(out_path)

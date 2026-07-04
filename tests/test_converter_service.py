@@ -11,6 +11,7 @@ class FakeFfmpegService:
     def __init__(self) -> None:
         self.ffmpeg_path = "/usr/bin/ffmpeg"
         self.ffprobe_path = None
+        self.encoder_caps = set()
         self.audio_called = False
         self.video_called = False
         self.auto_audio_processing = False
@@ -75,6 +76,9 @@ class FakeTranscriber:
 
 
 class MockConverterService(ConverterService):
+    def _create_child_service(self, result_queue):
+        return MockConverterService(self.ffmpeg, result_queue, self.transcriber)
+
     def _run_ffmpeg(self, cmd, duration, total_done, total_duration, done_files, total_files, total_start):
         Path(cmd[-1]).write_text("ok", encoding="utf-8")
         return 0
@@ -186,6 +190,34 @@ class ConverterServiceTest(unittest.TestCase):
             self.assertTrue(fake.audio_called)
             task_events = [event for event in drain_events(events) if event[0] == "task_state"]
             self.assertTrue(any(event[2] == "success" for event in task_events))
+
+    def test_parallel_conversion_preserves_output_template_index(self) -> None:
+        fake = FakeFfmpegService()
+        fake.encoder_caps = {"h264_nvenc"}
+        events: "queue.Queue[tuple]" = queue.Queue()
+        service = MockConverterService(fake, events)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            out_dir = tmp / "out"
+            out_dir.mkdir()
+            first = tmp / "first.mp4"
+            second = tmp / "second.mp4"
+            first.write_text("video", encoding="utf-8")
+            second.write_text("video", encoding="utf-8")
+
+            settings = ConversionSettings(out_video_format="mp4", output_template="{index}_{stem}")
+            service._run(
+                [
+                    TaskItem(path=first, media_type="video"),
+                    TaskItem(path=second, media_type="video"),
+                ],
+                settings,
+                out_dir,
+            )
+
+            self.assertTrue((out_dir / "001_first.mp4").exists())
+            self.assertTrue((out_dir / "002_second.mp4").exists())
 
 
 if __name__ == "__main__":

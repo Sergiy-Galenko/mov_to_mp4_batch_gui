@@ -9,7 +9,7 @@ from app.paths import find_ffprobe
 from app.models import ConversionSettings, TaskItem
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
-from utils.files import build_output_path, is_subtitle
+from utils.files import build_merge_output_path, build_output_path, is_subtitle
 from utils.formatting import parse_float, parse_time_to_seconds
 
 
@@ -192,10 +192,41 @@ class ValidationService:
                 add_error("queue", f"Файл не знайдено: {item.path}")
                 break
 
-        seen_outputs: Dict[Path, Path] = {}
-        for idx, item in enumerate(queue_items, start=1):
+        resolved_by_path: Dict[Path, ConversionSettings] = {}
+        for item in queue_items:
             merged = merge_settings_maps(raw, item.overrides)
-            resolved = settings_map_to_model(merged, defaults=ConversionSettings())
+            resolved_by_path[item.path] = settings_map_to_model(merged, defaults=ConversionSettings())
+
+        merge_candidates = [
+            item
+            for item in queue_items
+            if item.media_type == "video" and resolved_by_path[item.path].operation == "convert"
+        ]
+        merge_enabled = settings.merge and len(merge_candidates) >= 2
+        merge_paths = {item.path for item in merge_candidates} if merge_enabled else set()
+
+        seen_outputs: Dict[Path, str] = {}
+        if merge_enabled:
+            desired = build_merge_output_path(
+                output_dir,
+                settings.merge_name,
+                settings.out_video_format,
+                overwrite=True,
+                skip_existing=True,
+            )
+            seen_outputs[desired] = f"merge ({len(merge_candidates)} відео)"
+            if desired.exists():
+                if settings.overwrite:
+                    add_warning(f"{desired.name}: буде перезаписано.")
+                elif settings.skip_existing:
+                    add_warning(f"{desired.name}: буде пропущено.")
+                else:
+                    add_warning(f"{desired.name}: є конфлікт імені, буде створено безпечну копію.")
+
+        for idx, item in enumerate(queue_items, start=1):
+            if item.path in merge_paths:
+                continue
+            resolved = resolved_by_path[item.path]
             try:
                 out_ext = self.ffmpeg.output_extension_for(item.media_type, resolved)
                 desired = build_output_path(
@@ -214,9 +245,9 @@ class ValidationService:
                 return
             previous = seen_outputs.get(desired)
             if previous is not None:
-                add_error("output_template", f"Конфлікт імен: {previous.name} і {item.path.name} -> {desired.name}")
+                add_error("output_template", f"Конфлікт імен: {previous} і {item.path.name} -> {desired.name}")
                 break
-            seen_outputs[desired] = item.path
+            seen_outputs[desired] = item.path.name
             if desired.exists():
                 if resolved.overwrite:
                     add_warning(f"{desired.name}: буде перезаписано.")
