@@ -72,11 +72,11 @@ Rectangle {
 
     function iconText() {
         var state = canonicalStatus()
-        if (state === "done") return "\u2713"
-        if (state === "failed") return "\u2715"
-        if (state === "skipped") return "-"
-        if (state === "processing") return "\u25CF"
-        return mediaType === "audio" ? "A" : mediaType === "image" ? "I" : mediaType === "subtitle" ? "S" : "V"
+        if (state === "done") return "✅"
+        if (state === "failed") return "❌"
+        if (state === "skipped") return "⏭️"
+        if (state === "processing") return "⏳"
+        return mediaType === "audio" ? "🎵" : mediaType === "image" ? "🖼️" : mediaType === "subtitle" ? "💬" : "🎬"
     }
 
     function topErrorLines() {
@@ -101,12 +101,12 @@ Rectangle {
     }
 
     width: ListView.view ? ListView.view.width : 720
-    implicitHeight: (details.visible ? 204 : (showOutput && outputPath.length > 0 ? 164 : 140)) + (smartRecommendation.length > 0 ? 24 : 0)
+    implicitHeight: (details.visible ? 204 : (showOutput && outputPath.length > 0 ? 140 : 110)) + (smartRecommendation.length > 0 ? 24 : 0)
     radius: Theme.radiusMd
-    color: selected ? Theme.selection : (mouse.containsMouse ? Theme.bgElevated : Theme.bgSecondary)
+    color: selected ? Theme.selection : (mouse.containsMouse ? Theme.overlayHover : Theme.bgElevated)
     border.width: 1
-    border.color: selected ? Theme.accent : Theme.borderSubtle
-    opacity: canonicalStatus() === "pending" ? 0.76 : 1
+    border.color: selected ? Theme.accent : (mouse.containsMouse ? Theme.borderStrong : Theme.transparent)
+    opacity: canonicalStatus() === "pending" ? 0.85 : 1
     clip: true
     layer.enabled: false
     Drag.active: dragHandler.active
@@ -181,17 +181,15 @@ Rectangle {
 
             Rectangle {
                 visible: root.showThumbnail
-                Layout.preferredWidth: 38
-                Layout.preferredHeight: 38
+                Layout.preferredWidth: 44
+                Layout.preferredHeight: 44
                 radius: Theme.radiusSm
                 color: Theme.input
-                border.width: 1
-                border.color: Theme.borderSubtle
+                border.width: 0
                 clip: true
 
                 Image {
                     anchors.fill: parent
-                    anchors.margins: 1
                     source: root.thumbnailSource
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
@@ -205,7 +203,7 @@ Rectangle {
                     text: root.iconText()
                     color: Theme.statusColor(root.status)
                     font.family: Theme.monoFont
-                    font.pixelSize: 15
+                    font.pixelSize: 22
                     font.bold: true
                 }
             }

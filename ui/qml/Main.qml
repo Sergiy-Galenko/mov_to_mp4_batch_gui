@@ -1,4 +1,4 @@
-﻿import QtQuick 2.15
+import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import App 1.0
@@ -444,88 +444,53 @@ ApplicationWindow {
         Rectangle {
             id: topHeader
             Layout.fillWidth: true
-            Layout.preferredHeight: 96
+            Layout.preferredHeight: 64
             color: Theme.bgPrimary
             border.width: 0
 
-            ColumnLayout {
+            RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: Theme.space4
-                anchors.rightMargin: Theme.space4
-                anchors.topMargin: 8
-                anchors.bottomMargin: 8
-                spacing: 6
+                anchors.leftMargin: Theme.space5
+                anchors.rightMargin: Theme.space5
+                spacing: Theme.space4
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 32
-                    spacing: Theme.space3
+                Label {
+                    text: "🎬 " + I18n.t("app.title")
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: Theme.fontSizeLg
+                    font.bold: true
+                }
 
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        Layout.preferredWidth: 40
-                        text: sidebarCollapsed ? ">" : "<"
-                        onClicked: sidebarCollapsed = !sidebarCollapsed
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 0
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: I18n.t("app.title")
-                            color: Theme.textPrimary
-                            font.family: Theme.displayFont
-                            font.pixelSize: Theme.fontSizeLg
-                            font.bold: true
-                            elide: Text.ElideRight
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: backend ? backend.statusText : I18n.t("idle")
-                            color: Theme.textSecondary
-                            font.pixelSize: Theme.fontSizeXs
-                            elide: Text.ElideRight
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: false
-                        spacing: Theme.space2
-
-                        PulseDot {
-                            dotColor: backend && backend.isRunning ? Theme.statusRunning : Theme.statusSuccess
-                            running: backend ? backend.isRunning : false
-                        }
-                        StatusPill { text: backend && backend.isRunning ? I18n.t("live") : I18n.t("idle"); accent: backend && backend.isRunning ? Theme.statusRunning : Theme.statusSuccess }
-                        StatusPill { visible: root.width > 1240; text: backend ? backend.cpuLoadText : "CPU --"; accent: Theme.textSecondary }
-                        StatusPill { visible: root.width > 1320; text: backend ? backend.gpuLoadText : "GPU --"; accent: Theme.statusWarning }
-                        StatusPill { visible: root.width > 1160; text: backend ? backend.encoderInfo : "FFmpeg --"; accent: Theme.accent; maxWidth: 220 }
-                    }
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 24
+                    color: Theme.borderSubtle
                 }
 
                 RowLayout {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 36
-                    spacing: Theme.space2
+                    spacing: 4
+                    TopModeButton { mode: "convert"; text: "Конвертація" }
+                    TopModeButton { mode: "montage"; text: "Монтаж" }
+                    TopModeButton { mode: "downloads"; text: "Downloads" }
+                    TopModeButton { mode: "analytics"; text: "Аналітика" }
+                }
 
-                    RowLayout {
-                        Layout.fillWidth: false
-                        spacing: 4
-                        TopModeButton { mode: "convert"; text: "Конвертація" }
-                        TopModeButton { mode: "montage"; text: "Монтаж" }
-                        TopModeButton { mode: "downloads"; text: "Downloads" }
-                        TopModeButton { mode: "analytics"; text: "Аналітика" }
+                Item { Layout.fillWidth: true }
+
+                RowLayout {
+                    spacing: Theme.space3
+
+                    StatusPill { 
+                        visible: root.width > 900
+                        text: backend && backend.isRunning ? "⏳ " + I18n.t("live") : "✅ " + I18n.t("idle")
+                        accent: backend && backend.isRunning ? Theme.statusRunning : Theme.statusSuccess 
                     }
 
                     AppTextField {
                         id: globalSearchField
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: 180
-                        Layout.preferredWidth: 260
-                        placeholderText: "Пошук..."
+                        Layout.preferredWidth: 200
+                        placeholderText: "🔍 Пошук..."
                         text: root.globalSearchText
                         onTextChanged: root.runGlobalSearch(text)
                         Keys.onReturnPressed: {
@@ -533,35 +498,19 @@ ApplicationWindow {
                                 root.activateSearchResult(root.globalSearchResults[0])
                         }
                     }
-
+                    
                     SecondaryButton {
-                        Layout.fillWidth: false
-                        Layout.preferredWidth: 58
+                        Layout.preferredWidth: 50
                         text: "🔔 " + root.toastHistory.length
                         onClicked: notificationCenterPopup.open()
                     }
 
-                    AppComboBox {
-                        id: topThemeCombo
-                        Layout.fillWidth: false
-                        Layout.preferredWidth: 126
-                        model: ["Dark", "Light", "System", "High Contrast"]
-                        currentIndex: backend ? root.themeModeIndex(backend.themeMode) : 0
-                        onActivated: {
-                            if (!backend)
-                                return
-                            backend.themeMode = currentIndex === 1 ? "light"
-                                : currentIndex === 2 ? "auto"
-                                : currentIndex === 3 ? "high_contrast"
-                                : "dark"
+                    GhostButton {
+                        Layout.preferredWidth: 44
+                        text: "🌓"
+                        onClicked: {
+                            if (backend) backend.themeMode = backend.themeMode === "light" ? "dark" : "light"
                         }
-                    }
-
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        Layout.preferredWidth: 86
-                        text: I18n.t("choose")
-                        onClicked: backend && backend.pickFfmpeg()
                     }
                 }
             }
@@ -576,6 +525,7 @@ ApplicationWindow {
 
             SidebarPanel {
                 Layout.fillHeight: true
+                visible: root.activeSection !== 0 // Only visible in advanced sections
                 collapsed: root.sidebarCollapsed
                 activeIndex: root.activeNavIndex
                 navigationItems: root.navigationItems
@@ -585,7 +535,12 @@ ApplicationWindow {
                 onDedupeRequested: backend && backend.deduplicateQueueByHash()
             }
 
-            Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.borderSubtle }
+            Rectangle { 
+                visible: root.activeSection !== 0
+                Layout.preferredWidth: 1; 
+                Layout.fillHeight: true; 
+                color: Theme.borderSubtle 
+            }
 
             StackLayout {
                 Layout.fillWidth: true
@@ -618,38 +573,39 @@ ApplicationWindow {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 72
-            color: Theme.bgSecondary
+            Layout.preferredHeight: 88
+            color: Theme.bgElevated
             border.width: 1
             border.color: Theme.borderSubtle
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: Theme.space4
-                anchors.rightMargin: Theme.space4
-                spacing: Theme.space4
+                anchors.leftMargin: Theme.space5
+                anchors.rightMargin: Theme.space5
+                spacing: Theme.space5
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: Theme.space1
+                    spacing: 6
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: Theme.space2
-
+                        spacing: 12
+                        
                         Label {
                             text: backend ? backend.totalProgressText : "--"
                             color: Theme.textPrimary
-                            font.pixelSize: Theme.fontSizeSm
-                            elide: Text.ElideRight
+                            font.pixelSize: Theme.fontSizeMd
+                            font.bold: true
                             Layout.fillWidth: true
+                            elide: Text.ElideRight
                         }
-
+                        
                         Label {
-                            text: "ETA " + (backend ? backend.sessionEtaText : "--:--")
+                            text: "ETA: " + (backend ? backend.sessionEtaText : "--:--")
                             color: Theme.textSecondary
                             font.family: Theme.monoFont
-                            font.pixelSize: Theme.fontSizeXs
+                            font.pixelSize: Theme.fontSizeSm
                         }
                     }
 
@@ -660,61 +616,64 @@ ApplicationWindow {
                         active: backend ? backend.isRunning : false
                         highLoadMode: root.highLoadMode
                         shimmerPhase: root.sharedShimmerPhase
-                        fillColor: Theme.statusRunning
+                        fillColor: Theme.accentPrimary
                     }
                 }
 
-                ColumnLayout {
-                    Layout.preferredWidth: 320
-                    spacing: Theme.space1
-
-                    Label {
-                        text: I18n.t("output_folder")
-                        color: Theme.textDisabled
-                        font.family: Theme.monoFont
-                        font.pixelSize: Theme.fontSizeXs
+                RowLayout {
+                    Layout.preferredWidth: 280
+                    spacing: 12
+                    
+                    SecondaryButton {
+                        Layout.preferredWidth: 44
+                        text: "📁"
+                        onClicked: backend && backend.pickOutputDir()
                     }
-
-                    RowLayout {
+                    
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: Theme.space2
+                        spacing: 2
+                        Label {
+                            text: "Папка збереження"
+                            color: Theme.textDisabled
+                            font.pixelSize: 11
+                        }
                         Label {
                             Layout.fillWidth: true
                             text: backend && backend.outputDirConfigured ? backend.outputDir : I18n.t("output_folder_required")
                             color: backend && backend.outputDirConfigured ? Theme.textSecondary : Theme.statusWarning
-                            font.pixelSize: Theme.fontSizeXs
+                            font.pixelSize: Theme.fontSizeSm
                             elide: Text.ElideMiddle
-                        }
-                        SecondaryButton {
-                            Layout.fillWidth: false
-                            Layout.preferredWidth: 84
-                            text: I18n.t("change")
-                            onClicked: backend && backend.pickOutputDir()
                         }
                     }
                 }
 
-                SecondaryButton {
-                    Layout.fillWidth: false
-                    Layout.preferredWidth: 90
-                    text: backend && backend.isPaused ? I18n.t("resume") : I18n.t("pause")
-                    enabled: backend && backend.isRunning
-                    onClicked: backend && (backend.isPaused ? backend.resumeConversion() : backend.pauseConversion())
-                }
-                SecondaryButton {
-                    Layout.fillWidth: false
-                    Layout.preferredWidth: 82
-                    text: I18n.t("stop")
-                    enabled: backend && backend.isRunning
-                    onClicked: backend && backend.stopConversion()
-                }
-                PrimaryButton {
-                    Layout.fillWidth: false
-                    Layout.preferredWidth: 156
-                    Layout.preferredHeight: 44
-                    text: backend && backend.isRunning ? I18n.t("running") : I18n.t("start")
-                    enabled: backend ? (backend.queueCount > 0 && !backend.isRunning && formValid) : false
-                    onClicked: root.startIfValid()
+                RowLayout {
+                    spacing: 8
+                    
+                    SecondaryButton {
+                        Layout.preferredWidth: 48
+                        text: backend && backend.isPaused ? "▶️" : "⏸️"
+                        enabled: backend && backend.isRunning
+                        onClicked: backend && (backend.isPaused ? backend.resumeConversion() : backend.pauseConversion())
+                    }
+                    
+                    SecondaryButton {
+                        Layout.preferredWidth: 48
+                        text: "⏹️"
+                        enabled: backend && backend.isRunning
+                        onClicked: backend && backend.stopConversion()
+                    }
+                    
+                    PrimaryButton {
+                        Layout.preferredWidth: 160
+                        Layout.preferredHeight: 48
+                        text: "🚀 " + (backend && backend.isRunning ? I18n.t("running") : "Старт")
+                        font.pixelSize: Theme.fontSizeLg
+                        font.bold: true
+                        enabled: backend ? (backend.queueCount > 0 && !backend.isRunning && formValid) : false
+                        onClicked: root.startIfValid()
+                    }
                 }
             }
         }
@@ -2949,5 +2908,8 @@ ApplicationWindow {
         }
         }
     }
-}
 
+    WhatsNewPopup {
+        id: whatsNewPopup
+    }
+}

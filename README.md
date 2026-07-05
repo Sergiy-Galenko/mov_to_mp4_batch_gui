@@ -4,26 +4,23 @@ Desktop batch media converter for video, audio, images, and subtitles. The app i
 
 ## Features
 
-- Dark desktop UI with a sidebar, queue screen, analytics screen, presets, FFmpeg tools, and settings.
-- Drag-and-drop files or folders into the queue.
-- Explicit output-folder selection before any conversion or YouTube download starts.
-- Batch conversion for video, image, audio, and subtitle files.
-- Automatic media-type aware output formats: images use image formats, videos use video formats, audio uses audio formats, and subtitles use subtitle formats.
+- **Arc/Linear-Inspired UI**: Completely redesigned interface with deep dark modes, glassmorphism, soft shadows, and clean layouts.
+- **Progressive Disclosure**: Advanced settings and sidebar are hidden by default to keep the main conversion screen incredibly simple and focused.
+- **Emoji-Driven Navigation**: Uses clear emoji indicators (🎬, 🎵, ✅, ⏳, 📥) instead of text for instant visual recognition of media types and status.
+- **Modern Drag & Drop Zone**: A large, interactive glassmorphism drop zone for importing files directly from the desktop.
+- Batch conversion for video, image, audio, and subtitle files with automatic media-type aware output formats.
 - Right-click quick conversion: choose only the output format for one queued file and convert it immediately.
 - Queue controls for retry, skip, remove, reorder, multi-select, batch remove, and per-file overrides.
-- Presets for common formats and platform targets.
+- Explicit output-folder selection before any conversion or YouTube download starts.
+- Presets for common formats and platform targets (iPhone, PlayStation 5, etc).
 - FFmpeg/FFprobe integration for metadata, thumbnails, progress, ETA, and previews.
-- Automatic FFmpeg bootstrap on Windows x64: if FFmpeg is missing, the app downloads a local managed copy and checks it for updates on startup.
-- Automatic Python dependency bootstrap: missing runtime libraries from `requirements.txt` are installed on startup with `python -m pip install -r requirements.txt`.
+- Automatic FFmpeg & Python dependency bootstrap on Windows x64.
 - YouTube download support through `yt-dlp`: download a video or extract audio into the queue.
-- Device profiles for iPhone/iPad/Apple TV/Android/Samsung TV/consoles/TV sticks/action cameras/DVD/Blu-ray targets.
 - Smart Convert mode for per-file codec/CRF/preset recommendations, remux detection, two-pass target-size encoding, quality checks, and A/B samples.
 - Lightweight editor filters for deinterlace, stabilization, denoise, color correction, LUT files, and speed changes.
 - Subtitle tools for offset adjustment and styled burn-in output.
 - Privacy and security tools: manual blur regions, metadata sanitization, checksum sidecars, and secure-delete after conversion.
 - Optional cloud upload after conversion through an external `rclone` remote.
-- Performance profiles: `Quality`, `Balanced`, `Fast`, and `Small file`.
-- Target output size mode with bitrate estimation.
 - GPU-aware parallel conversion when a supported hardware encoder is available.
 - Built-in analytics for speed, per-file timings, codec distribution, and system resources.
 - JSON-based localization for Ukrainian, English, Polish, and German.
