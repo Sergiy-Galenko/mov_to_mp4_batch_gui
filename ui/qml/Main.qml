@@ -507,6 +507,12 @@ ApplicationWindow {
 
                     GhostButton {
                         Layout.preferredWidth: 44
+                        text: "📖"
+                        onClicked: tutorialPopup.open()
+                    }
+
+                    GhostButton {
+                        Layout.preferredWidth: 44
                         text: "🌓"
                         onClicked: {
                             if (backend) backend.themeMode = backend.themeMode === "light" ? "dark" : "light"
@@ -2911,5 +2917,9 @@ ApplicationWindow {
 
     WhatsNewPopup {
         id: whatsNewPopup
+    }
+    
+    TutorialPopup {
+        id: tutorialPopup
     }
 }

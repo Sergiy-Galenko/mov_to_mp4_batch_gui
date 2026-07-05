@@ -84,15 +84,26 @@ Rectangle {
             }
         }
 
-        PrimaryButton {
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            Layout.fillWidth: false
-            Layout.preferredWidth: 200
-            Layout.preferredHeight: 44
-            text: "Обрати файли..."
-            font.pixelSize: Theme.fontSizeMd
-            font.bold: true
-            onClicked: root.clicked()
+            spacing: Theme.space3
+            
+            PrimaryButton {
+                Layout.preferredWidth: 200
+                Layout.preferredHeight: 44
+                text: "Обрати файли..."
+                font.pixelSize: Theme.fontSizeMd
+                font.bold: true
+                onClicked: root.clicked()
+            }
+            
+            SecondaryButton {
+                Layout.preferredWidth: 200
+                Layout.preferredHeight: 44
+                text: "📖 Як користуватися"
+                font.pixelSize: Theme.fontSizeMd
+                onClicked: tutorialPopup.open()
+            }
         }
     }
 }
