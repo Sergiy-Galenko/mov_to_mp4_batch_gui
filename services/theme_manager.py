@@ -71,11 +71,12 @@ class ThemeManager:
         self._save()
 
     def theme_mode(self) -> str:
-        """Return 'dark', 'light', or 'auto'."""
+        """Return 'dark', 'light', 'auto', or 'high_contrast'."""
         return str(self._state.get("theme_mode") or "dark")
 
     def set_theme_mode(self, mode: str) -> None:
-        self._state["theme_mode"] = mode if mode in ("dark", "light", "auto") else "dark"
+        normalized = "auto" if mode == "system" else str(mode or "dark")
+        self._state["theme_mode"] = normalized if normalized in ("dark", "light", "auto", "high_contrast") else "dark"
         self._save()
 
     def layout_mode(self) -> str:

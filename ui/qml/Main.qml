@@ -24,6 +24,9 @@ ApplicationWindow {
     property bool hasBackend: backend !== null
     property bool sidebarCollapsed: false
     property int activeSection: 0
+    property string globalSearchText: ""
+    property var globalSearchResults: []
+    property var toastHistory: []
     property bool logErrorsOnly: false
     property var validationResult: ({ ok: true, errors: {}, warnings: [], summary: "OK" })
     property bool formValid: true
@@ -32,6 +35,11 @@ ApplicationWindow {
     property bool queueShowThumbnail: true
     property bool queueShowMetrics: true
     property bool queueShowActions: true
+    property bool queueShowSize: true
+    property bool queueShowDuration: true
+    property bool queueShowCodec: true
+    property bool queueShowOutput: true
+    property bool queueShowProgress: true
     property real queueDropZoneHeight: 0
     property string toastText: ""
     property string selectedPath: ""
@@ -117,7 +125,11 @@ ApplicationWindow {
             return
         if (!validateForm())
             return
-        backend.startConversion(collectSettings())
+        var settings = collectSettings()
+        var preflight = backend.refreshPreflight(settings)
+        if (!preflight.ok)
+            return
+        backend.startConversion(settings)
     }
 
     function outputFormatKeyFor(mediaType) {
@@ -278,6 +290,55 @@ ApplicationWindow {
         }
     }
 
+    function openTopMode(mode) {
+        if (mode === "convert")
+            openSidebarSection(0, "", 0)
+        else if (mode === "montage")
+            openSidebarSection(5, "video_editor", navIndexFor(5, "video_editor"))
+        else if (mode === "downloads")
+            openSidebarSection(4, "", navIndexFor(4, ""))
+        else if (mode === "analytics")
+            openSidebarSection(1, "", navIndexFor(1, ""))
+    }
+
+    function topModeActive(mode) {
+        if (mode === "convert")
+            return activeSection === 0
+        if (mode === "montage")
+            return activeSection === 5 && pendingSettingsTarget === "video_editor"
+        if (mode === "downloads")
+            return activeSection === 4
+        if (mode === "analytics")
+            return activeSection === 1
+        return false
+    }
+
+    function themeModeIndex(mode) {
+        if (mode === "light")
+            return 1
+        if (mode === "auto")
+            return 2
+        if (mode === "high_contrast")
+            return 3
+        return 0
+    }
+
+    function runGlobalSearch(text) {
+        globalSearchText = String(text || "")
+        globalSearchResults = backend ? backend.globalSearch(globalSearchText) : []
+        if (globalSearchText.length >= 2)
+            globalSearchPopup.open()
+        else
+            globalSearchPopup.close()
+    }
+
+    function activateSearchResult(result) {
+        if (!result)
+            return
+        openSidebarSection(Number(result.page || 0), String(result.target || ""), -1)
+        globalSearchPopup.close()
+    }
+
     function queueItemMatches(name, path, mediaType, status) {
         var needle = String(queueSearchText || "").trim().toLowerCase()
         if (needle.length > 0) {
@@ -299,8 +360,15 @@ ApplicationWindow {
 
     function showToast(message) {
         toastText = String(message || "")
-        if (toastText.length > 0)
+        if (toastText.length > 0) {
+            var next = toastHistory.slice()
+            next.unshift({
+                time: new Date().toLocaleTimeString(Qt.locale(), "hh:mm:ss"),
+                message: toastText
+            })
+            toastHistory = next.slice(0, 30)
             toastTimer.restart()
+        }
     }
 
     Timer {
@@ -353,6 +421,10 @@ ApplicationWindow {
         function onToastRequested(message) {
             root.showToast(message)
         }
+        function onThemeChanged() {
+            if (topThemeCombo)
+                topThemeCombo.currentIndex = root.themeModeIndex(backend.themeMode)
+        }
     }
 
     Component.onCompleted: {
@@ -370,60 +442,124 @@ ApplicationWindow {
         spacing: 0
 
         Rectangle {
+            id: topHeader
             Layout.fillWidth: true
-            Layout.preferredHeight: Theme.titlebarHeight
+            Layout.preferredHeight: 96
             color: Theme.bgPrimary
             border.width: 0
 
-            RowLayout {
+            ColumnLayout {
                 anchors.fill: parent
                 anchors.leftMargin: Theme.space4
                 anchors.rightMargin: Theme.space4
-                spacing: Theme.space3
+                anchors.topMargin: 8
+                anchors.bottomMargin: 8
+                spacing: 6
 
-                SecondaryButton {
-                    Layout.fillWidth: false
-                    Layout.preferredWidth: 40
-                    text: sidebarCollapsed ? ">" : "<"
-                    onClicked: sidebarCollapsed = !sidebarCollapsed
-                }
-
-                ColumnLayout {
+                RowLayout {
                     Layout.fillWidth: true
-                    spacing: 0
+                    Layout.preferredHeight: 32
+                    spacing: Theme.space3
 
-                    Label {
-                        text: I18n.t("app.title")
-                        color: Theme.textPrimary
-                        font.family: Theme.displayFont
-                        font.pixelSize: Theme.fontSizeXl
-                        font.bold: true
-                        elide: Text.ElideRight
+                    SecondaryButton {
+                        Layout.fillWidth: false
+                        Layout.preferredWidth: 40
+                        text: sidebarCollapsed ? ">" : "<"
+                        onClicked: sidebarCollapsed = !sidebarCollapsed
                     }
 
-                    Label {
-                        text: backend ? backend.statusText : I18n.t("idle")
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontSizeXs
-                        elide: Text.ElideRight
+                    ColumnLayout {
                         Layout.fillWidth: true
+                        spacing: 0
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: I18n.t("app.title")
+                            color: Theme.textPrimary
+                            font.family: Theme.displayFont
+                            font.pixelSize: Theme.fontSizeLg
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: backend ? backend.statusText : I18n.t("idle")
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fontSizeXs
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: false
+                        spacing: Theme.space2
+
+                        PulseDot {
+                            dotColor: backend && backend.isRunning ? Theme.statusRunning : Theme.statusSuccess
+                            running: backend ? backend.isRunning : false
+                        }
+                        StatusPill { text: backend && backend.isRunning ? I18n.t("live") : I18n.t("idle"); accent: backend && backend.isRunning ? Theme.statusRunning : Theme.statusSuccess }
+                        StatusPill { visible: root.width > 1240; text: backend ? backend.cpuLoadText : "CPU --"; accent: Theme.textSecondary }
+                        StatusPill { visible: root.width > 1320; text: backend ? backend.gpuLoadText : "GPU --"; accent: Theme.statusWarning }
+                        StatusPill { visible: root.width > 1160; text: backend ? backend.encoderInfo : "FFmpeg --"; accent: Theme.accent; maxWidth: 220 }
                     }
                 }
 
                 RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
                     spacing: Theme.space2
 
-                    PulseDot {
-                        dotColor: backend && backend.isRunning ? Theme.statusRunning : Theme.statusSuccess
-                        running: backend ? backend.isRunning : false
+                    RowLayout {
+                        Layout.fillWidth: false
+                        spacing: 4
+                        TopModeButton { mode: "convert"; text: "Конвертація" }
+                        TopModeButton { mode: "montage"; text: "Монтаж" }
+                        TopModeButton { mode: "downloads"; text: "Downloads" }
+                        TopModeButton { mode: "analytics"; text: "Аналітика" }
                     }
-                    StatusPill { text: backend && backend.isRunning ? I18n.t("live") : I18n.t("idle"); accent: backend && backend.isRunning ? Theme.statusRunning : Theme.statusSuccess }
-                    StatusPill { text: backend ? backend.cpuLoadText : "CPU --"; accent: Theme.textSecondary }
-                    StatusPill { text: backend ? backend.gpuLoadText : "GPU --"; accent: Theme.statusWarning }
-                    StatusPill { text: backend ? backend.encoderInfo : "FFmpeg --"; accent: Theme.accent; maxWidth: 260 }
+
+                    AppTextField {
+                        id: globalSearchField
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 180
+                        Layout.preferredWidth: 260
+                        placeholderText: "Пошук..."
+                        text: root.globalSearchText
+                        onTextChanged: root.runGlobalSearch(text)
+                        Keys.onReturnPressed: {
+                            if (root.globalSearchResults.length > 0)
+                                root.activateSearchResult(root.globalSearchResults[0])
+                        }
+                    }
+
                     SecondaryButton {
                         Layout.fillWidth: false
-                        Layout.preferredWidth: 96
+                        Layout.preferredWidth: 58
+                        text: "🔔 " + root.toastHistory.length
+                        onClicked: notificationCenterPopup.open()
+                    }
+
+                    AppComboBox {
+                        id: topThemeCombo
+                        Layout.fillWidth: false
+                        Layout.preferredWidth: 126
+                        model: ["Dark", "Light", "System", "High Contrast"]
+                        currentIndex: backend ? root.themeModeIndex(backend.themeMode) : 0
+                        onActivated: {
+                            if (!backend)
+                                return
+                            backend.themeMode = currentIndex === 1 ? "light"
+                                : currentIndex === 2 ? "auto"
+                                : currentIndex === 3 ? "high_contrast"
+                                : "dark"
+                        }
+                    }
+
+                    SecondaryButton {
+                        Layout.fillWidth: false
+                        Layout.preferredWidth: 86
                         text: I18n.t("choose")
                         onClicked: backend && backend.pickFfmpeg()
                     }
@@ -608,6 +744,135 @@ ApplicationWindow {
             font.pixelSize: Theme.fontSmall
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
+        }
+    }
+
+    Popup {
+        id: globalSearchPopup
+        z: 1100
+        modal: false
+        focus: true
+        width: 520
+        height: Math.min(420, searchResultsList.contentHeight + 24)
+        x: Math.max(12, Math.min(root.width - width - 12, globalSearchField.mapToItem(root, 0, 0).x))
+        y: globalSearchField.mapToItem(root, 0, globalSearchField.height + 8).y
+        padding: 8
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            radius: Theme.radiusPanel
+            color: Theme.bgElevated
+            border.width: 1
+            border.color: Theme.borderStrong
+        }
+
+        contentItem: ListView {
+            id: searchResultsList
+            clip: true
+            model: root.globalSearchResults
+            spacing: 4
+            delegate: ItemDelegate {
+                width: searchResultsList.width
+                height: 54
+                onClicked: root.activateSearchResult(modelData)
+                background: Rectangle {
+                    radius: Theme.radiusSm
+                    color: parent.hovered ? Theme.overlayHover : Theme.transparent
+                }
+                contentItem: ColumnLayout {
+                    spacing: 2
+                    Label {
+                        Layout.fillWidth: true
+                        text: modelData.kind + " · " + modelData.title
+                        color: Theme.textPrimary
+                        font.pixelSize: Theme.fontSizeSm
+                        font.bold: true
+                        elide: Text.ElideRight
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: modelData.detail
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.fontMeta
+                        elide: Text.ElideMiddle
+                    }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: notificationCenterPopup
+        z: 1100
+        modal: false
+        focus: true
+        width: 420
+        height: 420
+        x: root.width - width - 18
+        y: topHeader.height + 10
+        padding: 12
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            radius: Theme.radiusPanel
+            color: Theme.bgElevated
+            border.width: 1
+            border.color: Theme.borderStrong
+        }
+
+        contentItem: ColumnLayout {
+            spacing: Theme.space2
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    Layout.fillWidth: true
+                    text: "Сповіщення"
+                    color: Theme.textPrimary
+                    font.pixelSize: Theme.fontSizeLg
+                    font.bold: true
+                }
+                SecondaryButton {
+                    Layout.fillWidth: false
+                    Layout.preferredWidth: 86
+                    text: I18n.t("clear")
+                    enabled: root.toastHistory.length > 0
+                    onClicked: root.toastHistory = []
+                }
+            }
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                model: root.toastHistory
+                spacing: 6
+                delegate: Rectangle {
+                    width: ListView.view.width
+                    height: Math.max(48, messageLabel.implicitHeight + 18)
+                    radius: Theme.radiusSm
+                    color: Theme.bgSecondary
+                    border.width: 1
+                    border.color: Theme.borderSubtle
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 2
+                        Label {
+                            text: modelData.time
+                            color: Theme.textDisabled
+                            font.family: Theme.monoFont
+                            font.pixelSize: Theme.fontMeta
+                        }
+                        Label {
+                            id: messageLabel
+                            Layout.fillWidth: true
+                            text: modelData.message
+                            color: Theme.textPrimary
+                            font.pixelSize: Theme.fontSizeSm
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -865,15 +1130,61 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     AppCheckBox { text: I18n.t("show_thumbnail"); checked: root.queueShowThumbnail; onToggled: root.queueShowThumbnail = checked }
+                    AppCheckBox { text: "Розмір"; checked: root.queueShowSize; onToggled: root.queueShowSize = checked }
+                    AppCheckBox { text: "Тривалість"; checked: root.queueShowDuration; onToggled: root.queueShowDuration = checked }
+                    AppCheckBox { text: "Кодек"; checked: root.queueShowCodec; onToggled: root.queueShowCodec = checked }
+                    AppCheckBox { text: "Output"; checked: root.queueShowOutput; onToggled: root.queueShowOutput = checked }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    AppCheckBox { text: "Progress"; checked: root.queueShowProgress; onToggled: root.queueShowProgress = checked }
                     AppCheckBox { text: I18n.t("show_metrics"); checked: root.queueShowMetrics; onToggled: root.queueShowMetrics = checked }
                     AppCheckBox { text: I18n.t("show_actions"); checked: root.queueShowActions; onToggled: root.queueShowActions = checked }
                     Item { Layout.fillWidth: true }
+                    SecondaryButton {
+                        Layout.fillWidth: false
+                        text: "🛡️ Preflight"
+                        onClicked: backend && backend.refreshPreflight(collectSettings())
+                    }
+                    SecondaryButton {
+                        Layout.fillWidth: false
+                        text: "📌 Priority"
+                        onClicked: backend && backend.sortQueueByPriority()
+                    }
                     SecondaryButton {
                         Layout.fillWidth: false
                         text: I18n.t("retry")
                         visible: backend ? backend.failedCount > 0 : false
                         onClicked: backend && backend.retryFailed()
                     }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    SecondaryButton {
+                        Layout.fillWidth: false
+                        text: "🧹 Готові"
+                        enabled: backend ? backend.queueCount > 0 : false
+                        onClicked: backend && backend.cleanupQueue("done")
+                    }
+                    SecondaryButton {
+                        Layout.fillWidth: false
+                        text: "🧹 Помилкові"
+                        enabled: backend ? backend.queueCount > 0 : false
+                        onClicked: backend && backend.cleanupQueue("failed")
+                    }
+                    SecondaryButton {
+                        Layout.fillWidth: false
+                        text: "🧹 Відсутні"
+                        enabled: backend ? backend.queueCount > 0 : false
+                        onClicked: backend && backend.cleanupQueue("missing")
+                    }
+                    SecondaryButton {
+                        Layout.fillWidth: false
+                        text: "📊 Оновити preview"
+                        enabled: backend ? backend.queueCount > 0 : false
+                        onClicked: backend && backend.refreshOutputPreview(collectSettings())
+                    }
+                    Item { Layout.fillWidth: true }
                 }
                 Rectangle {
                     Layout.fillWidth: true
@@ -892,6 +1203,147 @@ ApplicationWindow {
                         color: Theme.textPrimary
                         font.pixelSize: Theme.fontMeta
                         elide: Text.ElideRight
+                    }
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: backend && backend.hasLastError ? 92 : 0
+                    visible: backend ? backend.hasLastError : false
+                    radius: Theme.radiusPanel
+                    color: Theme.dangerSoft
+                    border.width: 1
+                    border.color: Theme.accentError
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 10
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 3
+                            Label {
+                                Layout.fillWidth: true
+                                text: backend ? backend.lastErrorTitle : ""
+                                color: Theme.textPrimary
+                                font.pixelSize: Theme.fontSizeSm
+                                font.bold: true
+                                elide: Text.ElideRight
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: backend ? "Причина: " + backend.lastErrorDetails : ""
+                                color: Theme.textSecondary
+                                font.pixelSize: Theme.fontSizeSm
+                                maximumLineCount: 2
+                                wrapMode: Text.WordWrap
+                                elide: Text.ElideRight
+                            }
+                        }
+                        SecondaryButton {
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: 142
+                            text: "Скопіювати лог"
+                            onClicked: backend && backend.copyLastErrorLog()
+                        }
+                        SecondaryButton {
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: 76
+                            text: I18n.t("clear")
+                            onClicked: backend && backend.clearLastError()
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                Panel {
+                    title: "🛡️ Preflight"
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            Layout.fillWidth: true
+                            text: backend ? backend.preflightSummary : ""
+                            color: backend && backend.preflightOk ? Theme.statusSuccess : Theme.accentError
+                            font.pixelSize: Theme.fontSizeSm
+                            wrapMode: Text.WordWrap
+                        }
+                        SecondaryButton {
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: 110
+                            text: "Перевірити"
+                            onClicked: backend && backend.refreshPreflight(collectSettings())
+                        }
+                    }
+                    Repeater {
+                        model: backend ? backend.preflightErrors : []
+                        delegate: Label {
+                            Layout.fillWidth: true
+                            text: "❌ " + modelData
+                            color: Theme.accentError
+                            font.pixelSize: Theme.fontMeta
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    Repeater {
+                        model: backend ? backend.preflightWarnings : []
+                        delegate: Label {
+                            Layout.fillWidth: true
+                            text: "⚠️ " + modelData
+                            color: Theme.accentWarn
+                            font.pixelSize: Theme.fontMeta
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+
+                Panel {
+                    title: "📊 Output preview"
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Label {
+                        Layout.fillWidth: true
+                        text: backend ? backend.outputPreviewText : ""
+                        color: Theme.textPrimary
+                        font.pixelSize: Theme.fontSizeSm
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: backend ? "Output: " + backend.selectedPreviewOutput : ""
+                        color: Theme.textSecondary
+                        font.family: Theme.monoFont
+                        font.pixelSize: Theme.fontMeta
+                        elide: Text.ElideMiddle
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: backend ? "FFmpeg: " + backend.selectedPreviewCommand : ""
+                        color: Theme.textDisabled
+                        font.family: Theme.monoFont
+                        font.pixelSize: Theme.fontMeta
+                        maximumLineCount: 2
+                        wrapMode: Text.WrapAnywhere
+                        elide: Text.ElideRight
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        SecondaryButton {
+                            Layout.fillWidth: false
+                            text: "📋 Команду"
+                            onClicked: backend && backend.copyDryRunCommand(collectSettings())
+                        }
+                        SecondaryButton {
+                            Layout.fillWidth: false
+                            text: "📄 Script"
+                            onClicked: backend && backend.exportCommandScript(collectSettings())
+                        }
+                        Item { Layout.fillWidth: true }
                     }
                 }
             }
@@ -918,15 +1370,45 @@ ApplicationWindow {
                     }
                 }
 
-                DropZone {
-                    objectName: "queueDropZone"
+                ColumnLayout {
+                    id: emptyQueueState
                     anchors.centerIn: parent
                     width: Math.min(parent.width - 28, 680)
                     visible: backend ? backend.queueCount === 0 : true
-                    Component.onCompleted: root.queueDropZoneHeight = height
-                    onHeightChanged: root.queueDropZoneHeight = height
-                    onFilesDropped: function(urls) { backend && backend.addDroppedUrls(urls) }
-                    onClicked: backend && backend.addFiles()
+                    spacing: Theme.space3
+
+                    DropZone {
+                        objectName: "queueDropZone"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 260
+                        Component.onCompleted: root.queueDropZoneHeight = height
+                        onHeightChanged: root.queueDropZoneHeight = height
+                        onFilesDropped: function(urls) { backend && backend.addDroppedUrls(urls) }
+                        onClicked: backend && backend.addFiles()
+                    }
+
+                    RowLayout {
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: Theme.space2
+                        PrimaryButton {
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: 150
+                            text: I18n.t("add_files")
+                            onClicked: backend && backend.addFiles()
+                        }
+                        SecondaryButton {
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: 150
+                            text: I18n.t("add_folder")
+                            onClicked: backend && backend.addFolder()
+                        }
+                        SecondaryButton {
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: 150
+                            text: "YouTube URL"
+                            onClicked: root.openTopMode("downloads")
+                        }
+                    }
                 }
 
                 ListView {
@@ -959,6 +1441,9 @@ ApplicationWindow {
                         speedText: model.speedText
                         predictedSizeText: model.predictedSizeText
                         compressionText: model.compressionText
+                        smartRecommendation: model.smartRecommendation
+                        pinned: model.pinned
+                        priority: model.priority
                         exitCode: model.exitCode
                         hasOverride: model.hasOverride
                         selected: root.isPathSelected(model.path)
@@ -966,6 +1451,11 @@ ApplicationWindow {
                         showThumbnail: root.queueShowThumbnail
                         showMetrics: root.queueShowMetrics
                         showActions: root.queueShowActions
+                        showSize: root.queueShowSize
+                        showDuration: root.queueShowDuration
+                        showCodec: root.queueShowCodec
+                        showOutput: root.queueShowOutput
+                        showProgress: root.queueShowProgress
                         shimmerPhase: root.sharedShimmerPhase
                         itemIndex: index
                         onSelectedRequested: function(path, modifiers) {
@@ -988,6 +1478,8 @@ ApplicationWindow {
                             if (backend)
                                 backend.movePathToIndex(path, targetIndex)
                         }
+                        onPinnedRequested: function(path) { backend && backend.toggleTaskPinned(path) }
+                        onPriorityRequested: function(path, priority) { backend && backend.setTaskPriority(path, priority) }
                     }
                 }
             }
@@ -1165,6 +1657,8 @@ ApplicationWindow {
 
     component YoutubeDownloadPanel: Panel {
         title: I18n.t("youtube_download")
+        property string selectedDownloadMode: "video"
+
         function startDownload(mode) {
             if (!backend)
                 return
@@ -1172,7 +1666,7 @@ ApplicationWindow {
                 return
             backend.downloadYoutubeAdvanced({
                 url: youtubeUrlField.text,
-                mode: mode,
+                mode: mode || selectedDownloadMode,
                 quality: youtubeQualityCombo.currentText,
                 playlist: youtubePlaylistCheck.checked,
                 subtitles: youtubeSubtitlesCheck.checked,
@@ -1209,17 +1703,103 @@ ApplicationWindow {
 
         RowLayout {
             Layout.fillWidth: true
+            spacing: 8
+            Button {
+                id: youtubeVideoSegment
+                Layout.fillWidth: true
+                Layout.preferredHeight: 54
+                text: "🎬 Video"
+                hoverEnabled: true
+                onClicked: selectedDownloadMode = "video"
+                background: Rectangle {
+                    radius: Theme.radiusButton
+                    color: selectedDownloadMode === "video" ? Theme.accentSoft : Theme.bgElevated
+                    border.width: 1
+                    border.color: selectedDownloadMode === "video" ? Theme.accent : Theme.borderSubtle
+                }
+                contentItem: Label {
+                    text: youtubeVideoSegment.text
+                    color: selectedDownloadMode === "video" ? Theme.textPrimary : Theme.textSecondary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font.pixelSize: Theme.fontSizeLg
+                    font.bold: selectedDownloadMode === "video"
+                }
+            }
+            Button {
+                id: youtubeAudioSegment
+                Layout.fillWidth: true
+                Layout.preferredHeight: 54
+                text: "🎧 Audio only"
+                hoverEnabled: true
+                onClicked: selectedDownloadMode = "audio"
+                background: Rectangle {
+                    radius: Theme.radiusButton
+                    color: selectedDownloadMode === "audio" ? Theme.accentSoft : Theme.bgElevated
+                    border.width: 1
+                    border.color: selectedDownloadMode === "audio" ? Theme.accent : Theme.borderSubtle
+                }
+                contentItem: Label {
+                    text: youtubeAudioSegment.text
+                    color: selectedDownloadMode === "audio" ? Theme.textPrimary : Theme.textSecondary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font.pixelSize: Theme.fontSizeLg
+                    font.bold: selectedDownloadMode === "audio"
+                }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
             AppComboBox {
                 id: youtubeHistoryCombo
                 Layout.fillWidth: true
                 model: backend ? backend.youtubeDownloadHistory : []
-                enabled: backend ? backend.youtubeDownloadHistory.length > 0 && !backend.youtubeDownloadRunning : false
+                enabled: backend ? backend.youtubeDownloadHistory.length > 0 : false
                 onActivated: youtubeUrlField.text = currentText
             }
             SecondaryButton {
                 text: I18n.t("clear")
-                enabled: backend ? backend.youtubeDownloadHistory.length > 0 && !backend.youtubeDownloadRunning : false
+                enabled: backend ? backend.youtubeDownloadHistory.length > 0 : false
                 onClicked: backend && backend.clearYoutubeHistory()
+            }
+        }
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 6
+            visible: backend ? backend.youtubeDownloadHistory.length > 0 : false
+            Repeater {
+                model: backend ? backend.youtubeDownloadHistory : []
+                delegate: Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
+                    radius: Theme.radiusSm
+                    color: Theme.bgElevated
+                    border.width: 1
+                    border.color: Theme.borderSubtle
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 8
+                        Label {
+                            Layout.fillWidth: true
+                            text: modelData
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fontMeta
+                            elide: Text.ElideMiddle
+                        }
+                        SecondaryButton {
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: 104
+                            text: "Повторити"
+                            onClicked: {
+                                youtubeUrlField.text = modelData
+                                startDownload(selectedDownloadMode)
+                            }
+                        }
+                    }
+                }
             }
         }
         Item {
@@ -1230,7 +1810,7 @@ ApplicationWindow {
                 id: youtubeUrlField
                 anchors.fill: parent
                 placeholderText: I18n.t("youtube_url")
-                enabled: backend ? !backend.youtubeDownloadRunning : false
+                enabled: backend ? true : false
             }
 
             DropArea {
@@ -1258,7 +1838,7 @@ ApplicationWindow {
                 id: youtubeQualityCombo
                 model: ["best", "1080p", "720p", "audio_only"]
                 currentIndex: 0
-                enabled: backend ? !backend.youtubeDownloadRunning : false
+                enabled: backend ? true : false
             }
             FieldLabel { text: I18n.t("youtube.cookies_file") }
             RowLayout {
@@ -1266,41 +1846,59 @@ ApplicationWindow {
                 AppTextField {
                     id: youtubeCookiesField
                     text: backend ? backend.youtubeCookiesPath : ""
-                    enabled: backend ? !backend.youtubeDownloadRunning : false
+                    enabled: backend ? true : false
                     onEditingFinished: backend && backend.setYoutubeCookiesPath(text)
                 }
                 SecondaryButton {
                     text: "..."
                     Layout.preferredWidth: 42
-                    enabled: backend ? !backend.youtubeDownloadRunning : false
+                    enabled: backend ? true : false
                     onClicked: backend && backend.pickYoutubeCookies()
                 }
             }
+        }
+        Label {
+            Layout.fillWidth: true
+            text: backend ? "🍪 " + backend.youtubeCookiesStatus : "🍪 Cookies: --"
+            color: backend && backend.youtubeCookiesStatus.indexOf("Cookies: підключено") >= 0 ? Theme.statusSuccess : Theme.textMuted
+            font.pixelSize: Theme.fontMeta
+            elide: Text.ElideRight
         }
         RowLayout {
             Layout.fillWidth: true
             AppCheckBox {
                 id: youtubePlaylistCheck
                 text: I18n.t("youtube.playlist")
-                enabled: backend ? !backend.youtubeDownloadRunning : false
+                enabled: backend ? true : false
             }
             AppCheckBox {
                 id: youtubeSubtitlesCheck
                 text: I18n.t("youtube.subtitles")
-                enabled: backend ? !backend.youtubeDownloadRunning : false
+                enabled: backend ? true : false
             }
+            SecondaryButton {
+                Layout.fillWidth: false
+                Layout.preferredWidth: 150
+                text: "Preview playlist"
+                enabled: backend && String(youtubeUrlField.text).trim().length > 0
+                onClicked: backend && backend.previewYoutubePlaylist(youtubeUrlField.text, youtubePlaylistCheck.checked, youtubeCookiesField.text)
+            }
+        }
+        Label {
+            Layout.fillWidth: true
+            visible: backend ? backend.youtubePlaylistPreview.length > 0 : false
+            text: backend ? "📦 " + backend.youtubePlaylistPreview : ""
+            color: Theme.textSecondary
+            font.pixelSize: Theme.fontMeta
+            wrapMode: Text.WordWrap
         }
         RowLayout {
             Layout.fillWidth: true
             SecondaryButton {
-                text: I18n.t("download_video")
-                enabled: backend && !backend.youtubeDownloadRunning && String(youtubeUrlField.text).trim().length > 0
-                onClicked: startDownload("video")
-            }
-            SecondaryButton {
-                text: I18n.t("download_audio")
-                enabled: backend && !backend.youtubeDownloadRunning && String(youtubeUrlField.text).trim().length > 0
-                onClicked: startDownload("audio")
+                Layout.fillWidth: true
+                text: "⬇️ Додати в чергу"
+                enabled: backend && String(youtubeUrlField.text).trim().length > 0
+                onClicked: startDownload(selectedDownloadMode)
             }
             SecondaryButton {
                 text: I18n.t("cancel")
@@ -1321,6 +1919,92 @@ ApplicationWindow {
             color: Theme.textMuted
             wrapMode: Text.WordWrap
             font.pixelSize: Theme.fontMeta
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: backend && backend.youtubeDownloadQueue.length > 0
+                ? Math.min(420, 58 + backend.youtubeDownloadQueue.length * 94)
+                : 128
+            radius: Theme.radiusPanel
+            color: Theme.bgSurface
+            border.width: 1
+            border.color: Theme.borderSubtle
+            ColumnLayout {
+                id: downloadQueueColumn
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 8
+                Label {
+                    Layout.fillWidth: true
+                    text: "⬇️ Черга завантажень"
+                    color: Theme.textPrimary
+                    font.pixelSize: Theme.fontSizeSm
+                    font.bold: true
+                }
+                Label {
+                    Layout.fillWidth: true
+                    visible: backend ? backend.youtubeDownloadQueue.length === 0 : true
+                    text: "Немає активних завантажень."
+                    color: Theme.textMuted
+                    font.pixelSize: Theme.fontMeta
+                }
+                Repeater {
+                    model: backend ? backend.youtubeDownloadQueue : []
+                    delegate: Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 86
+                        radius: Theme.radiusSm
+                        color: Theme.bgElevated
+                        border.width: 1
+                        border.color: modelData.status === "failed" ? Theme.accentError
+                                      : modelData.status === "done" ? Theme.statusSuccess
+                                      : modelData.status === "running" ? Theme.accent
+                                      : Theme.borderSubtle
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 5
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.mode + " | " + modelData.quality + " | " + modelData.statusText
+                                    color: Theme.textPrimary
+                                    font.pixelSize: Theme.fontSizeSm
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                }
+                                Label {
+                                    text: Math.round((modelData.progress || 0) * 100) + "%"
+                                    color: Theme.textSecondary
+                                    font.family: Theme.monoFont
+                                    font.pixelSize: Theme.fontMeta
+                                }
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: modelData.url
+                                color: Theme.textSecondary
+                                font.pixelSize: Theme.fontMeta
+                                elide: Text.ElideMiddle
+                            }
+                            ProgressBar {
+                                Layout.fillWidth: true
+                                from: 0
+                                to: 1
+                                value: modelData.progress || 0
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Speed: " + modelData.speedText + " | ETA: " + modelData.etaText + " | " + modelData.message
+                                color: Theme.textMuted
+                                font.pixelSize: Theme.fontMeta
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1344,6 +2028,34 @@ ApplicationWindow {
             font.family: Theme.monoFont
             font.pixelSize: Theme.fontMeta
             horizontalAlignment: Text.AlignHCenter
+        }
+    }
+
+    component TopModeButton: Button {
+        id: modeButton
+        property string mode: ""
+        Layout.fillWidth: false
+        Layout.preferredWidth: Math.max(96, modeLabel.implicitWidth + 22)
+        Layout.preferredHeight: 36
+        hoverEnabled: true
+        onClicked: root.openTopMode(mode)
+
+        background: Rectangle {
+            radius: Theme.radiusButton
+            color: root.topModeActive(modeButton.mode) ? Theme.accentSoft : (modeButton.hovered ? Theme.overlayHover : Theme.bgElevated)
+            border.width: 1
+            border.color: root.topModeActive(modeButton.mode) ? Theme.accent : Theme.borderSubtle
+        }
+
+        contentItem: Label {
+            id: modeLabel
+            text: modeButton.text
+            color: root.topModeActive(modeButton.mode) ? Theme.textPrimary : Theme.textSecondary
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font.pixelSize: Theme.fontSizeSm
+            font.bold: root.topModeActive(modeButton.mode)
+            elide: Text.ElideRight
         }
     }
 

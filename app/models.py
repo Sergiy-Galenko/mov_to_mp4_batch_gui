@@ -85,6 +85,9 @@ class TaskItem:
     probe_data: Optional[MediaInfo] = None
     overrides: Dict[str, Any] = field(default_factory=dict)
     resolved_settings: Optional["ConversionSettings"] = None
+    smart_recommendation: str = ""
+    pinned: bool = False
+    priority: int = 0
 
 
 @dataclass

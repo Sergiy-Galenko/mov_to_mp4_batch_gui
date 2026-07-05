@@ -31,6 +31,9 @@ class QueueManager:
             "predicted_output_bytes": item.predicted_output_bytes,
             "compression_ratio": item.compression_ratio,
             "overrides": dict(item.overrides),
+            "smart_recommendation": item.smart_recommendation,
+            "pinned": item.pinned,
+            "priority": item.priority,
         }
 
     def deserialize_tasks(self, payload: Any, *, pending_recovery: bool = False) -> List[TaskItem]:
@@ -72,6 +75,9 @@ class QueueManager:
                     predicted_output_bytes=int(raw.get("predicted_output_bytes") or 0),
                     compression_ratio=float(raw.get("compression_ratio") or 0.0),
                     overrides=dict(raw.get("overrides") or {}),
+                    smart_recommendation=str(raw.get("smart_recommendation") or ""),
+                    pinned=bool(raw.get("pinned")),
+                    priority=int(raw.get("priority") or 0),
                 )
             )
         return items

@@ -136,6 +136,48 @@ class YouTubeDownloadService:
             raise YouTubeDownloadError("Download finished, but output file was not found.")
         return output_paths
 
+    def preview(
+        self,
+        url: str,
+        *,
+        playlist: bool = False,
+        cookies_file: str = "",
+    ) -> Dict[str, Any]:
+        clean_url = str(url or "").strip()
+        if not clean_url:
+            raise YouTubeDownloadError("YouTube URL is empty.")
+
+        YoutubeDL = self._youtube_dl_class()
+        opts: Dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": True,
+            "noplaylist": not playlist,
+        }
+        clean_cookies_file = str(cookies_file or "").strip()
+        if clean_cookies_file:
+            opts["cookiefile"] = clean_cookies_file
+        try:
+            with YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(clean_url, download=False)
+        except Exception as exc:
+            raise YouTubeDownloadError(str(exc) or exc.__class__.__name__) from exc
+
+        entries = info.get("entries") if isinstance(info, dict) else None
+        if isinstance(entries, list):
+            count = len([entry for entry in entries if entry])
+        elif isinstance(info, dict):
+            count = int(info.get("playlist_count") or info.get("n_entries") or 1)
+        else:
+            count = 1
+        title = str(info.get("title") or info.get("playlist_title") or "") if isinstance(info, dict) else ""
+        return {
+            "url": clean_url,
+            "title": title,
+            "count": max(0, count),
+            "is_playlist": bool(isinstance(entries, list) or count > 1),
+        }
+
     def _youtube_dl_class(self) -> Any:
         try:
             from yt_dlp import YoutubeDL

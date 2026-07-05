@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-from ui.backend_components.impl import Backend
+from .impl import Backend
 
 __all__ = ["Backend"]

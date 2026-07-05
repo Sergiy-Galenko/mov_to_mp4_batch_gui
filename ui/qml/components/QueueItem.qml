@@ -19,6 +19,9 @@ Rectangle {
     property string speedText: ""
     property string predictedSizeText: ""
     property string compressionText: ""
+    property string smartRecommendation: ""
+    property bool pinned: false
+    property int priority: 0
     property int exitCode: -1
     property bool hasOverride: false
     property bool selected: false
@@ -26,6 +29,11 @@ Rectangle {
     property bool showThumbnail: true
     property bool showMetrics: true
     property bool showActions: true
+    property bool showSize: true
+    property bool showDuration: true
+    property bool showCodec: true
+    property bool showOutput: true
+    property bool showProgress: true
     property real shimmerPhase: 0
     property int itemIndex: -1
 
@@ -36,6 +44,8 @@ Rectangle {
     signal removeRequested(string path)
     signal overrideRequested(string path)
     signal quickConvertRequested(string path, string name, string mediaType)
+    signal pinnedRequested(string path)
+    signal priorityRequested(string path, int priority)
 
     function canonicalStatus() {
         if (status === "success")
@@ -91,7 +101,7 @@ Rectangle {
     }
 
     width: ListView.view ? ListView.view.width : 720
-    implicitHeight: details.visible ? 174 : 126
+    implicitHeight: (details.visible ? 204 : (showOutput && outputPath.length > 0 ? 164 : 140)) + (smartRecommendation.length > 0 ? 24 : 0)
     radius: Theme.radiusMd
     color: selected ? Theme.selection : (mouse.containsMouse ? Theme.bgElevated : Theme.bgSecondary)
     border.width: 1
@@ -209,6 +219,13 @@ Rectangle {
                     spacing: 8
 
                     Label {
+                        visible: root.pinned
+                        text: "📌"
+                        color: Theme.accentPrimary
+                        font.pixelSize: Theme.fontMeta
+                    }
+
+                    Label {
                         Layout.fillWidth: true
                         text: root.fileName
                         color: canonicalStatus() === "skipped" ? Theme.textMuted : Theme.textPrimary
@@ -219,7 +236,7 @@ Rectangle {
                     }
 
                     Label {
-                        visible: root.showMetrics
+                        visible: root.showCodec
                         text: (root.mediaType || "media").toUpperCase() + " -> " + root.outputExtension()
                         color: Theme.textSecondary
                         font.family: Theme.monoFont
@@ -227,8 +244,8 @@ Rectangle {
                     }
 
                     Label {
-                        visible: root.showMetrics
-                        text: root.sizeText + (root.durationText ? " / " + root.durationText : "")
+                        visible: root.showSize || root.showDuration
+                        text: (root.showSize ? root.sizeText : "") + (root.showSize && root.showDuration && root.durationText ? " / " : "") + (root.showDuration ? root.durationText : "")
                         color: Theme.textDisabled
                         font.family: Theme.monoFont
                         font.pixelSize: Theme.fontMeta
@@ -239,6 +256,25 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 1
                     color: Theme.borderSubtle
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    visible: root.showOutput && root.outputPath.length > 0
+                    text: "Output: " + root.outputPath
+                    color: Theme.textSecondary
+                    font.family: Theme.monoFont
+                    font.pixelSize: Theme.fontMeta
+                    elide: Text.ElideMiddle
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    visible: root.smartRecommendation.length > 0
+                    text: "🧠 " + root.smartRecommendation
+                    color: Theme.accentPrimary
+                    font.pixelSize: Theme.fontMeta
+                    elide: Text.ElideRight
                 }
             }
 
@@ -251,7 +287,7 @@ Rectangle {
 
         ProgressRow {
             Layout.fillWidth: true
-            visible: canonicalStatus() !== "pending"
+            visible: root.showProgress && canonicalStatus() !== "pending"
             value: canonicalStatus() === "done" ? 1 : root.progress
             active: canonicalStatus() === "processing"
             highLoadMode: root.highLoadMode
@@ -310,6 +346,20 @@ Rectangle {
 
             Item { Layout.fillWidth: true }
 
+            GhostButton {
+                text: root.pinned ? "📌" : "Pin"
+                visible: root.showActions
+                Layout.fillWidth: false
+                flat: true
+                onClicked: root.pinnedRequested(root.filePath)
+            }
+            GhostButton {
+                text: root.priority > 0 ? "⚑ " + root.priority : "⚑"
+                visible: root.showActions
+                Layout.fillWidth: false
+                flat: true
+                onClicked: root.priorityRequested(root.filePath, (root.priority + 1) % 4)
+            }
             GhostButton {
                 text: root.hasOverride ? I18n.t("override") + " *" : I18n.t("override")
                 visible: root.showActions

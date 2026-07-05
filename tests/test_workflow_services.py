@@ -6,6 +6,7 @@ from pathlib import Path
 from app.models import TaskItem
 from services.ffmpeg_service import FfmpegService
 from services.preview_builder import PreviewBuilder
+from services.queue_manager import QueueManager
 from services.validation_service import ValidationService
 
 
@@ -36,6 +37,19 @@ class WorkflowServicesTest(unittest.TestCase):
             )
         self.assertFalse(result["ok"])
         self.assertIn("trim_end", result["errors"])
+
+    def test_draft_validation_ignores_runtime_preflight_requirements(self) -> None:
+        service = ValidationService(FfmpegService(None, None))
+        result = service.validate(
+            {"operation": "Конвертація"},
+            tasks=[],
+            output_dir="",
+            ffmpeg_path="",
+            include_queue=False,
+            require_output_dir=False,
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["errors"], {})
 
     def test_validation_rejects_operation_that_does_not_support_file_type(self) -> None:
         service = ValidationService(FfmpegService(sys.executable, None))
@@ -155,6 +169,26 @@ class WorkflowServicesTest(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         self.assertTrue(any("joined.mp4" in warning for warning in result["warnings"]))
+
+    def test_queue_serialization_preserves_smart_priority_fields(self) -> None:
+        manager = QueueManager()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "clip.mp4"
+            source.write_text("video", encoding="utf-8")
+            task = TaskItem(
+                path=source,
+                media_type="video",
+                smart_recommendation="краще remux",
+                pinned=True,
+                priority=3,
+            )
+
+            restored = manager.deserialize_tasks([manager.serialize_task(task)])
+
+        self.assertEqual(len(restored), 1)
+        self.assertEqual(restored[0].smart_recommendation, "краще remux")
+        self.assertTrue(restored[0].pinned)
+        self.assertEqual(restored[0].priority, 3)
 
 
 if __name__ == "__main__":

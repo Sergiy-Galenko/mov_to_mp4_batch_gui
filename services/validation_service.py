@@ -48,6 +48,7 @@ class ValidationService:
         output_dir: str,
         ffmpeg_path: str,
         include_queue: bool = True,
+        require_output_dir: bool = True,
         only_paths: Optional[set[Path]] = None,
     ) -> Dict[str, Any]:
         errors: Dict[str, str] = {}
@@ -62,15 +63,17 @@ class ValidationService:
 
         self._validate_fields(raw, add_error)
 
-        output_path = Path(str(output_dir or "").strip()).expanduser()
-        if not str(output_dir or "").strip():
-            add_error("output_dir", "Папку виводу не задано.")
-        elif output_path.exists() and not output_path.is_dir():
-            add_error("output_dir", "Шлях виводу має бути папкою.")
-        elif not output_path.exists():
-            parent = output_path.parent
-            if parent and not parent.exists():
-                add_error("output_dir", "Батьківська папка для виводу не існує.")
+        output_text = str(output_dir or "").strip()
+        output_path = Path(output_text).expanduser() if output_text else Path.cwd()
+        if require_output_dir:
+            if not output_text:
+                add_error("output_dir", "Папку виводу не задано.")
+            elif output_path.exists() and not output_path.is_dir():
+                add_error("output_dir", "Шлях виводу має бути папкою.")
+            elif not output_path.exists():
+                parent = output_path.parent
+                if parent and not parent.exists():
+                    add_error("output_dir", "Батьківська папка для виводу не існує.")
 
         queue_items = [item for item in tasks if only_paths is None or item.path in only_paths]
         settings = settings_map_to_model(raw, defaults=ConversionSettings())

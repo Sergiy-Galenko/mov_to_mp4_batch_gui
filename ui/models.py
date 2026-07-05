@@ -31,6 +31,9 @@ class QueueModel(QtCore.QAbstractListModel):
     ExitCodeRole = QtCore.Qt.UserRole + 19
     PredictedSizeRole = QtCore.Qt.UserRole + 20
     CompressionRole = QtCore.Qt.UserRole + 21
+    SmartRecommendationRole = QtCore.Qt.UserRole + 22
+    PinnedRole = QtCore.Qt.UserRole + 23
+    PriorityRole = QtCore.Qt.UserRole + 24
 
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
@@ -94,6 +97,12 @@ class QueueModel(QtCore.QAbstractListModel):
             return format_bytes(item.predicted_output_bytes) if item.predicted_output_bytes else ""
         if role == self.CompressionRole:
             return f"{item.compression_ratio:.2f}x" if item.compression_ratio > 0 else ""
+        if role == self.SmartRecommendationRole:
+            return item.smart_recommendation
+        if role == self.PinnedRole:
+            return bool(item.pinned)
+        if role == self.PriorityRole:
+            return int(item.priority)
         return None
 
     def roleNames(self) -> Dict[int, bytes]:
@@ -119,6 +128,9 @@ class QueueModel(QtCore.QAbstractListModel):
             self.ExitCodeRole: b"exitCode",
             self.PredictedSizeRole: b"predictedSizeText",
             self.CompressionRole: b"compressionText",
+            self.SmartRecommendationRole: b"smartRecommendation",
+            self.PinnedRole: b"pinned",
+            self.PriorityRole: b"priority",
         }
 
     def items(self) -> List[TaskItem]:
@@ -239,6 +251,39 @@ class QueueModel(QtCore.QAbstractListModel):
             if item.predicted_output_bytes == predicted:
                 return
             item.predicted_output_bytes = predicted
+            self.update_item(idx, item)
+            return
+
+    def set_smart_recommendation(self, task_path: Path, text: str) -> None:
+        for idx, item in enumerate(self._items):
+            if item.path != task_path:
+                continue
+            value = str(text or "")
+            if item.smart_recommendation == value:
+                return
+            item.smart_recommendation = value
+            self.update_item(idx, item)
+            return
+
+    def set_priority(self, task_path: Path, priority: int) -> None:
+        for idx, item in enumerate(self._items):
+            if item.path != task_path:
+                continue
+            value = max(0, min(5, int(priority or 0)))
+            if item.priority == value:
+                return
+            item.priority = value
+            self.update_item(idx, item)
+            return
+
+    def set_pinned(self, task_path: Path, pinned: bool) -> None:
+        for idx, item in enumerate(self._items):
+            if item.path != task_path:
+                continue
+            value = bool(pinned)
+            if item.pinned == value:
+                return
+            item.pinned = value
             self.update_item(idx, item)
             return
 
