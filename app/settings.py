@@ -7,6 +7,7 @@ from app.constants import (
     OUT_AUDIO_FORMATS,
     OUT_IMAGE_FORMATS,
     OUT_SUBTITLE_FORMATS,
+    OUT_TEXT_FORMATS,
     OUT_VIDEO_FORMATS,
     POSITION_OPTIONS,
     ROTATE_OPTIONS,
@@ -25,6 +26,7 @@ SETTINGS_SCHEMA = {
     "out_image_fmt": (str, "jpg"),
     "out_audio_fmt": (str, "mp3"),
     "out_subtitle_fmt": (str, "srt"),
+    "out_text_fmt": (str, "txt"),
     "audio_bitrate": (str, "192k"),
     "audio_codec": (str, "auto"),
     "audio_track_index": (int, 0),
@@ -170,6 +172,10 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     if out_subtitle_format in OUT_SUBTITLE_FORMATS:
         settings.out_subtitle_format = out_subtitle_format
         settings.subtitle_out_format = out_subtitle_format
+
+    out_text_format = str(settings_map.get("out_text_fmt") or settings.out_text_format).strip().lower()
+    if out_text_format in OUT_TEXT_FORMATS:
+        settings.out_text_format = out_text_format
 
     settings.audio_bitrate = str(settings_map.get("audio_bitrate") or settings.audio_bitrate).strip() or settings.audio_bitrate
     audio_codec = str(settings_map.get("audio_codec") or settings.audio_codec).strip().lower()

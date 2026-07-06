@@ -8,12 +8,18 @@ TextField {
     property bool invalid: false
     font.pixelSize: Theme.fontSizeSm
     color: Theme.text
-    padding: 13
     implicitHeight: Theme.inputHeight
+    leftPadding: 13
+    rightPadding: 13
+    topPadding: 0
+    bottomPadding: 0
     Layout.fillWidth: true
     placeholderTextColor: Theme.subtleText
     selectionColor: Theme.accent
     selectedTextColor: Theme.textOnAccent
+    verticalAlignment: TextInput.AlignVCenter
+    selectByMouse: true
+    clip: true
     hoverEnabled: true
 
     background: Rectangle {

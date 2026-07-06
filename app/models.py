@@ -117,6 +117,7 @@ class ConversionSettings:
     out_image_format: str = "jpg"
     out_audio_format: str = "mp3"
     out_subtitle_format: str = "srt"
+    out_text_format: str = "txt"
     audio_bitrate: str = "192k"
     audio_codec: str = "auto"
     audio_track_index: int = 0

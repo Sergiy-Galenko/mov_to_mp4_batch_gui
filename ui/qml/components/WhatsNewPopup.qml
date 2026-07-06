@@ -6,15 +6,19 @@ import App 1.0
 
 Popup {
     id: root
-    width: 600
-    height: 520
-    x: Math.round((parent.width - width) / 2)
-    y: Math.round((parent.height - height) / 2)
+    width: parent ? Math.max(360, Math.min(parent.width - 24, Math.round(parent.width * 0.82), 680)) : 640
+    height: parent ? Math.max(420, Math.min(parent.height - 24, Math.round(parent.height * 0.82), 600)) : 560
+    x: parent ? Math.round((parent.width - width) / 2) : 0
+    y: parent ? Math.round((parent.height - height) / 2) : 0
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-    property string currentVersion: "1.1.0" // Update this when releasing new features
+    property string currentVersion: (typeof backend !== "undefined" && backend) ? backend.appVersion : "1.2.1"
+    property url logoSource: Qt.resolvedUrl("../../../assets/app-logo.png")
+    property bool compact: width < 520
+    property int adaptiveMargin: compact ? Theme.space4 : Theme.space5
+    property int logoSize: compact ? 48 : 64
 
     Settings {
         id: settings
@@ -23,14 +27,11 @@ Popup {
     }
 
     Component.onCompleted: {
-        if (settings.lastSeenVersion !== currentVersion) {
+        if (settings.lastSeenVersion !== root.currentVersion)
             root.open()
-        }
     }
 
-    onClosed: {
-        settings.lastSeenVersion = currentVersion
-    }
+    onClosed: settings.lastSeenVersion = root.currentVersion
 
     background: Rectangle {
         color: Theme.bgElevated
@@ -41,86 +42,134 @@ Popup {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.space6
-        spacing: Theme.space4
+        anchors.margins: root.adaptiveMargin
+        spacing: root.compact ? Theme.space3 : Theme.space4
 
-        Label {
+        RowLayout {
             Layout.fillWidth: true
-            text: "🎉 Що нового у версії " + root.currentVersion
-            color: Theme.textPrimary
-            font.family: Theme.displayFont
-            font.pixelSize: Theme.fontSizeXl
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
+            spacing: Theme.space3
+
+            Image {
+                Layout.preferredWidth: root.logoSize
+                Layout.preferredHeight: root.logoSize
+                source: root.logoSource
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                asynchronous: true
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                Label {
+                    Layout.fillWidth: true
+                    text: I18n.t("app.title")
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: root.compact ? Theme.fontSizeLg : Theme.fontSizeXl
+                    font.bold: true
+                    elide: Text.ElideRight
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: "Версія " + root.currentVersion
+                    color: Theme.accentPrimary
+                    font.family: Theme.monoFont
+                    font.pixelSize: Theme.fontSizeMd
+                    elide: Text.ElideRight
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: Theme.borderSubtle
         }
 
         ScrollView {
+            id: releaseScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            contentWidth: availableWidth
+            contentHeight: releaseColumn.implicitHeight
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
             ColumnLayout {
-                width: parent.width - 20
-                spacing: Theme.space4
+                id: releaseColumn
+                width: releaseScroll.availableWidth
+                spacing: root.compact ? Theme.space3 : Theme.space4
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.space2
-
-                    Label {
-                        text: "✨ Нові фічі та UI/UX Редизайн"
-                        color: Theme.accentPrimary
-                        font.pixelSize: Theme.fontSizeLg
-                        font.bold: true
-                    }
-                    
-                    Label {
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: "• <b>Дизайн Arc/Linear</b>: Повністю оновлено вигляд програми. Глибокі темні кольори, скляні ефекти та м'які тіні.\n" +
-                              "• <b>Прогресивне розкриття</b>: Інтерфейс став набагато простішим. Розширені налаштування (Sidebar) тепер з'являються лише коли вони дійсно потрібні.\n" +
-                              "• <b>Емодзі замість тексту</b>: Легка навігація по статусах (✅ готово, ⏳ обробка) та типах файлів (🎬 відео, 🎵 аудіо).\n" +
-                              "• <b>Нова Drop Zone</b>: Зручна та приваблива зона для перетягування файлів (Drag & Drop) прямо на головному екрані."
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontSizeMd
-                        lineHeight: 1.4
-                    }
+                ReleaseSection {
+                    title: "Новий робочий екран"
+                    accent: Theme.accentPrimary
+                    body: "<b>Фото, Відео, Текст</b> тепер винесені у верхній перемикач. Режим фільтрує чергу, відкриття файлів, імпорт папки і показує потрібні налаштування без зайвого шуму."
                 }
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.space2
+                ReleaseSection {
+                    title: "Великий preview по центру"
+                    accent: Theme.statusSuccess
+                    body: "Коли вибрано фото, відео або текст, файл відкривається більшим у центральній зоні. Звідти можна швидко зберегти формат, конвертувати один файл або перейти до редагування."
+                }
 
-                    Label {
-                        text: "🐛 Виправлення багів (Bug Fixes)"
-                        color: Theme.statusWarning
-                        font.pixelSize: Theme.fontSizeLg
-                        font.bold: true
-                    }
-                    
-                    Label {
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: "• <b>Оптимізовано Header та Footer</b>: Виправлено відображення компонентів на різних роздільних здатностях.\n" +
-                              "• <b>Синтаксис QML</b>: Виправлено помилки парсингу та відсутні властивості (напр. radius у ShimmerBar).\n" +
-                              "• <b>Продуктивність</b>: Покращено швидкість анімацій та рендерингу списку файлів (QueueItem) за рахунок відмови від важких тіней."
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontSizeMd
-                        lineHeight: 1.4
-                    }
+                ReleaseSection {
+                    title: "Конвертація текстових файлів"
+                    accent: Theme.statusWarning
+                    body: "Додано підтримку <b>txt, md, html, json, csv, tsv, rtf, pdf, docx, doc, odt, xlsx, xls, ods, pptx, ppt, odp</b>. Текстові задачі можуть працювати навіть без FFmpeg, якщо в черзі немає медіафайлів."
+                }
+
+                ReleaseSection {
+                    title: "Логотип і поля вводу"
+                    accent: Theme.statusRunning
+                    body: "Оновлено логотип застосунку, іконку вікна та верхню шапку. Поля вводу, списки вибору, числові поля і мовний перемикач тепер краще вирівняні та коректно обрізають довгі значення."
                 }
             }
         }
 
         PrimaryButton {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: 200
+            Layout.preferredWidth: Math.min(220, parent.width)
             Layout.preferredHeight: 44
-            text: "Чудово! Почати роботу"
+            text: "Почати роботу"
             font.pixelSize: Theme.fontSizeMd
             font.bold: true
             onClicked: root.close()
+        }
+    }
+
+    component ReleaseSection: ColumnLayout {
+        property string title: ""
+        property string body: ""
+        property color accent: Theme.accentPrimary
+
+        Layout.fillWidth: true
+        Layout.preferredWidth: releaseScroll.availableWidth
+        spacing: Theme.space2
+
+        Label {
+            Layout.fillWidth: true
+            text: title
+            color: accent
+            font.pixelSize: root.compact ? Theme.fontSizeMd : Theme.fontSizeLg
+            font.bold: true
+            wrapMode: Text.WordWrap
+        }
+
+        Text {
+            width: parent.width
+            Layout.fillWidth: true
+            Layout.preferredWidth: parent.width
+            text: body
+            textFormat: Text.RichText
+            wrapMode: Text.WordWrap
+            color: Theme.textSecondary
+            font.family: Theme.bodyFont
+            font.pixelSize: root.compact ? Theme.fontSizeSm : Theme.fontSizeMd
+            lineHeight: 1.35
         }
     }
 }

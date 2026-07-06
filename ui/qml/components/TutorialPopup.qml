@@ -5,13 +5,16 @@ import App 1.0
 
 Popup {
     id: root
-    width: 600
-    height: 520
-    x: Math.round((parent.width - width) / 2)
-    y: Math.round((parent.height - height) / 2)
+    width: parent ? Math.max(360, Math.min(parent.width - 24, Math.round(parent.width * 0.82), 680)) : 640
+    height: parent ? Math.max(420, Math.min(parent.height - 24, Math.round(parent.height * 0.82), 600)) : 560
+    x: parent ? Math.round((parent.width - width) / 2) : 0
+    y: parent ? Math.round((parent.height - height) / 2) : 0
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+    property bool compact: width < 520
+    property int adaptiveMargin: compact ? Theme.space4 : Theme.space6
 
     background: Rectangle {
         color: Theme.bgElevated
@@ -22,38 +25,47 @@ Popup {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.space6
-        spacing: Theme.space4
+        anchors.margins: root.adaptiveMargin
+        spacing: root.compact ? Theme.space3 : Theme.space4
 
         Label {
             Layout.fillWidth: true
             text: "📖 Як почати користуватися"
             color: Theme.textPrimary
             font.family: Theme.displayFont
-            font.pixelSize: Theme.fontSizeXl
+            font.pixelSize: root.compact ? Theme.fontSizeLg : Theme.fontSizeXl
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
         }
 
         ScrollView {
+            id: tutorialScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            contentWidth: availableWidth
+            contentHeight: tutorialColumn.implicitHeight
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
             ColumnLayout {
-                width: parent.width - 20
-                spacing: Theme.space4
+                id: tutorialColumn
+                width: tutorialScroll.availableWidth
+                spacing: root.compact ? Theme.space3 : Theme.space4
 
                 ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: tutorialScroll.availableWidth
                     spacing: Theme.space2
 
                     Label {
+                        Layout.fillWidth: true
                         text: "1️⃣ Додайте файли"
                         color: Theme.accentPrimary
-                        font.pixelSize: Theme.fontSizeLg
+                        font.pixelSize: root.compact ? Theme.fontSizeMd : Theme.fontSizeLg
                         font.bold: true
+                        wrapMode: Text.WordWrap
                     }
                     
                     Label {
@@ -68,13 +80,16 @@ Popup {
 
                 ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: tutorialScroll.availableWidth
                     spacing: Theme.space2
 
                     Label {
+                        Layout.fillWidth: true
                         text: "2️⃣ Оберіть папку збереження"
                         color: Theme.statusWarning
-                        font.pixelSize: Theme.fontSizeLg
+                        font.pixelSize: root.compact ? Theme.fontSizeMd : Theme.fontSizeLg
                         font.bold: true
+                        wrapMode: Text.WordWrap
                     }
                     
                     Label {
@@ -89,13 +104,16 @@ Popup {
 
                 ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: tutorialScroll.availableWidth
                     spacing: Theme.space2
 
                     Label {
+                        Layout.fillWidth: true
                         text: "3️⃣ Налаштуйте формат (Опціонально)"
                         color: Theme.accent
-                        font.pixelSize: Theme.fontSizeLg
+                        font.pixelSize: root.compact ? Theme.fontSizeMd : Theme.fontSizeLg
                         font.bold: true
+                        wrapMode: Text.WordWrap
                     }
                     
                     Label {
@@ -110,13 +128,16 @@ Popup {
 
                 ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: tutorialScroll.availableWidth
                     spacing: Theme.space2
 
                     Label {
+                        Layout.fillWidth: true
                         text: "4️⃣ Запустіть конвертацію"
                         color: Theme.statusSuccess
-                        font.pixelSize: Theme.fontSizeLg
+                        font.pixelSize: root.compact ? Theme.fontSizeMd : Theme.fontSizeLg
                         font.bold: true
+                        wrapMode: Text.WordWrap
                     }
                     
                     Label {
@@ -133,7 +154,7 @@ Popup {
 
         PrimaryButton {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: 200
+            Layout.preferredWidth: Math.min(200, parent.width)
             Layout.preferredHeight: 44
             text: "Зрозуміло!"
             font.pixelSize: Theme.fontSizeMd

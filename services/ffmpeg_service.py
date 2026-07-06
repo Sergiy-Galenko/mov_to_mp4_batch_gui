@@ -339,6 +339,8 @@ class FfmpegService:
 
     def output_extension_for(self, media_type_name: str, settings: ConversionSettings) -> str:
         operation = settings.operation
+        if media_type_name == "text":
+            return settings.out_text_format
         if operation == "audio_only" or media_type_name == "audio":
             return settings.out_audio_format
         if operation in {"subtitle_extract", "auto_subtitle"} or media_type_name == "subtitle":

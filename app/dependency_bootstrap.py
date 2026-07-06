@@ -11,6 +11,8 @@ from typing import List, Sequence
 REQUIREMENT_IMPORTS = {
     "PySide6": "PySide6",
     "psutil": "psutil",
+    "pypdf": "pypdf",
+    "reportlab": "reportlab",
     "yt-dlp": "yt_dlp",
 }
 

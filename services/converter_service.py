@@ -15,6 +15,7 @@ from services.ffmpeg_service import FfmpegService, parse_progress_line
 from services.cloud_upload_service import CloudUploadError, CloudUploadService
 from services.security_service import secure_delete, write_checksum_sidecar
 from services.smart_convert_service import apply_smart_settings, parse_ab_crfs, recommend_settings
+from services.text_conversion_service import convert_text_file
 from services.transcription_service import TranscriptionService
 from services.validation_service import operation_supports_media
 from utils.files import build_merge_output_path, build_output_path, sanitize_file_stem
@@ -78,11 +79,14 @@ class ConverterService:
                 except CloudUploadError as exc:
                     self._log("WARN", f"Cloud upload помилка для {output_path.name}: {exc}")
             if settings.smart_integrity_check:
-                ok, details = self.ffmpeg.check_media_integrity(output_path)
-                if ok:
-                    self._log("OK", f"Integrity check OK: {output_path.name}")
+                if task.media_type == "text":
+                    self._log("WARN", f"Integrity check пропущено для текстового файлу: {output_path.name}")
                 else:
-                    self._log("WARN", f"Integrity check failed for {output_path.name}: {details or 'decode error'}")
+                    ok, details = self.ffmpeg.check_media_integrity(output_path)
+                    if ok:
+                        self._log("OK", f"Integrity check OK: {output_path.name}")
+                    else:
+                        self._log("WARN", f"Integrity check failed for {output_path.name}: {details or 'decode error'}")
             if task.media_type == "video" and settings.smart_quality_metric in {"ssim", "vmaf"}:
                 ok, score, details = self.ffmpeg.measure_quality(task.path, output_path, settings.smart_quality_metric)
                 label = settings.smart_quality_metric.upper()
@@ -408,6 +412,7 @@ class ConverterService:
                 "out_video_fmt": settings.out_video_format,
                 "out_audio_fmt": settings.out_audio_format,
                 "out_subtitle_fmt": settings.out_subtitle_format,
+                "out_text_fmt": settings.out_text_format,
                 "normalize_audio": settings.normalize_audio,
                 "audio_track_index": settings.audio_track_index,
                 "replace_audio_path": settings.replace_audio_path,
@@ -625,13 +630,17 @@ class ConverterService:
         return True, "; ".join(chapter_outputs)
 
     def _run(self, tasks: List[TaskItem], settings: ConversionSettings, out_dir: Path, *, start_index: int = 1) -> None:
-        if not self.ffmpeg.ffmpeg_path:
-            self._log("ERROR", "FFmpeg не знайдено. Вкажи шлях до ffmpeg.")
+        if not tasks:
+            self._log("WARN", "Черга порожня.")
             self._emit("done", True)
             return
 
-        if not tasks:
-            self._log("WARN", "Черга порожня.")
+        needs_ffmpeg = any(
+            task.media_type != "text" or self._effective_settings(task, settings).operation != "convert"
+            for task in tasks
+        )
+        if needs_ffmpeg and not self.ffmpeg.ffmpeg_path:
+            self._log("ERROR", "FFmpeg не знайдено. Вкажи шлях до ffmpeg.")
             self._emit("done", True)
             return
 
@@ -647,6 +656,9 @@ class ConverterService:
             missing_probe: List[Path] = []
             for task in tasks:
                 self._task_state(task.path, TaskStatus.ANALYZING)
+                if task.media_type == "text":
+                    self._task_state(task.path, TaskStatus.READY)
+                    continue
                 info = self.media_info.get(task.path)
                 if info is None:
                     missing_probe.append(task.path)
@@ -690,7 +702,8 @@ class ConverterService:
                         self._log_media_info(task, info)
                     self._task_state(task.path, TaskStatus.READY)
         else:
-            self._log("WARN", "FFprobe не знайдено. Прогрес/ETA можуть бути неточні.")
+            if needs_ffmpeg:
+                self._log("WARN", "FFprobe не знайдено. Прогрес/ETA можуть бути неточні.")
             for task in tasks:
                 self._task_state(task.path, TaskStatus.READY)
 
@@ -935,9 +948,23 @@ class ConverterService:
                             cmd = self.ffmpeg.build_audio_command(task.path, outp, settings_for_task, duration=duration, log_cb=self._log)
                         elif task.media_type == "subtitle":
                             cmd = self.ffmpeg.build_subtitle_file_command(task.path, outp, settings_for_task)
+                        elif task.media_type == "text":
+                            convert_text_file(task.path, outp, settings_for_task.out_text_format)
+                            cmd = []
                         else:
                             raise ValueError(f"Невідомий тип файлу: {task.media_type}")
-                        if task.media_type == "video" and op in {"convert", "subtitle_burn"}:
+                        if task.media_type == "text":
+                            rc = 0
+                            self._emit(
+                                "progress",
+                                1.0,
+                                None,
+                                None,
+                                None,
+                                (done_files + 1) / max(total_files, 1),
+                                None,
+                            )
+                        elif task.media_type == "video" and op in {"convert", "subtitle_burn"}:
                             rc = self._run_video_command(
                                 cmd,
                                 outp,

@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from app.constants import OUT_AUDIO_FORMATS, OUT_IMAGE_FORMATS, OUT_SUBTITLE_FORMATS, OUT_VIDEO_FORMATS
+from app.constants import OUT_AUDIO_FORMATS, OUT_IMAGE_FORMATS, OUT_SUBTITLE_FORMATS, OUT_TEXT_FORMATS, OUT_VIDEO_FORMATS
 from app.paths import find_ffprobe
 from app.models import ConversionSettings, TaskItem
 from app.settings import merge_settings_maps, settings_map_to_model
@@ -26,7 +26,7 @@ OPERATION_LABELS = {
 
 def operation_supports_media(operation: str, media_type_name: str) -> bool:
     if operation == "convert":
-        return media_type_name in {"video", "image", "audio", "subtitle"}
+        return media_type_name in {"video", "image", "audio", "subtitle", "text"}
     if operation == "audio_only":
         return media_type_name in {"video", "audio"}
     if operation == "auto_subtitle":
@@ -88,9 +88,14 @@ class ValidationService:
             add_warning("A/B тест увімкнено, але список CRF порожній.")
 
         if include_queue:
-            self._validate_ffmpeg(ffmpeg_path, add_error, add_warning)
             if not queue_items:
                 add_error("queue", "Черга порожня.")
+            needs_ffmpeg = not queue_items or any(
+                item.media_type != "text" or settings_map_to_model(merge_settings_maps(raw, item.overrides), defaults=ConversionSettings()).operation != "convert"
+                for item in queue_items
+            )
+            if needs_ffmpeg:
+                self._validate_ffmpeg(ffmpeg_path, add_error, add_warning)
             self._validate_queue(queue_items, raw, settings, output_path, add_error, add_warning)
 
         self._validate_format_compat(raw, add_warning)
@@ -270,6 +275,7 @@ class ValidationService:
         out_image = str(raw.get("out_image_fmt", "")).strip().lower()
         out_audio = str(raw.get("out_audio_fmt", "")).strip().lower()
         out_subtitle = str(raw.get("out_subtitle_fmt", raw.get("subtitle_out_fmt", ""))).strip().lower()
+        out_text = str(raw.get("out_text_fmt", "")).strip().lower()
         codec = str(raw.get("codec", "")).strip()
 
         if out_video and out_video not in OUT_VIDEO_FORMATS:
@@ -280,6 +286,8 @@ class ValidationService:
             add_warning(f"Аудіоформат '{out_audio}' не входить до стандартного списку.")
         if out_subtitle and out_subtitle not in OUT_SUBTITLE_FORMATS:
             add_warning(f"Формат субтитрів '{out_subtitle}' не входить до стандартного списку.")
+        if out_text and out_text not in OUT_TEXT_FORMATS:
+            add_warning(f"Текстовий формат '{out_text}' не входить до стандартного списку.")
         if out_video == "webm" and codec in {"H.264 (AVC)", "H.265 (HEVC)"}:
             add_warning("WebM не сумісний з H.264/H.265; буде використано VP9 або AV1.")
         if out_video in {"mp4", "mov", "avi"} and codec == "VP9 (WebM)":

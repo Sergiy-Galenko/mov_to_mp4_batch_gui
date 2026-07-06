@@ -23,7 +23,7 @@ def main() -> None:
 
         sys.exit(cli_main(sys.argv[1:]))
 
-    from PySide6 import QtCore, QtQml, QtWidgets
+    from PySide6 import QtCore, QtGui, QtQml, QtWidgets
     from PySide6.QtQuickControls2 import QQuickStyle
 
     from ui.backend import Backend
@@ -32,6 +32,10 @@ def main() -> None:
     app = QtWidgets.QApplication(sys.argv)
 
     base_dir = Path(__file__).resolve().parent
+    logo_path = base_dir / "assets" / "app-logo.png"
+    if logo_path.exists():
+        app.setWindowIcon(QtGui.QIcon(str(logo_path)))
+
     qml_dir = base_dir / "ui" / "qml"
     main_qml = qml_dir / "Main.qml"
 

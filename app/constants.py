@@ -1,6 +1,7 @@
 ﻿from app.paths import DEFAULT_OUTPUT_DIR, HISTORY_PATH, PRESET_PATH, STATE_PATH, THEME_PATH
 
-APP_TITLE = "Media Converter - Photo + Video (FFmpeg)"
+APP_TITLE = "Media Converter - Photo + Video + Text"
+APP_VERSION = "1.2.1"
 
 # Timing constants used across services
 PROGRESS_THROTTLE_SEC = 0.25
@@ -14,11 +15,65 @@ VIDEO_EXTS = {".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv", ".wmv", "
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"}
 AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".opus", ".ogg", ".wma", ".aiff", ".aif", ".mka"}
 SUBTITLE_EXTS = {".srt", ".ass", ".ssa", ".vtt", ".webvtt"}
+TEXT_EXTS = {
+    ".txt",
+    ".md",
+    ".markdown",
+    ".html",
+    ".htm",
+    ".json",
+    ".csv",
+    ".tsv",
+    ".xml",
+    ".yaml",
+    ".yml",
+    ".log",
+    ".rtf",
+    ".pdf",
+    ".docx",
+    ".docm",
+    ".dotx",
+    ".doc",
+    ".odt",
+    ".ott",
+    ".xlsx",
+    ".xlsm",
+    ".xltx",
+    ".xls",
+    ".ods",
+    ".ots",
+    ".pptx",
+    ".pptm",
+    ".ppsx",
+    ".potx",
+    ".ppt",
+    ".odp",
+    ".otp",
+}
 
 OUT_VIDEO_FORMATS = ["mp4", "mkv", "webm", "mov", "avi", "gif", "mpg", "m2ts"]
 OUT_IMAGE_FORMATS = ["jpg", "png", "webp", "bmp", "tiff"]
 OUT_AUDIO_FORMATS = ["mp3", "m4a", "aac", "wav", "flac", "opus"]
 OUT_SUBTITLE_FORMATS = ["srt", "ass", "vtt"]
+OUT_TEXT_FORMATS = [
+    "txt",
+    "md",
+    "html",
+    "json",
+    "csv",
+    "tsv",
+    "rtf",
+    "pdf",
+    "docx",
+    "doc",
+    "odt",
+    "xlsx",
+    "xls",
+    "ods",
+    "pptx",
+    "ppt",
+    "odp",
+]
 
 OPERATION_OPTIONS = [
     "Конвертація",

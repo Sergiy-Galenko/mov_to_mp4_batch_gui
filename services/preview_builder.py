@@ -157,6 +157,8 @@ class PreviewBuilder:
     ) -> str:
         if not operation_supports_media(settings.operation, task.media_type):
             return "Операція не підтримує тип цього файлу"
+        if settings.operation == "convert" and task.media_type == "text":
+            return f"text-convert {task.path} -> {output_path}"
         if settings.operation == "auto_subtitle":
             return f"whisper {self._format_command([task.path])} -> {output_path}"
         if not self.ffmpeg.ffmpeg_path:
@@ -316,6 +318,8 @@ class PreviewBuilder:
                 params.append(settings.audio_bitrate)
             elif media_type_name == "subtitle":
                 params.append(settings.out_subtitle_format)
+            elif media_type_name == "text":
+                params.append(settings.out_text_format)
         elif settings.operation == "audio_only":
             params.append(settings.out_audio_format)
             params.append(settings.audio_bitrate)

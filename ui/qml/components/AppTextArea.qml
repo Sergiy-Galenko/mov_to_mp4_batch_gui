@@ -7,10 +7,16 @@ TextArea {
     id: control
     font.pixelSize: Theme.fontSizeSm
     color: Theme.text
-    padding: 13
+    leftPadding: 13
+    rightPadding: 13
+    topPadding: 10
+    bottomPadding: 10
     Layout.fillWidth: true
+    placeholderTextColor: Theme.subtleText
     selectionColor: Theme.accent
     selectedTextColor: Theme.textOnAccent
+    selectByMouse: true
+    wrapMode: TextArea.Wrap
     hoverEnabled: true
 
     background: Rectangle {

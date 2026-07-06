@@ -41,7 +41,7 @@ class FolderScanner:
     ) -> None:
         """
         Args:
-            type_filter: Limit to 'video', 'audio', 'image', 'subtitle', or None for all.
+            type_filter: Limit to 'video', 'audio', 'image', 'subtitle', 'text', or None for all.
             exclude_patterns: Glob patterns for filenames to skip (e.g. '*.tmp').
             min_size_bytes: Skip files smaller than this (0 = no limit).
             max_size_bytes: Skip files larger than this (0 = no limit).

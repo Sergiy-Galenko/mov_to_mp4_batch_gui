@@ -1,6 +1,6 @@
 # Media Converter
 
-Desktop batch media converter for video, audio, images, and subtitles. The app is built with Python, PySide6, QML, and FFmpeg.
+Desktop batch converter for video, photos, audio, subtitles, and text files. The app is built with Python, PySide6, QML, FFmpeg, and a lightweight built-in text converter.
 
 ## Features
 
@@ -8,12 +8,15 @@ Desktop batch media converter for video, audio, images, and subtitles. The app i
 - **Progressive Disclosure**: Advanced settings and sidebar are hidden by default to keep the main conversion screen incredibly simple and focused.
 - **Emoji-Driven Navigation**: Uses clear emoji indicators (🎬, 🎵, ✅, ⏳, 📥) instead of text for instant visual recognition of media types and status.
 - **Modern Drag & Drop Zone**: A large, interactive glassmorphism drop zone for importing files directly from the desktop.
-- Batch conversion for video, image, audio, and subtitle files with automatic media-type aware output formats.
+- Top workspace switcher for `Photo`, `Video`, and `Text` modes. Each mode filters the queue, file picker, folder import, preview, and relevant edit controls.
+- Large centered selected-file preview: photos display as a larger image, videos display their generated frame thumbnail, and text files show a readable text preview.
+- Batch conversion for video, image, audio, subtitle, and text files with automatic media-type aware output formats.
 - Right-click quick conversion: choose only the output format for one queued file and convert it immediately.
 - Queue controls for retry, skip, remove, reorder, multi-select, batch remove, and per-file overrides.
 - Explicit output-folder selection before any conversion or YouTube download starts.
 - Presets for common formats and platform targets (iPhone, PlayStation 5, etc).
 - FFmpeg/FFprobe integration for metadata, thumbnails, progress, ETA, and previews.
+- Built-in document conversion between plain text, PDF, Word, Excel, PowerPoint, and OpenDocument-style formats; text/document-only conversion does not require FFmpeg.
 - Automatic FFmpeg & Python dependency bootstrap on Windows x64.
 - YouTube download support through `yt-dlp`: download a video or extract audio into the queue.
 - Smart Convert mode for per-file codec/CRF/preset recommendations, remux detection, two-pass target-size encoding, quality checks, and A/B samples.
@@ -29,7 +32,7 @@ Desktop batch media converter for video, audio, images, and subtitles. The app i
 ## Requirements
 
 - Python `3.13+`
-- FFmpeg
+- FFmpeg, required for video, photo, audio, subtitle, YouTube audio extraction, and media merge workflows
 - FFprobe, recommended for metadata, ETA, thumbnails, and analytics
 - PySide6
 - yt-dlp, used for YouTube and other supported video-site downloads
@@ -62,6 +65,8 @@ On Windows x64 the GUI can install FFmpeg automatically into the app data folder
 
 The app does not modify the system `PATH`. If you manually choose an external FFmpeg binary, that path is respected and the app does not overwrite it.
 
+Text-only conversion does not require FFmpeg or FFprobe.
+
 ## Run The GUI
 
 ```bash
@@ -71,11 +76,23 @@ python main.py
 Basic workflow:
 
 1. Choose the output folder where all converted files and downloads will be saved.
-2. Drag files or a folder into the queue.
-3. Choose a preset or configure the output settings.
-4. Use `Convert all` on the Queue screen to start the whole queue.
-5. Right-click a queued file to open Quick convert for that one file.
-6. Watch progress, session stats, logs, and analytics.
+2. Choose the top workspace mode: `Conversion` for everything, or `Photo`, `Video`, or `Text` for focused work.
+3. Drag files or a folder into the queue, or use the mode-aware add buttons.
+4. Select a photo, video, or text file to see it larger in the center preview and adjust the matching output/edit settings.
+5. Choose a preset or configure the output settings.
+6. Use `Convert all` on the Queue screen to start the whole queue.
+7. Right-click a queued file to open Quick convert for that one file.
+8. Watch progress, session stats, logs, and analytics.
+
+## Photo, Video, And Text Workspaces
+
+The top toolbar includes focused workspace modes:
+
+- `Photo`: shows image files, opens image-aware file filters, and puts photo quality, resize/crop, watermark, and text overlay controls close to the preview workflow.
+- `Video`: shows video files, opens video-aware file filters, and links directly to video editor, trim/resize, and audio/subtitle controls.
+- `Text`: shows text files, opens text-aware file filters, previews text content in the center panel, and exposes text output formats.
+
+The default `Conversion` mode still shows every supported file type in one queue.
 
 ## YouTube Downloads
 
@@ -102,8 +119,28 @@ Right-click any item in the queue to open a focused conversion panel. The panel 
 - Video files show formats such as `mp4`, `mkv`, `webm`, `mov`, `avi`, and `gif`.
 - Audio files show formats such as `mp3`, `m4a`, `aac`, `wav`, `flac`, and `opus`.
 - Subtitle files show formats such as `srt`, `ass`, and `vtt`.
+- Text/document files show formats such as `txt`, `md`, `html`, `pdf`, `docx`, `xlsx`, `pptx`, `odt`, `ods`, and `odp`.
 
 Use `Save format` to store the format as a per-file override, or `Convert this file` to save the override and run only that file.
+
+## Text Conversion
+
+Text and document files are first-class queue items. Supported input extensions include:
+
+```text
+.txt .md .markdown .html .htm .json .csv .tsv .xml .yaml .yml .log .rtf
+.pdf .docx .docm .dotx .doc .odt .ott
+.xlsx .xlsm .xltx .xls .ods .ots
+.pptx .pptm .ppsx .potx .ppt .odp .otp
+```
+
+Supported output formats are:
+
+```text
+txt md html json csv tsv rtf pdf docx doc odt xlsx xls ods pptx ppt odp
+```
+
+Text/document conversion uses Python document handlers instead of FFmpeg, so a text-only queue can run even when FFmpeg is not configured. `docx`, `xlsx`, `pptx`, `odt`, `ods`, and `odp` are generated as real document packages; legacy `doc`, `xls`, and `ppt` use compatibility fallbacks.
 
 ## Device Profiles
 
@@ -211,7 +248,7 @@ mov_to_mp4_batch_gui/
   requirements-dev.txt
   pytest.ini
   app/                    # config, models, presets, settings
-  services/               # FFmpeg, conversion, YouTube download, transcription, validation
+  services/               # FFmpeg, conversion, text conversion, YouTube download, transcription, validation
   ui/                     # Python backend and QML UI
     backend.py
     i18n/
@@ -257,7 +294,7 @@ python -m pytest -q
 Current expected result:
 
 ```text
-78 passed
+96 passed
 ```
 
 ## Build

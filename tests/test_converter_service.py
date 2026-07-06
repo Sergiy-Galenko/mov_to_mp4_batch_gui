@@ -27,6 +27,8 @@ class FakeFfmpegService:
             return "mp3"
         if media_type_name == "subtitle":
             return "srt"
+        if media_type_name == "text":
+            return settings.out_text_format
         return "jpg"
 
     def build_audio_speed_filter(self, settings):
@@ -188,6 +190,29 @@ class ConverterServiceTest(unittest.TestCase):
             service._run([task], settings, out_dir)
 
             self.assertTrue(fake.audio_called)
+            task_events = [event for event in drain_events(events) if event[0] == "task_state"]
+            self.assertTrue(any(event[2] == "success" for event in task_events))
+
+    def test_text_conversion_does_not_require_ffmpeg(self) -> None:
+        fake = FakeFfmpegService()
+        fake.ffmpeg_path = None
+        events: "queue.Queue[tuple]" = queue.Queue()
+        service = MockConverterService(fake, events)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            inp = tmp / "notes.txt"
+            out_dir = tmp / "out"
+            out_dir.mkdir()
+            inp.write_text("hello\nworld", encoding="utf-8")
+
+            task = TaskItem(path=inp, media_type="text")
+            settings = ConversionSettings(operation="convert", out_text_format="html")
+            service._run([task], settings, out_dir)
+
+            output = out_dir / "notes.html"
+            self.assertTrue(output.exists())
+            self.assertIn("<pre>hello", output.read_text(encoding="utf-8"))
             task_events = [event for event in drain_events(events) if event[0] == "task_state"]
             self.assertTrue(any(event[2] == "success" for event in task_events))
 

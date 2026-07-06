@@ -100,6 +100,21 @@ BODY = r'''    def _probe_media_async(self, path: Path) -> None:
         if path:
             self.subtitlePicked.emit(path)
 
+    @QtCore.Slot(str, result=str)
+    def readTextPreview(self, path_text: str) -> str:
+        path = Path(str(path_text or "").strip()).expanduser()
+        if not path.exists() or not path.is_file():
+            return ""
+        try:
+            from services.text_conversion_service import read_text_file
+
+            text, encoding = read_text_file(path)
+        except Exception as exc:
+            return f"Preview unavailable: {exc}"
+        limit = 6000
+        suffix = f"\n\n... ({encoding})" if len(text) > limit else f"\n\n({encoding})"
+        return text[:limit] + suffix
+
     @QtCore.Slot("QVariantMap", result="QVariantMap")
     def validateSettings(self, settings_map: Dict[str, Any]) -> Dict[str, Any]:
         return self.validation.validate(

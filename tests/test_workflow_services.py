@@ -110,6 +110,41 @@ class WorkflowServicesTest(unittest.TestCase):
         self.assertTrue(str(summary.items[0].output_path).endswith(".webp"))
         self.assertFalse(str(summary.items[0].output_path).endswith(".mp4"))
 
+    def test_preview_uses_text_format_for_text_sources_without_ffmpeg(self) -> None:
+        ffmpeg = FfmpegService(None, None)
+        builder = PreviewBuilder(ffmpeg)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            text = tmp / "notes.txt"
+            text.write_text("hello", encoding="utf-8")
+
+            summary = builder.build(
+                {"operation": "Конвертація", "out_text_fmt": "html"},
+                tasks=[TaskItem(path=text, media_type="text")],
+                output_dir=tmpdir,
+            )
+
+        self.assertEqual(len(summary.items), 1)
+        self.assertTrue(str(summary.items[0].output_path).endswith(".html"))
+        self.assertIn("text-convert", summary.items[0].command)
+
+    def test_text_only_validation_does_not_require_ffmpeg(self) -> None:
+        service = ValidationService(FfmpegService(None, None))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            text = tmp / "notes.txt"
+            text.write_text("hello", encoding="utf-8")
+            result = service.validate(
+                {"operation": "Конвертація", "out_text_fmt": "json"},
+                tasks=[TaskItem(path=text, media_type="text")],
+                output_dir=tmpdir,
+                ffmpeg_path="",
+                include_queue=True,
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertNotIn("ffmpeg", result["errors"])
+
     def test_merge_preview_uses_single_merged_output(self) -> None:
         ffmpeg = FfmpegService("ffmpeg", None)
         builder = PreviewBuilder(ffmpeg)

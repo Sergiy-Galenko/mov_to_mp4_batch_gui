@@ -70,15 +70,6 @@ Rectangle {
         return status
     }
 
-    function iconText() {
-        var state = canonicalStatus()
-        if (state === "done") return "✅"
-        if (state === "failed") return "❌"
-        if (state === "skipped") return "⏭️"
-        if (state === "processing") return "⏳"
-        return mediaType === "audio" ? "🎵" : mediaType === "image" ? "🖼️" : mediaType === "subtitle" ? "💬" : "🎬"
-    }
-
     function topErrorLines() {
         var text = errorText || ""
         var lines = text.split(/\r?\n/).filter(function(line) { return line.trim().length > 0 })
@@ -89,11 +80,23 @@ Rectangle {
         if (mediaType === "image") return "jpg"
         if (mediaType === "audio") return "mp3"
         if (mediaType === "subtitle") return "srt"
+        if (mediaType === "text") return "txt"
         return "mp4"
     }
 
     function outputExtension() {
         var path = root.outputPath || ""
+        var dot = path.lastIndexOf(".")
+        if (dot >= 0 && dot < path.length - 1)
+            return path.slice(dot + 1).toLowerCase()
+        return fallbackExtension()
+    }
+
+    function inputExtension() {
+        var path = root.fileName || root.filePath || ""
+        var slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
+        if (slash >= 0)
+            path = path.slice(slash + 1)
         var dot = path.lastIndexOf(".")
         if (dot >= 0 && dot < path.length - 1)
             return path.slice(dot + 1).toLowerCase()
@@ -197,14 +200,12 @@ Rectangle {
                     cache: true
                 }
 
-                Label {
-                    anchors.centerIn: parent
+                MediaTypeIcon {
+                    anchors.fill: parent
                     visible: root.thumbnailSource.length === 0
-                    text: root.iconText()
-                    color: Theme.statusColor(root.status)
-                    font.family: Theme.monoFont
-                    font.pixelSize: 22
-                    font.bold: true
+                    mediaType: root.mediaType
+                    status: root.status
+                    extension: root.inputExtension()
                 }
             }
 

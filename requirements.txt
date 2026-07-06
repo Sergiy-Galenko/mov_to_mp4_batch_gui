@@ -6,5 +6,9 @@ psutil>=5.9,<8
 # YouTube/video site downloads from the GUI and CLI.
 yt-dlp>=2025.1,<2027
 
+# Document/PDF text extraction and higher-quality PDF export.
+pypdf>=5,<7
+reportlab>=4.2,<5
+
 # Optional cloud uploads use the external rclone executable.
 # Install and configure rclone separately when Cloud integration is enabled.

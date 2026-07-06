@@ -15,6 +15,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from app.constants import (
     ANALYTICS_EMIT_INTERVAL_SEC,
     APP_TITLE,
+    APP_VERSION,
     EVENT_POLL_INTERVAL_MS,
     RECENT_FOLDERS_LIMIT,
     RESOURCE_SAMPLE_INTERVAL_SEC,

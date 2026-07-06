@@ -6,9 +6,38 @@ BODY = r'''    @QtCore.Slot()
             "Media Files (*.mp4 *.mov *.mkv *.webm *.avi *.m4v *.flv *.wmv *.mts *.m2ts "
             "*.jpg *.jpeg *.png *.bmp *.webp *.tiff *.heic *.heif "
             "*.mp3 *.m4a *.aac *.wav *.flac *.opus *.ogg *.wma *.aiff *.mka "
-            "*.srt *.ass *.ssa *.vtt *.webvtt);;All Files (*)"
+            "*.srt *.ass *.ssa *.vtt *.webvtt "
+            "*.txt *.md *.markdown *.html *.htm *.json *.csv *.tsv *.xml *.yaml *.yml *.log *.rtf "
+            "*.pdf *.docx *.docm *.dotx *.doc *.odt *.ott "
+            "*.xlsx *.xlsm *.xltx *.xls *.ods *.ots "
+            "*.pptx *.pptm *.ppsx *.potx *.ppt *.odp *.otp);;All Files (*)"
         )
         files, _ = QtWidgets.QFileDialog.getOpenFileNames(None, "Додати файли", "", filt)
+        paths = [Path(path) for path in files]
+        if paths:
+            self._remember_folder(str(paths[0].parent))
+        self._add_paths(paths)
+
+    @QtCore.Slot(str)
+    def addFilesForType(self, media_kind: str) -> None:
+        kind = str(media_kind or "").strip().lower()
+        filters = {
+            "video": "Video Files (*.mp4 *.mov *.mkv *.webm *.avi *.m4v *.flv *.wmv *.mts *.m2ts);;All Files (*)",
+            "image": "Photo Files (*.jpg *.jpeg *.png *.bmp *.webp *.tiff *.heic *.heif);;All Files (*)",
+            "audio": "Audio Files (*.mp3 *.m4a *.aac *.wav *.flac *.opus *.ogg *.wma *.aiff *.mka);;All Files (*)",
+            "subtitle": "Subtitle Files (*.srt *.ass *.ssa *.vtt *.webvtt);;All Files (*)",
+            "text": (
+                "Text and Office Files (*.txt *.md *.markdown *.html *.htm *.json *.csv *.tsv *.xml *.yaml *.yml *.log *.rtf "
+                "*.pdf *.docx *.docm *.dotx *.doc *.odt *.ott "
+                "*.xlsx *.xlsm *.xltx *.xls *.ods *.ots "
+                "*.pptx *.pptm *.ppsx *.potx *.ppt *.odp *.otp);;All Files (*)"
+            ),
+        }
+        filt = filters.get(kind)
+        if not filt:
+            self.addFiles()
+            return
+        files, _ = QtWidgets.QFileDialog.getOpenFileNames(None, "Р”РѕРґР°С‚Рё С„Р°Р№Р»Рё", "", filt)
         paths = [Path(path) for path in files]
         if paths:
             self._remember_folder(str(paths[0].parent))

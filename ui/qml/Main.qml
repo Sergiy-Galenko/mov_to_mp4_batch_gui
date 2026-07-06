@@ -22,6 +22,7 @@ ApplicationWindow {
     palette.highlightedText: Theme.textOnAccent
 
     property bool hasBackend: backend !== null
+    property url appLogoSource: Qt.resolvedUrl("../../assets/app-logo.png")
     property bool sidebarCollapsed: false
     property int activeSection: 0
     property string globalSearchText: ""
@@ -42,7 +43,12 @@ ApplicationWindow {
     property bool queueShowProgress: true
     property real queueDropZoneHeight: 0
     property string toastText: ""
+    property string activeWorkspaceMode: "all"
     property string selectedPath: ""
+    property string selectedName: ""
+    property string selectedMediaType: ""
+    property string selectedThumbnailSource: ""
+    property string selectedPreviewFormat: ""
     property int selectedIndex: -1
     property var selectedPaths: []
     property int lastSelectedIndex: -1
@@ -86,6 +92,7 @@ ApplicationWindow {
     property var imageFormats: ["jpg", "png", "webp", "bmp", "tiff"]
     property var audioFormats: ["mp3", "m4a", "aac", "wav", "flac", "opus"]
     property var subtitleFormats: ["srt", "ass", "vtt"]
+    property var textFormats: ["txt", "md", "html", "json", "csv", "tsv", "rtf", "pdf", "docx", "doc", "odt", "xlsx", "xls", "ods", "pptx", "ppt", "odp"]
     property var codecOptions: ["auto", "H.264 (AVC)", "H.265 (HEVC)", "ProRes", "MPEG-2", "AV1", "VP9 (WebM)"]
     property var audioCodecOptions: ["auto", "aac", "ac3", "opus", "mp3", "copy"]
     property var smartContentTypes: ["auto", "live_action", "animation", "screencast"]
@@ -136,6 +143,7 @@ ApplicationWindow {
         if (mediaType === "image") return "out_image_fmt"
         if (mediaType === "audio") return "out_audio_fmt"
         if (mediaType === "subtitle") return "out_subtitle_fmt"
+        if (mediaType === "text") return "out_text_fmt"
         return "out_video_fmt"
     }
 
@@ -143,6 +151,7 @@ ApplicationWindow {
         if (mediaType === "image") return root.imageFormats
         if (mediaType === "audio") return root.audioFormats
         if (mediaType === "subtitle") return root.subtitleFormats
+        if (mediaType === "text") return root.textFormats
         return root.videoFormats
     }
 
@@ -168,11 +177,94 @@ ApplicationWindow {
         return settings
     }
 
+    function workspaceMediaType() {
+        if (root.activeWorkspaceMode === "photo") return "image"
+        if (root.activeWorkspaceMode === "video") return "video"
+        if (root.activeWorkspaceMode === "text") return "text"
+        return "all"
+    }
+
+    function workspaceTitle() {
+        if (root.activeWorkspaceMode === "photo") return "Фото"
+        if (root.activeWorkspaceMode === "video") return "Відео"
+        if (root.activeWorkspaceMode === "text") return "Текст"
+        return I18n.t("queue")
+    }
+
+    function clearSelectionIfOutsideWorkspace() {
+        var mediaType = workspaceMediaType()
+        if (mediaType === "all" || root.selectedMediaType.length === 0 || root.selectedMediaType === mediaType)
+            return
+        root.selectedPath = ""
+        root.selectedName = ""
+        root.selectedMediaType = ""
+        root.selectedThumbnailSource = ""
+        root.selectedPreviewFormat = ""
+        root.selectedPaths = []
+        root.selectedIndex = -1
+        if (backend)
+            backend.selectQueueIndex(-1)
+    }
+
+    function addFilesForWorkspace() {
+        if (!backend)
+            return
+        var mediaType = workspaceMediaType()
+        if (mediaType === "all")
+            backend.addFiles()
+        else
+            backend.addFilesForType(mediaType)
+    }
+
+    function addFolderForWorkspace() {
+        if (!backend)
+            return
+        var mediaType = workspaceMediaType()
+        if (mediaType === "all") {
+            backend.addFolder()
+            return
+        }
+        backend.folderTypeFilter = mediaType
+        backend.addFolderFiltered()
+    }
+
+    function openSelectedSettings() {
+        if (root.selectedMediaType === "image") {
+            root.openSidebarSection(5, "images_sheets", root.navIndexFor(5, "images_sheets"))
+        } else if (root.selectedMediaType === "video") {
+            root.openSidebarSection(5, "video_editor", root.navIndexFor(5, "video_editor"))
+        } else if (root.selectedMediaType === "text") {
+            root.openSidebarSection(5, "core", root.navIndexFor(5, "core"))
+        }
+    }
+
+    function saveSelectedFormat(format) {
+        if (!backend || root.selectedPath.length === 0 || !format)
+            return
+        var overrideMap = { operation: "convert" }
+        overrideMap[outputFormatKeyFor(root.selectedMediaType)] = format
+        backend.updateTaskOverrideByPath(root.selectedPath, overrideMap)
+        backend.refreshOutputPreview(collectSettings())
+    }
+
+    function convertSelectedFormat(format) {
+        if (!backend || root.selectedPath.length === 0 || !format)
+            return
+        root.quickConvertPath = root.selectedPath
+        root.quickConvertName = root.selectedName || root.selectedPath
+        root.quickConvertMediaType = root.selectedMediaType || "video"
+        root.quickConvertFormat = format
+        root.convertQuickFile()
+    }
+
     function openQuickConvert(path, name, mediaType, index) {
         root.quickConvertPath = path || ""
         root.quickConvertName = name || path || ""
         root.quickConvertMediaType = mediaType || "video"
         root.selectedPath = root.quickConvertPath
+        root.selectedName = root.quickConvertName
+        root.selectedMediaType = root.quickConvertMediaType
+        root.selectedPreviewFormat = currentFormatFor(root.selectedMediaType)
         root.selectedIndex = index
         root.selectedPaths = root.quickConvertPath.length > 0 ? [root.quickConvertPath] : []
         root.lastSelectedIndex = index
@@ -239,7 +331,7 @@ ApplicationWindow {
         return selectedPaths.indexOf(path) >= 0
     }
 
-    function selectQueuePath(path, index, modifiers) {
+    function selectQueuePath(path, index, modifiers, name, mediaType, thumbnailSource) {
         var next = selectedPaths.slice()
         var ctrl = (modifiers & Qt.ControlModifier) !== 0
         var shift = (modifiers & Qt.ShiftModifier) !== 0
@@ -263,6 +355,10 @@ ApplicationWindow {
         }
         selectedPaths = next
         selectedPath = path
+        selectedName = name || path
+        selectedMediaType = mediaType || ""
+        selectedThumbnailSource = thumbnailSource || ""
+        selectedPreviewFormat = selectedMediaType.length > 0 ? currentFormatFor(selectedMediaType) : ""
         selectedIndex = index
         lastSelectedIndex = index
         if (backend)
@@ -291,9 +387,22 @@ ApplicationWindow {
     }
 
     function openTopMode(mode) {
-        if (mode === "convert")
+        if (mode === "photo") {
+            root.activeWorkspaceMode = "photo"
+            root.clearSelectionIfOutsideWorkspace()
             openSidebarSection(0, "", 0)
-        else if (mode === "montage")
+        } else if (mode === "video") {
+            root.activeWorkspaceMode = "video"
+            root.clearSelectionIfOutsideWorkspace()
+            openSidebarSection(0, "", 0)
+        } else if (mode === "text") {
+            root.activeWorkspaceMode = "text"
+            root.clearSelectionIfOutsideWorkspace()
+            openSidebarSection(0, "", 0)
+        } else if (mode === "convert") {
+            root.activeWorkspaceMode = "all"
+            openSidebarSection(0, "", 0)
+        } else if (mode === "montage")
             openSidebarSection(5, "video_editor", navIndexFor(5, "video_editor"))
         else if (mode === "downloads")
             openSidebarSection(4, "", navIndexFor(4, ""))
@@ -302,8 +411,14 @@ ApplicationWindow {
     }
 
     function topModeActive(mode) {
+        if (mode === "photo")
+            return activeSection === 0 && root.activeWorkspaceMode === "photo"
+        if (mode === "video")
+            return activeSection === 0 && root.activeWorkspaceMode === "video"
+        if (mode === "text")
+            return activeSection === 0 && root.activeWorkspaceMode === "text"
         if (mode === "convert")
-            return activeSection === 0
+            return activeSection === 0 && root.activeWorkspaceMode === "all"
         if (mode === "montage")
             return activeSection === 5 && pendingSettingsTarget === "video_editor"
         if (mode === "downloads")
@@ -340,6 +455,9 @@ ApplicationWindow {
     }
 
     function queueItemMatches(name, path, mediaType, status) {
+        var workspaceType = workspaceMediaType()
+        if (workspaceType !== "all" && mediaType !== workspaceType)
+            return false
         var needle = String(queueSearchText || "").trim().toLowerCase()
         if (needle.length > 0) {
             var haystack = [name, path, mediaType, status].join(" ").toLowerCase()
@@ -454,8 +572,17 @@ ApplicationWindow {
                 anchors.rightMargin: Theme.space5
                 spacing: Theme.space4
 
+                Image {
+                    Layout.preferredWidth: 38
+                    Layout.preferredHeight: 38
+                    source: root.appLogoSource
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    smooth: true
+                }
+
                 Label {
-                    text: "🎬 " + I18n.t("app.title")
+                    text: I18n.t("app.title")
                     color: Theme.textPrimary
                     font.family: Theme.displayFont
                     font.pixelSize: Theme.fontSizeLg
@@ -471,6 +598,9 @@ ApplicationWindow {
                 RowLayout {
                     spacing: 4
                     TopModeButton { mode: "convert"; text: "Конвертація" }
+                    TopModeButton { mode: "photo"; text: "Фото" }
+                    TopModeButton { mode: "video"; text: "Відео" }
+                    TopModeButton { mode: "text"; text: "Текст" }
                     TopModeButton { mode: "montage"; text: "Монтаж" }
                     TopModeButton { mode: "downloads"; text: "Downloads" }
                     TopModeButton { mode: "analytics"; text: "Аналітика" }
@@ -967,7 +1097,7 @@ ApplicationWindow {
                 spacing: 10
                 Label {
                     Layout.fillWidth: true
-                    text: I18n.t("queue")
+                    text: root.workspaceTitle()
                     color: Theme.textPrimary
                     font.family: Theme.displayFont
                     font.pixelSize: Theme.fontHeading
@@ -1019,6 +1149,10 @@ ApplicationWindow {
                             backend.removeSelectedPaths(root.selectedPaths)
                         root.selectedPaths = []
                         root.selectedPath = ""
+                        root.selectedName = ""
+                        root.selectedMediaType = ""
+                        root.selectedThumbnailSource = ""
+                        root.selectedPreviewFormat = ""
                         root.selectedIndex = -1
                     }
                 }
@@ -1028,8 +1162,8 @@ ApplicationWindow {
                     visible: root.selectedPaths.length > 1
                     onClicked: root.openSidebarSection(5, "selected_override", -1)
                 }
-                SecondaryButton { Layout.fillWidth: false; text: I18n.t("add"); onClicked: backend && backend.addFiles() }
-                SecondaryButton { Layout.fillWidth: false; text: I18n.t("folder"); onClicked: backend && backend.addFolder() }
+                SecondaryButton { Layout.fillWidth: false; text: I18n.t("add"); onClicked: root.addFilesForWorkspace() }
+                SecondaryButton { Layout.fillWidth: false; text: I18n.t("folder"); onClicked: root.addFolderForWorkspace() }
                 SecondaryButton {
                     Layout.fillWidth: false
                     Layout.preferredWidth: 132
@@ -1313,6 +1447,157 @@ ApplicationWindow {
                 }
             }
 
+            Panel {
+                id: selectedPreviewPanel
+                visible: root.selectedPath.length > 0 && ["image", "video", "text"].indexOf(root.selectedMediaType) >= 0
+                title: root.selectedMediaType === "image" ? "Фото preview"
+                     : root.selectedMediaType === "video" ? "Відео preview"
+                     : "Текст preview"
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    Rectangle {
+                        Layout.preferredWidth: Math.min(520, Math.max(320, queueScreen.availableWidth * 0.44))
+                        Layout.preferredHeight: 300
+                        radius: Theme.radiusPanel
+                        color: Theme.input
+                        border.width: 1
+                        border.color: Theme.borderSubtle
+                        clip: true
+
+                        Image {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            source: (root.selectedMediaType === "image" || root.selectedMediaType === "video") ? root.selectedThumbnailSource : ""
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            visible: source.toString().length > 0
+                        }
+
+                        ScrollView {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            visible: root.selectedMediaType === "text"
+                            clip: true
+                            Label {
+                                width: selectedPreviewPanel.width > 0 ? Math.max(280, selectedPreviewPanel.width * 0.38) : 360
+                                text: backend ? backend.readTextPreview(root.selectedPath) : ""
+                                color: Theme.textPrimary
+                                font.family: Theme.monoFont
+                                font.pixelSize: Theme.fontMeta
+                                wrapMode: Text.WrapAnywhere
+                            }
+                        }
+
+                        Label {
+                            anchors.centerIn: parent
+                            width: parent.width - 28
+                            visible: root.selectedMediaType !== "text" && root.selectedThumbnailSource.length === 0
+                            text: root.selectedMediaType === "video" ? "Preview кадр ще не готовий" : "Preview недоступний"
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fontSmall
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: root.selectedName || root.selectedPath
+                            color: Theme.textPrimary
+                            font.pixelSize: Theme.fontSizeLg
+                            font.bold: true
+                            elide: Text.ElideMiddle
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: root.selectedPath
+                            color: Theme.textSecondary
+                            font.family: Theme.monoFont
+                            font.pixelSize: Theme.fontMeta
+                            elide: Text.ElideMiddle
+                        }
+
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: 2
+                            rowSpacing: 8
+                            columnSpacing: 8
+
+                            FieldLabel { text: "Тип" }
+                            Label {
+                                Layout.fillWidth: true
+                                text: root.selectedMediaType.toUpperCase()
+                                color: Theme.textSecondary
+                                font.family: Theme.monoFont
+                                font.pixelSize: Theme.fontMeta
+                            }
+
+                            FieldLabel { text: I18n.t("output_format") }
+                            AppComboBox {
+                                id: selectedPreviewFormatCombo
+                                Layout.fillWidth: true
+                                model: root.formatOptionsFor(root.selectedMediaType)
+                                currentIndex: Math.max(0, find(root.selectedPreviewFormat))
+                                onActivated: root.selectedPreviewFormat = currentText
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            SecondaryButton {
+                                text: I18n.t("save_format")
+                                enabled: root.selectedPath.length > 0 && selectedPreviewFormatCombo.currentText.length > 0
+                                onClicked: root.saveSelectedFormat(selectedPreviewFormatCombo.currentText)
+                            }
+                            PrimaryButton {
+                                text: I18n.t("convert_this_file")
+                                enabled: backend ? (!backend.isRunning && root.selectedPath.length > 0 && selectedPreviewFormatCombo.currentText.length > 0) : false
+                                onClicked: root.convertSelectedFormat(selectedPreviewFormatCombo.currentText)
+                            }
+                            SecondaryButton {
+                                text: I18n.t("change")
+                                onClicked: root.openSelectedSettings()
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: root.selectedMediaType === "image"
+                            spacing: 8
+                            SecondaryButton { text: "Якість фото"; onClicked: root.openSidebarSection(5, "images_sheets", root.navIndexFor(5, "images_sheets")) }
+                            SecondaryButton { text: "Resize / Crop"; onClicked: root.openSidebarSection(5, "video", root.navIndexFor(5, "video")) }
+                            SecondaryButton { text: "Watermark / Text"; onClicked: root.openSidebarSection(5, "watermark_text", root.navIndexFor(5, "watermark_text")) }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: root.selectedMediaType === "video"
+                            spacing: 8
+                            SecondaryButton { text: I18n.t("video_editor"); onClicked: root.openSidebarSection(5, "video_editor", root.navIndexFor(5, "video_editor")) }
+                            SecondaryButton { text: "Trim / Size"; onClicked: root.openSidebarSection(5, "video", root.navIndexFor(5, "video")) }
+                            SecondaryButton { text: I18n.t("audio_subtitles"); onClicked: root.openSidebarSection(5, "audio_subtitles", root.navIndexFor(5, "audio_subtitles")) }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: root.selectedMediaType === "text"
+                            spacing: 8
+                            SecondaryButton { text: "Text formats"; onClicked: root.openSidebarSection(5, "core", root.navIndexFor(5, "core")) }
+                            SecondaryButton { text: I18n.t("output"); onClicked: root.openSidebarSection(5, "output", root.navIndexFor(5, "output")) }
+                        }
+                    }
+                }
+            }
+
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.max(360, root.height - 360)
@@ -1335,6 +1620,60 @@ ApplicationWindow {
                     }
                 }
 
+                DropArea {
+                    id: queueAppendDropArea
+                    objectName: "queueAppendDropArea"
+                    anchors.fill: parent
+                    visible: backend ? backend.queueCount > 0 : false
+                    enabled: visible
+                    keys: ["text/uri-list"]
+                    z: 30
+                    onDropped: function(drop) {
+                        if (drop.hasUrls) {
+                            backend && backend.addDroppedUrls(drop.urls)
+                            drop.acceptProposedAction()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    visible: queueAppendDropArea.containsDrag
+                    z: 29
+                    radius: Theme.radiusMd
+                    color: Theme.accentSoft
+                    border.width: 1
+                    border.color: Theme.accent
+                    opacity: 0.94
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width - 32, 520)
+                        spacing: Theme.space2
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: "Відпустіть файли, щоб додати їх у чергу"
+                            color: Theme.textPrimary
+                            font.family: Theme.displayFont
+                            font.pixelSize: Theme.fontSizeLg
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: "Можна докидати фото, відео, аудіо, документи або папки без очищення поточного списку."
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fontSizeSm
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+
                 ColumnLayout {
                     id: emptyQueueState
                     anchors.centerIn: parent
@@ -1349,7 +1688,7 @@ ApplicationWindow {
                         Component.onCompleted: root.queueDropZoneHeight = height
                         onHeightChanged: root.queueDropZoneHeight = height
                         onFilesDropped: function(urls) { backend && backend.addDroppedUrls(urls) }
-                        onClicked: backend && backend.addFiles()
+                        onClicked: root.addFilesForWorkspace()
                     }
 
                     RowLayout {
@@ -1359,13 +1698,13 @@ ApplicationWindow {
                             Layout.fillWidth: false
                             Layout.preferredWidth: 150
                             text: I18n.t("add_files")
-                            onClicked: backend && backend.addFiles()
+                            onClicked: root.addFilesForWorkspace()
                         }
                         SecondaryButton {
                             Layout.fillWidth: false
                             Layout.preferredWidth: 150
                             text: I18n.t("add_folder")
-                            onClicked: backend && backend.addFolder()
+                            onClicked: root.addFolderForWorkspace()
                         }
                         SecondaryButton {
                             Layout.fillWidth: false
@@ -1424,11 +1763,20 @@ ApplicationWindow {
                         shimmerPhase: root.sharedShimmerPhase
                         itemIndex: index
                         onSelectedRequested: function(path, modifiers) {
-                            root.selectQueuePath(path, index, modifiers)
+                            root.selectQueuePath(path, index, modifiers, model.name, model.mediaType, model.thumbnailSource)
                         }
                         onRetryRequested: function(path) { backend && backend.retryTaskPath(path) }
                         onSkipRequested: function(path) { backend && backend.skipCurrentFile() }
-                        onRemoveRequested: function(path) { backend && backend.removeTaskPath(path) }
+                        onRemoveRequested: function(path) {
+                            if (root.selectedPath === path) {
+                                root.selectedPath = ""
+                                root.selectedName = ""
+                                root.selectedMediaType = ""
+                                root.selectedThumbnailSource = ""
+                                root.selectedPreviewFormat = ""
+                            }
+                            backend && backend.removeTaskPath(path)
+                        }
                         onOverrideRequested: function(path) {
                             root.selectedPath = path
                             root.selectedIndex = index
@@ -2105,6 +2453,7 @@ ApplicationWindow {
             if (preset.out_image_fmt) root.setComboText(outImageFmt, preset.out_image_fmt)
             if (preset.out_audio_fmt) root.setComboText(outAudioFmt, preset.out_audio_fmt)
             if (preset.out_subtitle_fmt) root.setComboText(outSubtitleFmt, preset.out_subtitle_fmt)
+            if (preset.out_text_fmt) root.setComboText(outTextFmt, preset.out_text_fmt)
             if (preset.audio_bitrate) audioBitrateField.text = preset.audio_bitrate
             if (preset.audio_codec) root.setComboText(audioCodecCombo, preset.audio_codec)
             if (preset.audio_track_index !== undefined) audioTrackSpin.value = Number(preset.audio_track_index) + 1
@@ -2222,6 +2571,7 @@ ApplicationWindow {
                 out_image_fmt: outImageFmt.currentText,
                 out_audio_fmt: outAudioFmt.currentText,
                 out_subtitle_fmt: outSubtitleFmt.currentText,
+                out_text_fmt: outTextFmt.currentText,
                 audio_bitrate: audioBitrateField.text,
                 audio_codec: audioCodecCombo.currentText,
                 audio_track_index: audioTrackSpin.value - 1,
@@ -2493,6 +2843,8 @@ ApplicationWindow {
                 AppComboBox { id: outAudioFmt; model: root.audioFormats; currentIndex: 0; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("subtitle") }
                 AppComboBox { id: outSubtitleFmt; model: root.subtitleFormats; currentIndex: 0; onActivated: scheduleSettingsSync() }
+                FieldLabel { text: "Text" }
+                AppComboBox { id: outTextFmt; model: root.textFormats; currentIndex: 0; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("codec") }
                 AppComboBox { id: codecCombo; model: root.codecOptions; currentIndex: 0; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("hw") }

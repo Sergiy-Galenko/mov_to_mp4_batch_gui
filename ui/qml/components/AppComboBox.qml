@@ -15,8 +15,11 @@ ComboBox {
     contentItem: Label {
         text: control.displayText
         color: control.enabled ? Theme.text : Theme.disabledText
+        font: control.font
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
+        maximumLineCount: 1
+        clip: true
         leftPadding: 0
         rightPadding: 8
     }
@@ -50,10 +53,13 @@ ComboBox {
         height: 38
 
         contentItem: Label {
-            text: modelData
+            text: String(modelData)
             color: Theme.text
+            font: control.font
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
+            maximumLineCount: 1
+            clip: true
         }
 
         background: Rectangle {

@@ -4,6 +4,10 @@ BODY = r'''    @QtCore.Property(str, constant=True)
     def appTitle(self) -> str:
         return APP_TITLE
 
+    @QtCore.Property(str, constant=True)
+    def appVersion(self) -> str:
+        return APP_VERSION
+
     @QtCore.Property(QtCore.QObject, constant=True)
     def queueModel(self) -> QtCore.QObject:
         return self.queue_model

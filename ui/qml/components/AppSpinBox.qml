@@ -19,6 +19,7 @@ SpinBox {
         id: input
         text: ""
         color: control.enabled ? Theme.text : Theme.disabledText
+        font: control.font
         selectionColor: Theme.accent
         selectedTextColor: Theme.textOnAccent
         horizontalAlignment: Text.AlignLeft
@@ -27,8 +28,9 @@ SpinBox {
         selectByMouse: true
         inputMethodHints: Qt.ImhFormattedNumbersOnly
         validator: control.validator
+        clip: true
         leftPadding: 0
-        rightPadding: control.stepperWidth + 4
+        rightPadding: 0
 
         onEditingFinished: control.value = control.valueFromText(text, control.locale)
 
