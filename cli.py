@@ -83,6 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--download-playlist", action="store_true", help="Allow playlist downloads")
     parser.add_argument("--download-subtitles", action="store_true", help="Download available subtitles next to the media")
     parser.add_argument("--download-cookies", help="Path to a Netscape cookies.txt file for restricted videos")
+    parser.add_argument("--download-rate-limit-kbps", type=int, default=0, help="Limit download speed in KB/s; 0 means unlimited")
     parser.add_argument(
         "--download-audio-format",
         choices=sorted(YouTubeDownloadService.AUDIO_FORMATS),
@@ -164,6 +165,7 @@ def main(argv: List[str] | None = None) -> int:
                     playlist=args.download_playlist,
                     subtitles=args.download_subtitles,
                     cookies_file=args.download_cookies or "",
+                    rate_limit=args.download_rate_limit_kbps * 1024 if args.download_rate_limit_kbps else None,
                     progress_callback=_print_download_progress,
                 )
             except YouTubeDownloadError as exc:

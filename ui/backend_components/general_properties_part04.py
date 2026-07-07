@@ -18,6 +18,18 @@ BODY = r'''    @QtCore.Property("QVariantList", notify=youtubeDownloadChanged)
     def youtubePlaylistPreview(self) -> str:
         return self._youtube_playlist_preview
 
+    @QtCore.Property("QVariantMap", notify=youtubeDownloadChanged)
+    def youtubePreviewInfo(self) -> Dict[str, Any]:
+        return dict(self._youtube_preview_info)
+
+    @QtCore.Property("QVariantList", notify=youtubeDownloadChanged)
+    def youtubeDownloadLog(self) -> List[str]:
+        return list(self._youtube_download_log)
+
+    @QtCore.Property(bool, notify=youtubeDownloadChanged)
+    def ytdlpUpdateRunning(self) -> bool:
+        return self._ytdlp_update_running
+
     @QtCore.Property(bool, notify=preflightChanged)
     def preflightOk(self) -> bool:
         return bool(self._preflight_result.get("ok", True))

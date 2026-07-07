@@ -239,6 +239,7 @@
   "import": "Import",
   "override": "Override",
   "retry": "Retry",
+  "open_output": "Open output",
   "remove": "Remove",
   "change": "Change",
   "cancel": "Cancel",

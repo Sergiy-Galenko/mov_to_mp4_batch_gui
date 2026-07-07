@@ -93,6 +93,7 @@ class YouTubeDownloadService:
         playlist: bool = False,
         subtitles: bool = False,
         cookies_file: str = "",
+        rate_limit: Optional[int] = None,
         cancel_event: Optional[Event] = None,
         progress_callback: Optional[ProgressCallback] = None,
     ) -> Path:
@@ -105,6 +106,7 @@ class YouTubeDownloadService:
             playlist=playlist,
             subtitles=subtitles,
             cookies_file=cookies_file,
+            rate_limit=rate_limit,
             cancel_event=cancel_event,
             progress_callback=progress_callback,
         )
@@ -123,6 +125,7 @@ class YouTubeDownloadService:
         playlist: bool = False,
         subtitles: bool = False,
         cookies_file: str = "",
+        rate_limit: Optional[int] = None,
         cancel_event: Optional[Event] = None,
         progress_callback: Optional[ProgressCallback] = None,
     ) -> List[Path]:
@@ -134,6 +137,7 @@ class YouTubeDownloadService:
         clean_mode = "audio" if str(mode or "").lower() == "audio" or clean_quality == "audio_only" else "video"
         clean_audio_format = self._normalize_audio_format(audio_format)
         clean_cookies_file = str(cookies_file or "").strip()
+        clean_rate_limit = self._normalize_rate_limit(rate_limit)
         output_dir = output_dir.expanduser()
         output_dir.mkdir(parents=True, exist_ok=True)
         before = self._snapshot_files(output_dir)
@@ -150,6 +154,7 @@ class YouTubeDownloadService:
                 playlist,
                 subtitles,
                 clean_cookies_file,
+                clean_rate_limit,
                 cancel_event,
                 progress_callback,
             )
@@ -181,6 +186,7 @@ class YouTubeDownloadService:
                         clean_mode,
                         clean_audio_format,
                         clean_cookies_file,
+                        clean_rate_limit,
                         cancel_event,
                         progress_callback,
                     )
@@ -212,7 +218,7 @@ class YouTubeDownloadService:
         opts: Dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
-            "extract_flat": True,
+            "extract_flat": "in_playlist" if playlist else False,
             "noplaylist": not playlist,
         }
         clean_cookies_file = str(cookies_file or "").strip()
@@ -236,11 +242,24 @@ class YouTubeDownloadService:
         else:
             count = 1
         title = str(info.get("title") or info.get("playlist_title") or "") if isinstance(info, dict) else ""
+        preview_item = self._preview_item(info)
+        duration = self._optional_float(preview_item.get("duration") if preview_item else info.get("duration") if isinstance(info, dict) else None)
+        thumbnail = str(preview_item.get("thumbnail") or info.get("thumbnail") or "") if isinstance(info, dict) else ""
+        formats = preview_item.get("formats") if isinstance(preview_item, dict) else None
+        media_kind = self._detect_media_kind(preview_item or info)
+        source_type = "playlist" if isinstance(entries, list) or count > 1 else media_kind
         return {
             "url": clean_url,
             "title": title,
             "count": max(0, count),
             "is_playlist": bool(isinstance(entries, list) or count > 1),
+            "source_type": source_type,
+            "media_kind": media_kind,
+            "duration": duration,
+            "duration_text": format_time(duration) if duration is not None else "--:--",
+            "quality_summary": self._quality_summary(formats),
+            "thumbnail": thumbnail,
+            "extractor": str(info.get("extractor") or info.get("extractor_key") or "") if isinstance(info, dict) else "",
         }
 
     def _youtube_dl_class(self) -> Any:
@@ -265,6 +284,7 @@ class YouTubeDownloadService:
         mode: str,
         audio_format: str,
         cookies_file: str,
+        rate_limit: Optional[int],
         cancel_event: Optional[Event],
         progress_callback: Optional[ProgressCallback],
     ) -> Path:
@@ -308,6 +328,7 @@ class YouTubeDownloadService:
                             break
                         file.write(chunk)
                         downloaded += len(chunk)
+                        self._throttle_direct_download(downloaded, started, rate_limit)
                         elapsed = max(time.monotonic() - started, 0.001)
                         speed = downloaded / elapsed
                         eta = (total - downloaded) / speed if total and speed else None
@@ -393,7 +414,80 @@ class YouTubeDownloadService:
             "title": Path(name).stem or "Direct media URL",
             "count": 1,
             "is_playlist": False,
+            "source_type": "direct_file",
+            "media_kind": "audio" if suffix in AUDIO_EXTS else "video",
+            "duration": None,
+            "duration_text": "--:--",
+            "quality_summary": suffix.lstrip(".").upper() if suffix else "Direct file",
+            "thumbnail": "",
+            "extractor": "direct",
         }
+
+    def _preview_item(self, info: Any) -> Dict[str, Any]:
+        if not isinstance(info, dict):
+            return {}
+        entries = info.get("entries")
+        if isinstance(entries, list):
+            for entry in entries:
+                if isinstance(entry, dict):
+                    return entry
+            return {}
+        return info
+
+    def _detect_media_kind(self, info: Any) -> str:
+        if not isinstance(info, dict):
+            return "video"
+        ext = str(info.get("ext") or "").lower()
+        if f".{ext}" in AUDIO_EXTS:
+            return "audio"
+        if f".{ext}" in VIDEO_EXTS:
+            return "video"
+        formats = info.get("formats")
+        has_video = False
+        has_audio = False
+        if isinstance(formats, list):
+            for item in formats:
+                if not isinstance(item, dict):
+                    continue
+                vcodec = str(item.get("vcodec") or "none").lower()
+                acodec = str(item.get("acodec") or "none").lower()
+                has_video = has_video or vcodec not in {"", "none"}
+                has_audio = has_audio or acodec not in {"", "none"}
+        if has_video:
+            return "video"
+        if has_audio:
+            return "audio"
+        vcodec = str(info.get("vcodec") or "none").lower()
+        acodec = str(info.get("acodec") or "none").lower()
+        if vcodec not in {"", "none"}:
+            return "video"
+        if acodec not in {"", "none"}:
+            return "audio"
+        return "video"
+
+    def _quality_summary(self, formats: Any) -> str:
+        if not isinstance(formats, list):
+            return "Best available"
+        heights: set[int] = set()
+        audio_exts: set[str] = set()
+        for item in formats:
+            if not isinstance(item, dict):
+                continue
+            height = self._optional_int(item.get("height"))
+            if height:
+                heights.add(height)
+            vcodec = str(item.get("vcodec") or "none").lower()
+            acodec = str(item.get("acodec") or "none").lower()
+            ext = str(item.get("ext") or "").lower()
+            if vcodec in {"", "none"} and acodec not in {"", "none"} and ext:
+                audio_exts.add(ext)
+        parts: List[str] = []
+        if heights:
+            top = sorted(heights)[-3:]
+            parts.append(", ".join(f"{height}p" for height in top))
+        if audio_exts:
+            parts.append("audio: " + ", ".join(sorted(audio_exts)[:4]))
+        return " | ".join(parts) or "Best available"
 
     def _direct_response_is_supported(
         self,
@@ -583,6 +677,7 @@ class YouTubeDownloadService:
         playlist: bool,
         subtitles: bool,
         cookies_file: str,
+        rate_limit: Optional[int],
         cancel_event: Optional[Event],
         progress_callback: Optional[ProgressCallback],
     ) -> Dict[str, Any]:
@@ -602,6 +697,8 @@ class YouTubeDownloadService:
             opts["ffmpeg_location"] = self.ffmpeg_path
         if cookies_file:
             opts["cookiefile"] = cookies_file
+        if rate_limit:
+            opts["ratelimit"] = int(rate_limit)
         if subtitles:
             opts.update(
                 {
@@ -633,6 +730,22 @@ class YouTubeDownloadService:
                 }
             )
         return opts
+
+    def _throttle_direct_download(self, downloaded: int, started: float, rate_limit: Optional[int]) -> None:
+        if not rate_limit or rate_limit <= 0:
+            return
+        target_elapsed = downloaded / float(rate_limit)
+        actual_elapsed = time.monotonic() - started
+        delay = target_elapsed - actual_elapsed
+        if delay > 0:
+            time.sleep(min(delay, 1.0))
+
+    def _normalize_rate_limit(self, value: Optional[int]) -> Optional[int]:
+        try:
+            normalized = int(value or 0)
+        except (TypeError, ValueError):
+            return None
+        return normalized if normalized > 0 else None
 
     def _progress_hook(
         self,

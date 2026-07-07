@@ -8,7 +8,7 @@ ApplicationWindow {
     id: root
     visible: true
     visibility: Window.Maximized
-    minimumWidth: 1040
+    minimumWidth: 760
     minimumHeight: 700
     title: I18n.t("app.title")
     color: Theme.bgBase
@@ -24,6 +24,7 @@ ApplicationWindow {
     property bool hasBackend: backend !== null
     property url appLogoSource: Qt.resolvedUrl("../../assets/app-logo.png")
     property bool sidebarCollapsed: false
+    property bool compactMode: width < Theme.compactBreakpoint || (backend && backend.layoutMode === "compact")
     property int activeSection: 0
     property string globalSearchText: ""
     property var globalSearchResults: []
@@ -1201,6 +1202,40 @@ ApplicationWindow {
             }
 
             Panel {
+                title: "1-2-3"
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: root.compactMode ? 1 : 3
+                    rowSpacing: 8
+                    columnSpacing: 8
+                    SecondaryButton {
+                        Layout.fillWidth: true
+                        text: "1. " + I18n.t("add_files")
+                        onClicked: root.addFilesForWorkspace()
+                    }
+                    AppComboBox {
+                        id: wizardFormatCombo
+                        Layout.fillWidth: true
+                        model: root.formatOptionsFor(root.workspaceMediaType() === "all" ? "video" : root.workspaceMediaType())
+                        onActivated: {
+                            if (settingsPanel)
+                                settingsPanel.setOutputFormatFor(root.workspaceMediaType() === "all" ? "video" : root.workspaceMediaType(), currentText)
+                        }
+                    }
+                    PrimaryButton {
+                        Layout.fillWidth: true
+                        text: "3. " + I18n.t("start")
+                        enabled: backend ? (backend.queueCount > 0 && !backend.isRunning) : false
+                        onClicked: {
+                            if (settingsPanel)
+                                settingsPanel.setOutputFormatFor(root.workspaceMediaType() === "all" ? "video" : root.workspaceMediaType(), wizardFormatCombo.currentText)
+                            root.startIfValid()
+                        }
+                    }
+                }
+            }
+
+            Panel {
                 title: I18n.t("queue_tools")
                 RowLayout {
                     Layout.fillWidth: true
@@ -1784,6 +1819,9 @@ ApplicationWindow {
                             if (backend)
                                 backend.selectQueuePath(path)
                         }
+                        onOpenOutputRequested: function(path) {
+                            backend && backend.openOutputForPath(path)
+                        }
                         onQuickConvertRequested: function(path, name, mediaType) {
                             root.openQuickConvert(path, name, mediaType, index)
                         }
@@ -1972,19 +2010,33 @@ ApplicationWindow {
         title: I18n.t("youtube_download")
         property string selectedDownloadMode: "video"
 
+        function downloadOptions(urlText) {
+            return {
+                url: urlText,
+                mode: selectedDownloadMode,
+                quality: youtubeQualityCombo.currentText,
+                playlist: youtubePlaylistCheck.checked,
+                subtitles: youtubeSubtitlesCheck.checked,
+                cookies_file: youtubeCookiesField.text,
+                rate_limit_kbps: youtubeRateLimitSpin.value
+            }
+        }
+
         function startDownload(mode) {
             if (!backend)
                 return
             if (!backend.ensureOutputDirSelected())
                 return
-            backend.downloadYoutubeAdvanced({
-                url: youtubeUrlField.text,
-                mode: mode || selectedDownloadMode,
-                quality: youtubeQualityCombo.currentText,
-                playlist: youtubePlaylistCheck.checked,
-                subtitles: youtubeSubtitlesCheck.checked,
-                cookies_file: youtubeCookiesField.text
-            })
+            var options = downloadOptions(youtubeUrlField.text)
+            options.mode = mode || selectedDownloadMode
+            backend.downloadYoutubeAdvanced(options)
+        }
+
+        function appendDownloadText(value) {
+            var text = String(value || "").trim()
+            if (!text.length)
+                return
+            youtubeUrlField.text = youtubeUrlField.text.length > 0 ? youtubeUrlField.text + "\n" + text : text
         }
 
         Rectangle {
@@ -2078,6 +2130,28 @@ ApplicationWindow {
                 onClicked: backend && backend.clearYoutubeHistory()
             }
         }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            SecondaryButton {
+                Layout.fillWidth: true
+                text: "Import .txt/.csv"
+                enabled: backend ? true : false
+                onClicked: backend && backend.importDownloadUrlsFromFile(downloadOptions(""))
+            }
+            SecondaryButton {
+                Layout.fillWidth: true
+                text: backend && backend.ytdlpUpdateRunning ? "Updating yt-dlp..." : "Update yt-dlp"
+                enabled: backend ? !backend.ytdlpUpdateRunning : false
+                onClicked: backend && backend.updateYtdlp()
+            }
+            SecondaryButton {
+                Layout.fillWidth: true
+                text: "Retry failed"
+                enabled: backend ? backend.youtubeDownloadQueue.length > 0 : false
+                onClicked: backend && backend.retryFailedYoutubeDownloads()
+            }
+        }
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 6
@@ -2132,10 +2206,11 @@ ApplicationWindow {
                     var value = ""
                     if (drop.hasText)
                         value = String(drop.text || "").trim()
-                    else if (drop.hasUrls && drop.urls.length > 0)
-                        value = String(drop.urls[0] || "").trim()
-                    if (value.indexOf("http://") === 0 || value.indexOf("https://") === 0) {
-                        youtubeUrlField.text = value
+                    if (value.indexOf("http://") >= 0 || value.indexOf("https://") >= 0) {
+                        appendDownloadText(value)
+                        drop.acceptProposedAction()
+                    } else if (drop.hasUrls && drop.urls.length > 0) {
+                        backend && backend.addDroppedDownloadUrls(drop.urls, downloadOptions(""))
                         drop.acceptProposedAction()
                     }
                 }
@@ -2151,6 +2226,16 @@ ApplicationWindow {
                 id: youtubeQualityCombo
                 model: ["best", "1080p", "720p", "audio_only"]
                 currentIndex: 0
+                enabled: backend ? true : false
+            }
+            FieldLabel { text: "Speed limit KB/s" }
+            AppSpinBox {
+                id: youtubeRateLimitSpin
+                from: 0
+                to: 102400
+                stepSize: 256
+                value: 0
+                editable: true
                 enabled: backend ? true : false
             }
             FieldLabel { text: I18n.t("youtube.cookies_file") }
@@ -2205,6 +2290,78 @@ ApplicationWindow {
             font.pixelSize: Theme.fontMeta
             wrapMode: Text.WordWrap
         }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? 116 : 0
+            visible: backend ? Object.keys(backend.youtubePreviewInfo).length > 0 : false
+            radius: Theme.radiusPanel
+            color: Theme.bgSurface
+            border.width: 1
+            border.color: Theme.borderSubtle
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 10
+                Rectangle {
+                    Layout.preferredWidth: 148
+                    Layout.fillHeight: true
+                    radius: Theme.radiusSm
+                    color: Theme.input
+                    clip: true
+                    Image {
+                        anchors.fill: parent
+                        source: backend && backend.youtubePreviewInfo.thumbnail ? backend.youtubePreviewInfo.thumbnail : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        visible: source.toString().length > 0
+                    }
+                    Label {
+                        anchors.centerIn: parent
+                        width: parent.width - 16
+                        visible: !(backend && backend.youtubePreviewInfo.thumbnail)
+                        text: backend && backend.youtubePreviewInfo.source_type ? backend.youtubePreviewInfo.source_type : "URL"
+                        color: Theme.textMuted
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 5
+                    Label {
+                        Layout.fillWidth: true
+                        text: backend ? (backend.youtubePreviewInfo.title || backend.youtubePreviewInfo.error || "") : ""
+                        color: Theme.textPrimary
+                        font.pixelSize: Theme.fontSizeSm
+                        font.bold: true
+                        elide: Text.ElideRight
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: backend ? ((backend.youtubePreviewInfo.source_type || "source") + " | " + (backend.youtubePreviewInfo.duration_text || "--:--") + " | " + (backend.youtubePreviewInfo.quality_summary || "")) : ""
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.fontMeta
+                        elide: Text.ElideRight
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: backend ? ("items: " + (backend.youtubePreviewInfo.count || 1) + " | " + (backend.youtubePreviewInfo.extractor || "")) : ""
+                        color: Theme.textMuted
+                        font.family: Theme.monoFont
+                        font.pixelSize: Theme.fontMeta
+                        elide: Text.ElideRight
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        visible: backend ? !!backend.youtubePreviewInfo.hint : false
+                        text: backend ? backend.youtubePreviewInfo.hint : ""
+                        color: Theme.accentWarn
+                        font.pixelSize: Theme.fontMeta
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
+        }
         RowLayout {
             Layout.fillWidth: true
             SecondaryButton {
@@ -2236,7 +2393,7 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: backend && backend.youtubeDownloadQueue.length > 0
-                ? Math.min(420, 58 + backend.youtubeDownloadQueue.length * 94)
+                ? Math.min(480, 58 + backend.youtubeDownloadQueue.length * 112)
                 : 128
             radius: Theme.radiusPanel
             color: Theme.bgSurface
@@ -2265,7 +2422,7 @@ ApplicationWindow {
                     model: backend ? backend.youtubeDownloadQueue : []
                     delegate: Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 86
+                        Layout.preferredHeight: 104
                         radius: Theme.radiusSm
                         color: Theme.bgElevated
                         border.width: 1
@@ -2314,7 +2471,69 @@ ApplicationWindow {
                                 font.pixelSize: Theme.fontMeta
                                 elide: Text.ElideRight
                             }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.rateLimitKbps > 0 ? "Limit: " + modelData.rateLimitKbps + " KB/s" : "Limit: none"
+                                    color: Theme.textDisabled
+                                    font.family: Theme.monoFont
+                                    font.pixelSize: Theme.fontMeta
+                                    elide: Text.ElideRight
+                                }
+                                SecondaryButton {
+                                    Layout.fillWidth: false
+                                    Layout.preferredWidth: 96
+                                    text: I18n.t("retry")
+                                    visible: modelData.status === "failed" || modelData.status === "cancelled"
+                                    onClicked: backend && backend.retryYoutubeDownload(modelData.id)
+                                }
+                            }
                         }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 170
+            radius: Theme.radiusPanel
+            color: Theme.bgSurface
+            border.width: 1
+            border.color: Theme.borderSubtle
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 8
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label {
+                        Layout.fillWidth: true
+                        text: "Download log"
+                        color: Theme.textPrimary
+                        font.pixelSize: Theme.fontSizeSm
+                        font.bold: true
+                    }
+                    SecondaryButton {
+                        Layout.fillWidth: false
+                        text: I18n.t("clear")
+                        onClicked: backend && backend.clearYoutubeDownloadLog()
+                    }
+                }
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    model: backend ? backend.youtubeDownloadLog : []
+                    clip: true
+                    spacing: 4
+                    delegate: Label {
+                        width: ListView.view.width
+                        text: modelData
+                        color: modelData.indexOf("[ERROR]") >= 0 ? Theme.accentError : modelData.indexOf("[WARN]") >= 0 ? Theme.accentWarn : Theme.textSecondary
+                        font.family: Theme.monoFont
+                        font.pixelSize: Theme.fontMeta
+                        elide: Text.ElideRight
                     }
                 }
             }
@@ -2561,6 +2780,22 @@ ApplicationWindow {
             root.setComboText(cloudProviderCombo, preset.cloud_provider || "rclone")
             cloudRclonePathField.text = preset.cloud_rclone_path || "rclone"
             cloudRemotePathField.text = preset.cloud_remote_path || ""
+            root.scheduleSettingsSync()
+        }
+
+        function setOutputFormatFor(mediaType, format) {
+            if (!format || format.length === 0)
+                return
+            if (mediaType === "image")
+                root.setComboText(outImageFmt, format)
+            else if (mediaType === "audio")
+                root.setComboText(outAudioFmt, format)
+            else if (mediaType === "subtitle")
+                root.setComboText(outSubtitleFmt, format)
+            else if (mediaType === "text")
+                root.setComboText(outTextFmt, format)
+            else
+                root.setComboText(outVideoFmt, format)
             root.scheduleSettingsSync()
         }
 

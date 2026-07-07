@@ -6,6 +6,9 @@ BODY = r'''        self._youtube_history = self.settings_manager.youtube_history
         self._youtube_download_queue: List[Dict[str, Any]] = []
         self._youtube_current_download_id = ""
         self._youtube_playlist_preview = ""
+        self._youtube_preview_info: Dict[str, Any] = {}
+        self._youtube_download_log: List[str] = []
+        self._ytdlp_update_running = False
         self._ffmpeg_auto_install_running = False
         self._is_running = False
         self._is_paused = False

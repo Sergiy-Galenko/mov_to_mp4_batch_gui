@@ -200,6 +200,21 @@ def test_advanced_download_options_support_playlist_subtitles_and_cookies(tmp_pa
     assert opts["cookiefile"] == str(cookies)
 
 
+def test_download_rate_limit_is_passed_to_ytdlp(tmp_path):
+    FakeVideoYoutubeDL.instances.clear()
+
+    with patch.dict(sys.modules, {"yt_dlp": fake_module(FakeVideoYoutubeDL)}):
+        service = YouTubeDownloadService()
+        service.download(
+            "https://youtu.be/example",
+            tmp_path,
+            mode="video",
+            rate_limit=512 * 1024,
+        )
+
+    assert FakeVideoYoutubeDL.instances[0].opts["ratelimit"] == 512 * 1024
+
+
 def test_cancel_event_stops_download(tmp_path):
     cancel_event = Event()
     cancel_event.set()

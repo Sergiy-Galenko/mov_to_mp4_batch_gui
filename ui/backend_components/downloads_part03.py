@@ -25,8 +25,11 @@ BODY = r'''    @QtCore.Slot(str, bool, str)
             if bool(info.get("is_playlist")):
                 message = f"Playlist: {count} відео | {title}"
             else:
-                message = f"Preview: 1 відео | {title}"
-            self.event_queue.put(("youtube_playlist_preview_done", message))
+                duration = str(info.get("duration_text") or "--:--")
+                quality = str(info.get("quality_summary") or "Best available")
+                source_type = str(info.get("source_type") or info.get("media_kind") or "video")
+                message = f"{source_type}: {duration} | {quality} | {title}"
+            self.event_queue.put(("youtube_playlist_preview_done", message, dict(info)))
         except Exception as exc:
             self.event_queue.put(("youtube_playlist_preview_failed", str(exc) or exc.__class__.__name__))
 
@@ -39,6 +42,7 @@ BODY = r'''    @QtCore.Slot(str, bool, str)
         subtitles: bool,
         cookies_file: str,
         output_dir: Path,
+        rate_limit_kbps: int = 0,
     ) -> Dict[str, Any]:
         download_id = f"yt-{int(time.time() * 1000)}-{len(self._youtube_download_queue) + 1}"
         return {
@@ -51,6 +55,7 @@ BODY = r'''    @QtCore.Slot(str, bool, str)
             "subtitles": bool(subtitles),
             "cookiesFile": cookies_file,
             "outputDir": str(output_dir),
+            "rateLimitKbps": int(rate_limit_kbps or 0),
             "status": "queued",
             "statusText": "Queued",
             "progress": 0.0,

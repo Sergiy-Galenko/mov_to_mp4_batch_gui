@@ -101,9 +101,14 @@ The Downloads screen includes a video/source URL download panel. Paste or drag a
 - `Download video`: downloads the best practical video and adds it to the queue.
 - `Download audio`: extracts audio, defaults to MP3 behavior in the backend, and adds it to the queue.
 - Quality: `best`, `1080p`, `720p`, or `audio_only`.
+- Batch URL import from `.txt` or `.csv` files.
+- Automatic preview with detected source type, title, duration, available quality summary, and thumbnail when the source exposes one.
 - Optional playlist downloads.
 - Optional subtitle download.
 - Optional `cookies.txt` file for private, age-restricted, or account-bound videos.
+- Optional download speed limit.
+- Failed/cancelled download retry and a separate download log.
+- Built-in `yt-dlp` update button.
 - Download history for recent URLs.
 - Cancel button for an active download.
 
@@ -187,6 +192,10 @@ Cloud upload is implemented through `rclone copy` after a successful conversion.
 
 The app does not store provider secrets directly.
 
+## Reports And History
+
+Conversion history is stored locally and can be rerun or reused for settings. The latest run can be exported from Analytics as CSV, JSON, or HTML.
+
 ## CLI Mode
 
 CLI mode uses `--cli` and does not initialize PySide or QML.
@@ -222,6 +231,7 @@ Useful CLI arguments:
 - `--download-playlist`: allow playlist downloads.
 - `--download-subtitles`: download subtitles next to the media.
 - `--download-cookies`: use a Netscape `cookies.txt` file.
+- `--download-rate-limit-kbps`: limit download speed in KB/s; `0` means unlimited.
 - `--download-only`: download URL(s) and exit without conversion.
 
 ## Localization

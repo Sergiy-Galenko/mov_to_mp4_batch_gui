@@ -21,6 +21,7 @@ BODY = r'''    def _start_next_youtube_download(self) -> None:
             message=self._tr("youtube.downloading"),
             progress=0.0,
         )
+        self._append_youtube_log("INFO", f"Started: {next_item.get('url')}")
         self._set_youtube_download_state(True, 0.0, self._tr("youtube.downloading"))
         threading.Thread(
             target=self._download_youtube_async,
@@ -32,6 +33,7 @@ BODY = r'''    def _start_next_youtube_download(self) -> None:
                 bool(next_item.get("playlist")),
                 bool(next_item.get("subtitles")),
                 str(next_item.get("cookiesFile") or ""),
+                int(next_item.get("rateLimitKbps") or 0),
                 Path(str(next_item.get("outputDir") or self.outputDir)).expanduser(),
                 self._youtube_cancel_event,
             ),
@@ -46,6 +48,29 @@ BODY = r'''    def _start_next_youtube_download(self) -> None:
                 item.update(updates)
                 break
         self.youtubeDownloadChanged.emit()
+
+    def _append_youtube_log(self, level: str, message: str) -> None:
+        timestamp = time.strftime("%H:%M:%S")
+        line = f"[{timestamp}] [{str(level or 'INFO').upper()}] {message}"
+        self._youtube_download_log.append(line)
+        self._youtube_download_log = self._youtube_download_log[-300:]
+        self.youtubeDownloadChanged.emit()
+
+    def _youtube_error_hint(self, message: str) -> str:
+        text = str(message or "").lower()
+        if "yt-dlp is not installed" in text or "no module named" in text:
+            return "Встанови або онови залежності: pip install -r requirements.txt."
+        if "unsupported url" in text or "no suitable extractor" in text:
+            return "Онови yt-dlp або спробуй пряме посилання на медіафайл."
+        if "http 403" in text or "forbidden" in text or "private" in text:
+            return "Джерело обмежує доступ. Додай cookies.txt або перевір права доступу."
+        if "http 404" in text or "not found" in text:
+            return "Посилання або файл не знайдено. Перевір URL."
+        if "sign in" in text or "login" in text or "age" in text:
+            return "Для цього джерела потрібні cookies з браузера."
+        if "ffmpeg" in text:
+            return "Перевір шлях до FFmpeg у налаштуваннях."
+        return "Перевір URL, cookies, мережу або спробуй оновити yt-dlp."
 
     def _youtube_speed_text(self, speed: Optional[float]) -> str:
         if not speed:

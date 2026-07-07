@@ -5,6 +5,8 @@ import queue
 import re
 import shutil
 import subprocess
+import csv
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -33,6 +35,7 @@ from services.folder_scanner import FolderScanner
 from services.history_store import HistoryStore
 from services.media_preview_service import MediaPreviewService
 from services.preset_manager import PresetManager
+from services.report_service import ReportService
 from services.queue_manager import QueueManager
 from services.settings_manager import SettingsManager
 from services.shortcut_manager import ShortcutManager

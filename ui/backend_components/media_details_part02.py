@@ -108,6 +108,34 @@ BODY = r'''        self._refresh_size_predictions(settings_map)
         self.historyChanged.emit()
         self._append_log("INFO", "Історію запусків очищено.")
 
+    @QtCore.Slot(str)
+    def exportHistoryReport(self, fmt: str) -> None:
+        clean_fmt = str(fmt or "csv").strip().lower()
+        if clean_fmt not in {"csv", "json", "html"}:
+            clean_fmt = "csv"
+        if not self.history_store.entries:
+            QtWidgets.QMessageBox.information(None, "Report", "Історія запусків порожня.")
+            return
+        latest = self.history_store.entries[0]
+        default_path = Path(self.outputDir or str(Path.home())).expanduser() / f"conversion-report.{clean_fmt}"
+        filter_map = {
+            "csv": "CSV (*.csv)",
+            "json": "JSON (*.json)",
+            "html": "HTML (*.html)",
+        }
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(None, "Експорт звіту", str(default_path), filter_map[clean_fmt])
+        if not path:
+            return
+        ReportService.export_file(
+            Path(path),
+            list(latest.get("results") or []),
+            fmt=clean_fmt,
+            settings=dict(latest.get("settings") or {}),
+            output_dir=str(latest.get("output_dir") or ""),
+            started_at=latest.get("started_at"),
+        )
+        self._append_log("OK", f"Звіт експортовано: {path}")
+
     @QtCore.Slot(int)
     def openHistoryOutput(self, index: int) -> None:
         entry = self.history_model.entry_at(index)

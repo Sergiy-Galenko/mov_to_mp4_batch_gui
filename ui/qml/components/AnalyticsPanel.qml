@@ -76,6 +76,22 @@ Rectangle {
                     }
                 }
             }
+
+            SecondaryButton {
+                Layout.fillWidth: false
+                text: "CSV"
+                onClicked: backend && backend.exportHistoryReport("csv")
+            }
+            SecondaryButton {
+                Layout.fillWidth: false
+                text: "JSON"
+                onClicked: backend && backend.exportHistoryReport("json")
+            }
+            SecondaryButton {
+                Layout.fillWidth: false
+                text: "HTML"
+                onClicked: backend && backend.exportHistoryReport("html")
+            }
         }
 
         StackLayout {

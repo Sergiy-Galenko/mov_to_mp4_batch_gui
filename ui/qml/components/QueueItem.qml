@@ -43,6 +43,7 @@ Rectangle {
     signal skipRequested(string path)
     signal removeRequested(string path)
     signal overrideRequested(string path)
+    signal openOutputRequested(string path)
     signal quickConvertRequested(string path, string name, string mediaType)
     signal pinnedRequested(string path)
     signal priorityRequested(string path, int priority)
@@ -365,6 +366,13 @@ Rectangle {
                 Layout.fillWidth: false
                 flat: true
                 onClicked: root.overrideRequested(root.filePath)
+            }
+            GhostButton {
+                text: I18n.t("open_output")
+                visible: root.showActions && root.outputPath.length > 0
+                Layout.fillWidth: false
+                flat: true
+                onClicked: root.openOutputRequested(root.filePath)
             }
             GhostButton {
                 text: I18n.t("retry")

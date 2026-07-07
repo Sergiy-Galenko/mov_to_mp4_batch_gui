@@ -12,6 +12,7 @@ BODY = r'''            self.event_queue.put(("youtube_download_progress", downlo
                 playlist=playlist,
                 subtitles=subtitles,
                 cookies_file=cookies_file,
+                rate_limit=self._download_rate_limit_bytes(rate_limit_kbps),
                 cancel_event=cancel_event,
                 progress_callback=on_progress,
             )

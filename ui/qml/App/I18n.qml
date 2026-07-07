@@ -76,6 +76,7 @@ QtObject {
         "output_format": "Output format",
         "cancel": "Cancel",
         "stop": "Stop",
+        "open_output": "Open output",
         "status.pending": "pending",
         "status.processing": "processing",
         "status.done": "done",

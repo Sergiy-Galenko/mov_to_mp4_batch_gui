@@ -45,6 +45,15 @@ class ReportServiceTest(unittest.TestCase):
             data = json.loads(result.read_text(encoding="utf-8"))
             self.assertEqual(len(data["results"]), 3)
 
+    def test_export_html_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "report.html"
+            result = ReportService.export_file(path, self.results, fmt="html")
+            self.assertTrue(result.exists())
+            content = result.read_text(encoding="utf-8")
+            self.assertIn("<table", content)
+            self.assertIn("a.mp4", content)
+
     def test_empty_results(self) -> None:
         csv = ReportService.to_csv([])
         self.assertIn("Всього", csv)
