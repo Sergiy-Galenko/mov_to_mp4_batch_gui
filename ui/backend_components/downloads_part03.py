@@ -20,7 +20,7 @@ BODY = r'''    @QtCore.Slot(str, bool, str)
         try:
             service = YouTubeDownloadService(self.ffmpegPath or self.ffmpeg_service.ffmpeg_path)
             info = service.preview(url, playlist=playlist, cookies_file=cookies_file)
-            title = str(info.get("title") or "YouTube")
+            title = str(info.get("title") or "Source")
             count = int(info.get("count") or 0)
             if bool(info.get("is_playlist")):
                 message = f"Playlist: {count} відео | {title}"

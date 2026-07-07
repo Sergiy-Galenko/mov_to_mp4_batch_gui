@@ -55,7 +55,7 @@ BODY = r'''    def _handle_youtube_event(self, event: tuple) -> None:
                 self._remember_folder(remember_folder)
             self._add_paths(paths)
             self.toastRequested.emit(self._tr("youtube.done"))
-            self._send_push_notification("YouTube", f"Завантажено {len(paths)} файл(ів).")
+            self._send_push_notification("Downloads", f"Завантажено {len(paths)} файл(ів).")
             self._youtube_current_download_id = ""
             self._youtube_cancel_event = None
             self._start_next_youtube_download()
@@ -66,7 +66,7 @@ BODY = r'''    def _handle_youtube_event(self, event: tuple) -> None:
             self._set_youtube_download_state(False, 0.0, self._tr("youtube.cancelled"))
             self._append_log("WARN", self._tr("youtube.cancelled_detail", error=msg))
             self.toastRequested.emit(self._tr("youtube.cancelled"))
-            self._send_push_notification("YouTube", self._tr("youtube.cancelled"), "warning")
+            self._send_push_notification("Downloads", self._tr("youtube.cancelled"), "warning")
             self._youtube_current_download_id = ""
             self._youtube_cancel_event = None
             self._start_next_youtube_download()
@@ -77,7 +77,7 @@ BODY = r'''    def _handle_youtube_event(self, event: tuple) -> None:
             self._set_youtube_download_state(False, 0.0, self._tr("youtube.failed"))
             self._append_log("ERROR", self._tr("youtube.failed_detail", error=msg))
             self.toastRequested.emit(self._tr("youtube.failed"))
-            self._send_push_notification("YouTube", str(msg or self._tr("youtube.failed")), "error")
+            self._send_push_notification("Downloads", str(msg or self._tr("youtube.failed")), "error")
             self._youtube_current_download_id = ""
             self._youtube_cancel_event = None
             self._start_next_youtube_download()

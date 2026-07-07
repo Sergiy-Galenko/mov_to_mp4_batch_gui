@@ -13,12 +13,12 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 - Batch conversion for video, image, audio, subtitle, and text files with automatic media-type aware output formats.
 - Right-click quick conversion: choose only the output format for one queued file and convert it immediately.
 - Queue controls for retry, skip, remove, reorder, multi-select, batch remove, and per-file overrides.
-- Explicit output-folder selection before any conversion or YouTube download starts.
+- Explicit output-folder selection before any conversion or URL download starts.
 - Presets for common formats and platform targets (iPhone, PlayStation 5, etc).
 - FFmpeg/FFprobe integration for metadata, thumbnails, progress, ETA, and previews.
 - Built-in document conversion between plain text, PDF, Word, Excel, PowerPoint, and OpenDocument-style formats; text/document-only conversion does not require FFmpeg.
 - Automatic FFmpeg & Python dependency bootstrap on Windows x64.
-- YouTube download support through `yt-dlp`: download a video or extract audio into the queue.
+- Video/source URL download support through `yt-dlp`, with direct media URL fallback: download a video or extract audio into the queue.
 - Smart Convert mode for per-file codec/CRF/preset recommendations, remux detection, two-pass target-size encoding, quality checks, and A/B samples.
 - Lightweight editor filters for deinterlace, stabilization, denoise, color correction, LUT files, and speed changes.
 - Subtitle tools for offset adjustment and styled burn-in output.
@@ -32,10 +32,10 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 ## Requirements
 
 - Python `3.13+`
-- FFmpeg, required for video, photo, audio, subtitle, YouTube audio extraction, and media merge workflows
+- FFmpeg, required for video, photo, audio, subtitle, URL audio extraction, and media merge workflows
 - FFprobe, recommended for metadata, ETA, thumbnails, and analytics
 - PySide6
-- yt-dlp, used for YouTube and other supported video-site downloads
+- yt-dlp, used for supported video-site downloads
 - Optional: `rclone`, used for Google Drive, OneDrive, Dropbox, S3/MinIO, FTP, and SFTP uploads
 
 Install dependencies:
@@ -94,9 +94,9 @@ The top toolbar includes focused workspace modes:
 
 The default `Conversion` mode still shows every supported file type in one queue.
 
-## YouTube Downloads
+## Video URL Downloads
 
-The Downloads screen includes a YouTube download panel. Paste or drag a URL into the URL field and choose:
+The Downloads screen includes a video/source URL download panel. Paste or drag a URL into the URL field and choose:
 
 - `Download video`: downloads the best practical video and adds it to the queue.
 - `Download audio`: extracts audio, defaults to MP3 behavior in the backend, and adds it to the queue.
@@ -107,7 +107,7 @@ The Downloads screen includes a YouTube download panel. Paste or drag a URL into
 - Download history for recent URLs.
 - Cancel button for an active download.
 
-Downloaded files are saved to the configured output directory. Audio extraction and some video merges require FFmpeg, so keep the FFmpeg path configured.
+The app uses `yt-dlp` for supported video sites and falls back to plain HTTP(S) for direct media links such as `.mp4`, `.mov`, `.webm`, `.mp3`, or `.m4a`. DRM-protected streams, paywalled content, or sources that require bypassing access controls are not supported. Downloaded files are saved to the configured output directory. Audio extraction and some video merges require FFmpeg, so keep the FFmpeg path configured.
 
 If no output folder has been selected yet, the GUI asks for it before starting the download.
 
@@ -215,7 +215,7 @@ Useful CLI arguments:
 - `--cpu-load-limit` and `--gpu-load-limit`: delay new tasks when system load is above the limit.
 - `--ffmpeg` and `--ffprobe`: set explicit binary paths.
 - `--language`: choose `uk`, `en`, `pl`, or `de`.
-- `--download-url`: download a YouTube/video-site URL before conversion, or download only when no `--input` is provided.
+- `--download-url`: download a video/source URL before conversion, or download only when no `--input` is provided.
 - `--download-mode`: choose `video` or `audio`.
 - `--download-quality`: choose `best`, `1080p`, `720p`, or `audio_only`.
 - `--download-audio-format`: choose `mp3`, `m4a`, `opus`, `wav`, `flac`, or `aac`.
@@ -248,7 +248,7 @@ mov_to_mp4_batch_gui/
   requirements-dev.txt
   pytest.ini
   app/                    # config, models, presets, settings
-  services/               # FFmpeg, conversion, text conversion, YouTube download, transcription, validation
+  services/               # FFmpeg, conversion, text conversion, URL download, transcription, validation
   ui/                     # Python backend and QML UI
     backend.py
     i18n/

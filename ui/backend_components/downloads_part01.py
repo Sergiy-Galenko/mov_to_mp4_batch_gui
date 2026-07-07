@@ -78,7 +78,7 @@ BODY = r'''    @QtCore.Slot()
     @QtCore.Slot("QVariantMap")
     def downloadYoutubeAdvanced(self, options: Dict[str, Any]) -> None:
         payload = dict(options or {})
-        clean_url = str(payload.get("url") or "").strip()
+        url_text = str(payload.get("url") or "").strip()
         quality = str(payload.get("quality") or "best").strip().lower()
         clean_mode = str(payload.get("mode") or "").strip().lower()
         if clean_mode not in {"audio", "video"}:
@@ -86,7 +86,8 @@ BODY = r'''    @QtCore.Slot()
         playlist = bool(payload.get("playlist"))
         subtitles = bool(payload.get("subtitles"))
         cookies_file = str(payload.get("cookies_file") or self._youtube_cookies_path or "").strip()
-        if not clean_url:
+        urls = self._split_download_urls(url_text)
+        if not urls:
             self._append_log("WARN", self._tr("youtube.empty_url"))
             return
         if not self._ensure_output_dir_selected(prompt=True):
@@ -99,13 +100,29 @@ BODY = r'''    @QtCore.Slot()
             self._append_log("ERROR", self._tr("backend.output_dir_error", error=exc))
             return
 
-        item = self._create_youtube_download_item(clean_url, clean_mode, quality, playlist, subtitles, cookies_file, output_dir)
-        self._youtube_download_queue.append(item)
+        for clean_url in urls:
+            item = self._create_youtube_download_item(clean_url, clean_mode, quality, playlist, subtitles, cookies_file, output_dir)
+            self._youtube_download_queue.append(item)
         self._youtube_playlist_preview = ""
         self.youtubeDownloadChanged.emit()
-        self._append_log("INFO", f"YouTube queued: {clean_url}")
+        self._append_log("INFO", f"Download queued: {len(urls)} URL(s)")
         if not self._youtube_download_running:
             self._start_next_youtube_download()
+
+    def _split_download_urls(self, text: str) -> List[str]:
+        raw = str(text or "").strip()
+        if not raw:
+            return []
+        matches = [item.rstrip(".,;") for item in re.findall(r"https?://\S+", raw, flags=re.IGNORECASE)]
+        if matches:
+            seen: set[str] = set()
+            urls: List[str] = []
+            for item in matches:
+                if item not in seen:
+                    urls.append(item)
+                    seen.add(item)
+            return urls
+        return [raw]
 
     @QtCore.Slot()
     def cancelYoutubeDownload(self) -> None:

@@ -1709,7 +1709,7 @@ ApplicationWindow {
                         SecondaryButton {
                             Layout.fillWidth: false
                             Layout.preferredWidth: 150
-                            text: "YouTube URL"
+                            text: I18n.t("youtube_url")
                             onClicked: root.openTopMode("downloads")
                         }
                     }
@@ -2192,7 +2192,7 @@ ApplicationWindow {
             SecondaryButton {
                 Layout.fillWidth: false
                 Layout.preferredWidth: 150
-                text: "Preview playlist"
+                text: I18n.t("youtube.preview_source")
                 enabled: backend && String(youtubeUrlField.text).trim().length > 0
                 onClicked: backend && backend.previewYoutubePlaylist(youtubeUrlField.text, youtubePlaylistCheck.checked, youtubeCookiesField.text)
             }

@@ -42,7 +42,7 @@ BODY = r'''        return self.shortcut_manager.all_shortcuts()
 
         for url in self._youtube_history:
             if needle in str(url).lower():
-                add("YouTube", str(url), "Відкрити Downloads", 4)
+                add("URL", str(url), "Відкрити Downloads", 4)
 
         for entry in self.history_store.entries[:30]:
             started = time.strftime("%Y-%m-%d %H:%M", time.localtime(entry.get("started_at", 0) or 0))
@@ -57,7 +57,7 @@ BODY = r'''        return self.shortcut_manager.all_shortcuts()
         quick_targets = [
             ("Конвертація", "Черга файлів", 0, ""),
             ("Монтаж", "Відео-редактор", 5, "video_editor"),
-            ("Downloads", "YouTube завантаження", 4, ""),
+            ("Downloads", "Завантаження з URL", 4, ""),
             ("Аналітика", "Графіки та історія", 1, ""),
             ("FFmpeg", "Шлях, кодеки, watch folder", 3, ""),
             ("Налаштування", "Параметри конвертації", 5, "run"),

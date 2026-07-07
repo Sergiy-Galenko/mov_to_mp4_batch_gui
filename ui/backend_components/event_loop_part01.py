@@ -38,21 +38,21 @@ BODY = r'''    def _poll_events(self) -> None:
                     self._add_paths(paths)
                     self.toastRequested.emit(self._tr("youtube.done"))
                     file_word = "файл" if len(paths) == 1 else "файлів"
-                    self._send_push_notification("YouTube", f"Завантажено {len(paths)} {file_word}.")
+                    self._send_push_notification("Downloads", f"Завантажено {len(paths)} {file_word}.")
                     self._youtube_cancel_event = None
                 elif etype == "youtube_download_cancelled":
                     _, msg = event
                     self._set_youtube_download_state(False, 0.0, self._tr("youtube.cancelled"))
                     self._append_log("WARN", self._tr("youtube.cancelled_detail", error=msg))
                     self.toastRequested.emit(self._tr("youtube.cancelled"))
-                    self._send_push_notification("YouTube", self._tr("youtube.cancelled"), "warning")
+                    self._send_push_notification("Downloads", self._tr("youtube.cancelled"), "warning")
                     self._youtube_cancel_event = None
                 elif etype == "youtube_download_failed":
                     _, msg = event
                     self._set_youtube_download_state(False, 0.0, self._tr("youtube.failed"))
                     self._append_log("ERROR", self._tr("youtube.failed_detail", error=msg))
                     self.toastRequested.emit(self._tr("youtube.failed"))
-                    self._send_push_notification("YouTube", str(msg or self._tr("youtube.failed")), "error")
+                    self._send_push_notification("Downloads", str(msg or self._tr("youtube.failed")), "error")
                     self._youtube_cancel_event = None
                 elif etype == "progress":
                     if len(event) >= 8:

@@ -78,7 +78,7 @@ BODY = r'''    @QtCore.Property(str, notify=queueStatsChanged)
             self._add_paths(paths)
             self._append_log("OK", f"Додано з буферу: {len(paths)} файлів")
         if urls:
-            self._append_log("INFO", f"URL з буферу: {len(urls)} (використай YouTube для завантаження)")
+            self._append_log("INFO", f"URL з буферу: {len(urls)} (відкрий Downloads для завантаження)")
         if not paths and not urls:
             self._append_log("WARN", "Не знайдено дійсних шляхів або URL у буфері обміну.")
 

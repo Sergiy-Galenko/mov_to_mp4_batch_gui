@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import http.cookiejar
+import mimetypes
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
@@ -35,6 +41,35 @@ class DownloadProgress:
 class YouTubeDownloadService:
     AUDIO_FORMATS = {"mp3", "m4a", "opus", "wav", "flac", "aac"}
     QUALITY_OPTIONS = {"best", "1080p", "720p", "audio_only"}
+    DIRECT_MEDIA_EXTS = VIDEO_EXTS | AUDIO_EXTS
+    DIRECT_CONTENT_TYPE_EXTS = {
+        "audio/aac": ".aac",
+        "audio/flac": ".flac",
+        "audio/mpeg": ".mp3",
+        "audio/mp4": ".m4a",
+        "audio/ogg": ".ogg",
+        "audio/opus": ".opus",
+        "audio/wav": ".wav",
+        "audio/webm": ".webm",
+        "audio/x-aiff": ".aiff",
+        "audio/x-flac": ".flac",
+        "audio/x-m4a": ".m4a",
+        "audio/x-ms-wma": ".wma",
+        "audio/x-wav": ".wav",
+        "video/avi": ".avi",
+        "video/mp2t": ".m2ts",
+        "video/mp4": ".mp4",
+        "video/mpeg": ".mpg",
+        "video/quicktime": ".mov",
+        "video/webm": ".webm",
+        "video/x-flv": ".flv",
+        "video/x-m4v": ".m4v",
+        "video/x-matroska": ".mkv",
+        "video/x-ms-wmv": ".wmv",
+        "video/x-msvideo": ".avi",
+        "application/mp4": ".mp4",
+        "application/ogg": ".ogg",
+    }
 
     def __init__(self, ffmpeg_path: Optional[str] = None) -> None:
         self.ffmpeg_path = str(ffmpeg_path or "").strip()
@@ -93,7 +128,7 @@ class YouTubeDownloadService:
     ) -> List[Path]:
         clean_url = str(url or "").strip()
         if not clean_url:
-            raise YouTubeDownloadError("YouTube URL is empty.")
+            raise YouTubeDownloadError("Video/source URL is empty.")
 
         clean_quality = self._normalize_quality(quality)
         clean_mode = "audio" if str(mode or "").lower() == "audio" or clean_quality == "audio_only" else "video"
@@ -103,20 +138,21 @@ class YouTubeDownloadService:
         output_dir.mkdir(parents=True, exist_ok=True)
         before = self._snapshot_files(output_dir)
 
-        YoutubeDL = self._youtube_dl_class()
-        opts = self._options(
-            output_dir,
-            clean_mode,
-            clean_audio_format,
-            clean_quality,
-            playlist,
-            subtitles,
-            clean_cookies_file,
-            cancel_event,
-            progress_callback,
-        )
+        ytdlp_error: Optional[YouTubeDownloadError] = None
         prepared_path: Optional[Path] = None
         try:
+            YoutubeDL = self._youtube_dl_class()
+            opts = self._options(
+                output_dir,
+                clean_mode,
+                clean_audio_format,
+                clean_quality,
+                playlist,
+                subtitles,
+                clean_cookies_file,
+                cancel_event,
+                progress_callback,
+            )
             with YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(clean_url, download=True)
                 try:
@@ -125,16 +161,42 @@ class YouTubeDownloadService:
                     prepared_path = None
         except YouTubeDownloadCancelled:
             raise
-        except YouTubeDownloadError:
-            raise
+        except YouTubeDownloadError as exc:
+            ytdlp_error = exc
         except Exception as exc:
-            raise YouTubeDownloadError(str(exc) or exc.__class__.__name__) from exc
+            ytdlp_error = YouTubeDownloadError(str(exc) or exc.__class__.__name__)
+        else:
+            candidates = self._candidate_paths(info, prepared_path, clean_mode, clean_audio_format)
+            output_paths = self._find_output_files(output_dir, before, candidates, clean_mode)
+            if output_paths:
+                return output_paths
+            ytdlp_error = YouTubeDownloadError("Download finished, but output file was not found.")
 
-        candidates = self._candidate_paths(info, prepared_path, clean_mode, clean_audio_format)
-        output_paths = self._find_output_files(output_dir, before, candidates, clean_mode)
-        if not output_paths:
-            raise YouTubeDownloadError("Download finished, but output file was not found.")
-        return output_paths
+        if self._can_try_direct_download(clean_url, clean_mode, playlist, subtitles):
+            try:
+                return [
+                    self._download_direct_media(
+                        clean_url,
+                        output_dir,
+                        clean_mode,
+                        clean_audio_format,
+                        clean_cookies_file,
+                        cancel_event,
+                        progress_callback,
+                    )
+                ]
+            except YouTubeDownloadCancelled:
+                raise
+            except YouTubeDownloadError as direct_exc:
+                if ytdlp_error:
+                    raise YouTubeDownloadError(
+                        f"{ytdlp_error} Direct media fallback failed: {direct_exc}"
+                    ) from direct_exc
+                raise
+
+        if ytdlp_error:
+            raise ytdlp_error
+        raise YouTubeDownloadError("Download failed.")
 
     def preview(
         self,
@@ -145,9 +207,8 @@ class YouTubeDownloadService:
     ) -> Dict[str, Any]:
         clean_url = str(url or "").strip()
         if not clean_url:
-            raise YouTubeDownloadError("YouTube URL is empty.")
+            raise YouTubeDownloadError("Video/source URL is empty.")
 
-        YoutubeDL = self._youtube_dl_class()
         opts: Dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
@@ -158,9 +219,13 @@ class YouTubeDownloadService:
         if clean_cookies_file:
             opts["cookiefile"] = clean_cookies_file
         try:
+            YoutubeDL = self._youtube_dl_class()
             with YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(clean_url, download=False)
         except Exception as exc:
+            direct_preview = self._direct_preview(clean_url)
+            if direct_preview:
+                return direct_preview
             raise YouTubeDownloadError(str(exc) or exc.__class__.__name__) from exc
 
         entries = info.get("entries") if isinstance(info, dict) else None
@@ -184,6 +249,330 @@ class YouTubeDownloadService:
         except ImportError as exc:
             raise YouTubeDownloadError("yt-dlp is not installed. Run: pip install -r requirements.txt") from exc
         return YoutubeDL
+
+    def _can_try_direct_download(self, url: str, mode: str, playlist: bool, subtitles: bool) -> bool:
+        return (
+            not playlist
+            and not subtitles
+            and mode in {"audio", "video"}
+            and self._is_http_url(url)
+        )
+
+    def _download_direct_media(
+        self,
+        url: str,
+        output_dir: Path,
+        mode: str,
+        audio_format: str,
+        cookies_file: str,
+        cancel_event: Optional[Event],
+        progress_callback: Optional[ProgressCallback],
+    ) -> Path:
+        tmp_path: Optional[Path] = None
+        try:
+            with self._open_direct_url(url, cookies_file) as response:
+                headers = getattr(response, "headers", {})
+                content_type = self._content_type(headers)
+                if not self._direct_response_is_supported(url, headers, content_type, mode):
+                    raise YouTubeDownloadError(
+                        "URL does not point to a supported downloadable media file for this mode."
+                    )
+
+                filename = self._direct_filename(url, headers, content_type, mode, audio_format)
+                output_path = self._unique_output_path(output_dir / filename)
+                tmp_path = output_path.with_suffix(output_path.suffix + ".part")
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+                total = self._optional_int(self._header_value(headers, "Content-Length"))
+                downloaded = 0
+                started = time.monotonic()
+                self._emit_direct_progress(
+                    progress_callback,
+                    "downloading",
+                    downloaded,
+                    total,
+                    None,
+                    None,
+                    str(output_path),
+                )
+
+                with tmp_path.open("wb") as file:
+                    while True:
+                        if cancel_event and cancel_event.is_set():
+                            raise YouTubeDownloadCancelled("Download cancelled.")
+                        chunk = response.read(256 * 1024)
+                        if not chunk:
+                            break
+                        file.write(chunk)
+                        downloaded += len(chunk)
+                        elapsed = max(time.monotonic() - started, 0.001)
+                        speed = downloaded / elapsed
+                        eta = (total - downloaded) / speed if total and speed else None
+                        self._emit_direct_progress(
+                            progress_callback,
+                            "downloading",
+                            downloaded,
+                            total,
+                            speed,
+                            eta,
+                            str(output_path),
+                        )
+
+                tmp_path.replace(output_path)
+                self._emit_direct_progress(
+                    progress_callback,
+                    "finished",
+                    downloaded,
+                    total or downloaded,
+                    None,
+                    None,
+                    str(output_path),
+                )
+                return output_path
+        except YouTubeDownloadCancelled:
+            if tmp_path and tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
+            raise
+        except urllib.error.HTTPError as exc:
+            raise YouTubeDownloadError(f"HTTP {exc.code}: {exc.reason}") from exc
+        except urllib.error.URLError as exc:
+            reason = getattr(exc, "reason", exc)
+            raise YouTubeDownloadError(str(reason) or exc.__class__.__name__) from exc
+        except OSError as exc:
+            raise YouTubeDownloadError(str(exc) or exc.__class__.__name__) from exc
+
+    def _open_direct_url(self, url: str, cookies_file: str) -> Any:
+        parsed = urllib.parse.urlparse(url)
+        origin = f"{parsed.scheme}://{parsed.netloc}/" if parsed.scheme and parsed.netloc else url
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/126.0 Safari/537.36"
+                ),
+                "Accept": "video/*,audio/*,*/*;q=0.8",
+                "Referer": origin,
+            },
+        )
+        opener = self._direct_opener(cookies_file)
+        return opener.open(request, timeout=60)
+
+    def _direct_opener(self, cookies_file: str) -> Any:
+        clean_cookies_file = str(cookies_file or "").strip()
+        if not clean_cookies_file:
+            return urllib.request.build_opener()
+
+        cookie_path = Path(clean_cookies_file).expanduser()
+        if not cookie_path.is_file():
+            raise YouTubeDownloadError(f"Cookies file was not found: {cookie_path}")
+
+        jar = http.cookiejar.MozillaCookieJar(str(cookie_path))
+        try:
+            jar.load(ignore_discard=True, ignore_expires=True)
+        except Exception as exc:
+            raise YouTubeDownloadError(f"Could not load cookies file: {exc}") from exc
+        return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+
+    def _direct_preview(self, url: str) -> Optional[Dict[str, Any]]:
+        if not self._is_http_url(url):
+            return None
+        name = self._filename_from_url(url)
+        suffix = Path(name).suffix.lower()
+        if suffix not in self.DIRECT_MEDIA_EXTS:
+            return None
+        return {
+            "url": url,
+            "title": Path(name).stem or "Direct media URL",
+            "count": 1,
+            "is_playlist": False,
+        }
+
+    def _direct_response_is_supported(
+        self,
+        url: str,
+        headers: Any,
+        content_type: str,
+        mode: str,
+    ) -> bool:
+        allowed_exts = AUDIO_EXTS if mode == "audio" else VIDEO_EXTS
+        content_ext = self._extension_for_content_type(content_type)
+        header_name = self._filename_from_content_disposition(headers)
+        header_ext = Path(header_name).suffix.lower() if header_name else ""
+        url_ext = self._url_suffix(url)
+
+        if content_type.startswith("text/") or content_type in {
+            "application/json",
+            "application/xml",
+            "text/html",
+        }:
+            return False
+        if content_type.startswith("video/"):
+            return mode == "video"
+        if content_type.startswith("audio/"):
+            return mode == "audio"
+        if header_ext in allowed_exts:
+            return True
+        if url_ext in allowed_exts and not content_type:
+            return True
+        if url_ext in allowed_exts and content_type in {"application/octet-stream", "binary/octet-stream"}:
+            return True
+        if content_ext:
+            return content_ext in allowed_exts
+        return False
+
+    def _direct_filename(
+        self,
+        url: str,
+        headers: Any,
+        content_type: str,
+        mode: str,
+        audio_format: str,
+    ) -> str:
+        raw_name = self._filename_from_content_disposition(headers) or self._filename_from_url(url)
+        filename = self._sanitize_filename(raw_name)
+        ext = Path(filename).suffix.lower()
+        allowed_exts = AUDIO_EXTS if mode == "audio" else VIDEO_EXTS
+        guessed_ext = self._extension_for_content_type(content_type)
+        if ext not in allowed_exts:
+            stem = Path(filename).stem or ("audio" if mode == "audio" else "video")
+            fallback_ext = guessed_ext if guessed_ext in allowed_exts else f".{audio_format}" if mode == "audio" else ".mp4"
+            filename = self._sanitize_filename(f"{stem}{fallback_ext}")
+        return filename
+
+    def _filename_from_content_disposition(self, headers: Any) -> str:
+        value = self._header_value(headers, "Content-Disposition")
+        if not value:
+            return ""
+        filename = ""
+        encoded_filename = ""
+        for part in value.split(";")[1:]:
+            key, separator, raw_part_value = part.strip().partition("=")
+            if not separator:
+                continue
+            key = key.strip().lower()
+            part_value = raw_part_value.strip().strip('"')
+            if key == "filename*":
+                encoded_filename = part_value
+            elif key == "filename":
+                filename = part_value
+
+        if encoded_filename:
+            charset, separator, encoded_value = encoded_filename.partition("''")
+            if separator:
+                try:
+                    return self._last_path_segment(
+                        urllib.parse.unquote(encoded_value, encoding=charset or "utf-8")
+                    )
+                except LookupError:
+                    return self._last_path_segment(urllib.parse.unquote(encoded_value))
+            return self._last_path_segment(urllib.parse.unquote(encoded_filename))
+        return self._last_path_segment(filename)
+
+    def _filename_from_url(self, url: str) -> str:
+        path = urllib.parse.urlparse(url).path
+        name = self._last_path_segment(urllib.parse.unquote(path))
+        return name or "downloaded-media"
+
+    def _last_path_segment(self, value: str) -> str:
+        normalized = str(value or "").replace("\\", "/")
+        return normalized.rsplit("/", 1)[-1].strip()
+
+    def _sanitize_filename(self, value: str) -> str:
+        name = self._last_path_segment(value)
+        invalid = '<>:"/\\|?*'
+        cleaned = "".join("_" if char in invalid or ord(char) < 32 else char for char in name)
+        cleaned = cleaned.strip().strip(".")
+        if not cleaned:
+            cleaned = "downloaded-media"
+        if len(cleaned) > 180:
+            path = Path(cleaned)
+            suffix = path.suffix
+            cleaned = f"{path.stem[: max(1, 180 - len(suffix))]}{suffix}"
+        return cleaned
+
+    def _unique_output_path(self, path: Path) -> Path:
+        if not path.exists():
+            return path
+        stem = path.stem
+        suffix = path.suffix
+        for index in range(1, 10000):
+            candidate = path.with_name(f"{stem} ({index}){suffix}")
+            if not candidate.exists():
+                return candidate
+        raise YouTubeDownloadError(f"Could not find a free output filename for {path.name}.")
+
+    def _extension_for_content_type(self, content_type: str) -> str:
+        normalized = str(content_type or "").split(";", 1)[0].strip().lower()
+        if not normalized:
+            return ""
+        mapped = self.DIRECT_CONTENT_TYPE_EXTS.get(normalized)
+        if mapped:
+            return mapped
+        guessed = mimetypes.guess_extension(normalized) or ""
+        return guessed.lower()
+
+    def _content_type(self, headers: Any) -> str:
+        return str(self._header_value(headers, "Content-Type") or "").split(";", 1)[0].strip().lower()
+
+    def _header_value(self, headers: Any, name: str) -> str:
+        try:
+            return str(headers.get(name) or headers.get(name.lower()) or "")
+        except AttributeError:
+            return ""
+
+    def _url_suffix(self, url: str) -> str:
+        return Path(urllib.parse.urlparse(url).path).suffix.lower()
+
+    def _is_http_url(self, url: str) -> bool:
+        parsed = urllib.parse.urlparse(str(url or "").strip())
+        return parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc)
+
+    def _emit_direct_progress(
+        self,
+        callback: Optional[ProgressCallback],
+        status: str,
+        downloaded: int,
+        total: Optional[int],
+        speed: Optional[float],
+        eta: Optional[float],
+        filename: str,
+    ) -> None:
+        if not callback:
+            return
+        percent = downloaded / total if total else None
+        if status == "finished":
+            percent = 1.0
+            message = f"Finished: {Path(filename).name}" if filename else "Finished."
+        elif percent is not None:
+            message = f"{percent * 100:.1f}%"
+            if total:
+                message += f" of {format_bytes(total)}"
+            if speed:
+                message += f" at {format_bytes(int(speed))}/s"
+            if eta is not None:
+                message += f", ETA {format_time(eta)}"
+        else:
+            message = "Downloading direct media..."
+        callback(
+            DownloadProgress(
+                status=status,
+                percent=percent,
+                downloaded_bytes=downloaded,
+                total_bytes=total,
+                speed=speed,
+                eta=eta,
+                filename=filename,
+                message=message,
+            )
+        )
 
     def _options(
         self,

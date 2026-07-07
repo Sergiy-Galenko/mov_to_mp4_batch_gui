@@ -88,6 +88,37 @@ class FakePlaylistYoutubeDL(FakeVideoYoutubeDL):
         return str(Path(self.opts["paths"]["home"]) / "playlist.mp4")
 
 
+class FakeFailingYoutubeDL(FakeVideoYoutubeDL):
+    instances = []
+
+    def extract_info(self, url, download):
+        self.url = url
+        self.download = download
+        raise RuntimeError("unsupported URL")
+
+
+class FakeDirectResponse:
+    def __init__(self, data: bytes, headers: dict[str, str]):
+        self._data = data
+        self._offset = 0
+        self.headers = headers
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def read(self, size=-1):
+        if self._offset >= len(self._data):
+            return b""
+        if size is None or size < 0:
+            size = len(self._data) - self._offset
+        chunk = self._data[self._offset : self._offset + size]
+        self._offset += len(chunk)
+        return chunk
+
+
 def fake_module(youtube_dl_class):
     module = types.ModuleType("yt_dlp")
     module.YoutubeDL = youtube_dl_class
@@ -181,3 +212,61 @@ def test_cancel_event_stops_download(tmp_path):
                 tmp_path,
                 cancel_event=cancel_event,
             )
+
+
+def test_direct_media_fallback_downloads_plain_http_video(tmp_path):
+    progress_events: list[DownloadProgress] = []
+    response = FakeDirectResponse(
+        b"direct-video",
+        {
+            "Content-Type": "video/mp4",
+            "Content-Length": str(len(b"direct-video")),
+        },
+    )
+
+    with patch.dict(sys.modules, {"yt_dlp": fake_module(FakeFailingYoutubeDL)}):
+        service = YouTubeDownloadService()
+        with patch.object(service, "_open_direct_url", return_value=response):
+            outputs = service.download_many(
+                "https://cdn.example.com/media/source",
+                tmp_path,
+                mode="video",
+                progress_callback=progress_events.append,
+            )
+
+    assert outputs == [tmp_path / "source.mp4"]
+    assert outputs[0].read_bytes() == b"direct-video"
+    assert progress_events[-1].percent == 1.0
+
+
+def test_direct_media_fallback_uses_content_disposition_filename(tmp_path):
+    response = FakeDirectResponse(
+        b"direct-video",
+        {
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": 'attachment; filename="camera export.mkv"',
+            "Content-Length": str(len(b"direct-video")),
+        },
+    )
+
+    with patch.dict(sys.modules, {"yt_dlp": None}):
+        service = YouTubeDownloadService()
+        with patch.object(service, "_open_direct_url", return_value=response):
+            output = service.download(
+                "https://cdn.example.com/download?id=42",
+                tmp_path,
+                mode="video",
+            )
+
+    assert output == tmp_path / "camera export.mkv"
+    assert output.read_bytes() == b"direct-video"
+
+
+def test_direct_preview_handles_media_url_without_ytdlp():
+    with patch.dict(sys.modules, {"yt_dlp": None}):
+        service = YouTubeDownloadService()
+        preview = service.preview("https://cdn.example.com/path/clip.webm")
+
+    assert preview["title"] == "clip"
+    assert preview["count"] == 1
+    assert preview["is_playlist"] is False
