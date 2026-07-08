@@ -1,22 +1,98 @@
-MIT License
+Source-Available Non-Commercial License
 
-Copyright (c) 2026 Serhii
+Copyright (c) 2026 Serhii. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This license governs use of the software, source code, binaries,
+documentation, assets, and related materials distributed with this project
+(the "Software").
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Non-Commercial License Grant
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Subject to the terms of this license, the copyright holder grants you a
+limited, worldwide, non-exclusive, non-transferable, revocable license to use,
+copy, study, modify, and distribute the Software solely for personal,
+educational, research, testing, and other non-commercial purposes.
 
+2. Commercial Use Requires a Purchased License
+
+Commercial use of the Software is not permitted under this license.
+
+The right to use the Software for commercial purposes may be purchased from the
+copyright holder under a separate written commercial license agreement.
+Commercial rights are granted only after the copyright holder accepts the
+commercial license terms and any required license fee has been paid.
+
+Commercial use includes, without limitation:
+
+- using the Software in a business, company, agency, studio, production
+  workflow, paid service, or revenue-generating activity;
+- distributing, selling, sublicensing, leasing, or otherwise monetizing the
+  Software or modified versions of it;
+- using the Software to provide services, deliverables, automation, hosting,
+  support, consulting, or internal tooling for commercial benefit;
+- bundling the Software with a commercial product or service.
+
+To request or purchase a commercial license, contact the copyright holder or
+the project maintainer identified in the repository.
+
+3. Distribution Conditions
+
+Any copy or substantial portion of the Software distributed under this license
+must include this license text and the copyright notice above.
+
+Modified versions may be distributed only for non-commercial purposes and must
+clearly identify that changes were made.
+
+4. Ownership
+
+The Software is licensed, not sold. The copyright holder retains all ownership,
+copyright, patent, trademark, trade secret, and other intellectual property
+rights in and to the Software, except for the limited rights expressly granted
+by this license.
+
+5. Restrictions
+
+You may not:
+
+- use the Software for commercial purposes without a separate purchased
+  commercial license;
+- remove or alter copyright, license, attribution, or proprietary notices;
+- misrepresent the origin of the Software;
+- use the Software in any way that violates applicable law or third-party
+  rights.
+
+6. Third-Party Components
+
+Third-party libraries, tools, codecs, frameworks, or other dependencies used by
+the Software may be governed by their own license terms. This license does not
+grant rights to any third-party materials beyond the rights provided by their
+respective licenses.
+
+7. Disclaimer of Warranty
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND
+NON-INFRINGEMENT. USE OF THE SOFTWARE IS AT YOUR OWN RISK.
+
+8. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE COPYRIGHT HOLDER SHALL
+NOT BE LIABLE FOR ANY CLAIM, DAMAGE, LOSS, LIABILITY, COST, OR EXPENSE,
+WHETHER DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR
+PUNITIVE, ARISING FROM OR RELATING TO THE SOFTWARE OR THIS LICENSE, WHETHER IN
+CONTRACT, TORT, STRICT LIABILITY, OR OTHERWISE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+9. Termination
+
+This license terminates automatically if you violate its terms. Upon
+termination, you must stop using, copying, modifying, and distributing the
+Software and destroy all copies in your possession or control, except where a
+separate valid commercial license agreement expressly permits continued use.
+
+10. No Implied Rights
+
+No rights are granted except as expressly stated in this license. Any use not
+expressly permitted by this license requires prior written permission from the
+copyright holder.
