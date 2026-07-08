@@ -7,6 +7,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
     env:
       QT_QPA_PLATFORM: offscreen
       QT_QUICK_CONTROLS_STYLE: Basic
@@ -16,7 +19,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install system packages
         run: |
@@ -28,8 +31,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Lint with ruff
+        run: python -m ruff check app services ui utils tests cli.py main.py
+
       - name: Compile Python
         run: python -m compileall app services ui utils tests
 
       - name: Run tests
-        run: python -m pytest -q
+        run: python -m pytest -q --tb=short
