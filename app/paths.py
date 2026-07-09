@@ -55,7 +55,10 @@ def _find_binary(filename: str, explicit_path: str = "") -> str | None:
         candidate = root / filename
         if candidate.exists() and candidate.is_file():
             return str(candidate)
-    return shutil.which(filename)
+    if os.environ.get("MEDIA_CONVERTER_ALLOW_PATH_BINARIES", "").strip().lower() in {"1", "true", "yes"}:
+        resolved = shutil.which(filename)
+        return str(Path(resolved).resolve()) if resolved else None
+    return None
 
 
 def find_ffmpeg() -> str | None:

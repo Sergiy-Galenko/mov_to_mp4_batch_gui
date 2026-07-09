@@ -18,7 +18,7 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 - Presets for common formats and platform targets (iPhone, PlayStation 5, etc).
 - FFmpeg/FFprobe integration for metadata, thumbnails, progress, ETA, and previews.
 - Built-in document conversion between plain text, PDF, Word, Excel, PowerPoint, and OpenDocument-style formats; text/document-only conversion does not require FFmpeg.
-- Automatic FFmpeg & Python dependency bootstrap on Windows x64.
+- Opt-in FFmpeg, Python dependency, and Desktop `.exe` bootstrap on Windows x64.
 - Video/source URL download support through `yt-dlp`, with direct media URL fallback: download a video or extract audio into the queue.
 - Smart Convert mode for per-file codec/CRF/preset recommendations, remux detection, two-pass target-size encoding, quality checks, and A/B samples.
 - Lightweight editor filters for deinterlace, stabilization, denoise, color correction, LUT files, and speed changes.
@@ -47,13 +47,17 @@ Install dependencies:
 python -m pip install -r requirements.txt
 ```
 
-On Windows, `run_windows.cmd` checks Python automatically. If Python is missing or older than 3.12, it installs the
-Python 3.13 channel through `winget`, installs dependencies, and starts the app.
+On Windows, `run_windows.cmd` checks Python automatically and starts the app when Python 3.12+ is already available.
+System Python installation, package installation, and launch-time Desktop `.exe` creation are explicit opt-in actions:
 
-The app also runs this dependency check automatically at startup. To disable automatic Python package installation in managed environments, set:
+```powershell
+.\scripts\python_bootstrap.ps1 -Mode run -AllowSystemInstall -AllowDependencyInstall -AllowDesktopBuild
+```
+
+The app checks imports at startup, but does not run `pip install` unless this is explicitly enabled:
 
 ```bash
-MEDIA_CONVERTER_SKIP_DEP_BOOTSTRAP=1
+MEDIA_CONVERTER_AUTO_INSTALL_DEPS=1
 ```
 
 Check FFmpeg:
@@ -79,18 +83,17 @@ Text-only conversion does not require FFmpeg or FFprobe.
 python main.py
 ```
 
-Or on Windows with automatic Python bootstrap:
+Or on Windows with Python bootstrap:
 
 ```bat
 run_windows.cmd
 ```
 
-On Windows, `run_windows.cmd` also creates or updates `MediaConverter.exe` on the Desktop automatically. The Desktop
-copy is rebuilt only when it is missing or older than the current project files. To skip this behavior:
+Launch-time Desktop `.exe` creation is disabled by default. To build or refresh `MediaConverter.exe` on the Desktop
+while starting the app:
 
 ```bat
-set MEDIA_CONVERTER_SKIP_DESKTOP_EXE=1
-run_windows.cmd
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\python_bootstrap.ps1 -Mode run -AllowDependencyInstall -AllowDesktopBuild
 ```
 
 Basic workflow:
@@ -223,7 +226,8 @@ The Settings sidebar includes a Commercial License screen for paid/commercial bu
 
 Pro-gated features include AI blur, batch automation, cloud upload, and advanced JSON/HTML reports. Watermark-free commercial export is blocked unless an active Commercial license is present. AI blur is license-gated here, but the automatic ML detector itself still requires a separate integration.
 
-Production licensing should set `MEDIA_CONVERTER_LICENSE_SECRET` during paid-build packaging; the built-in fallback secret is only suitable for local development and tests.
+Production licensing must set `MEDIA_CONVERTER_LICENSE_SECRET` during paid-build packaging. The development fallback
+secret is disabled unless `MEDIA_CONVERTER_ALLOW_DEV_LICENSE_SECRET=1` is set.
 
 ## Reports And History
 
@@ -361,7 +365,7 @@ python scripts/find_ffmpeg.py
 python scripts/build_pyinstaller.py
 ```
 
-Or on Windows with automatic Python bootstrap:
+Or on Windows with Python bootstrap and explicit dependency install:
 
 ```bat
 build_exe_windows.cmd

@@ -368,6 +368,9 @@ class ConverterService:
         command = command.strip()
         if not command:
             return
+        if os.environ.get("MEDIA_CONVERTER_ENABLE_HOOKS", "").strip().lower() not in {"1", "true", "yes"}:
+            self._log("WARN", f"Hook {stage} skipped because MEDIA_CONVERTER_ENABLE_HOOKS is not enabled.")
+            return
         self._log("INFO", f"Hook {stage}: {command}")
         try:
             import shlex

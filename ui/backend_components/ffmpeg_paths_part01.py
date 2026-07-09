@@ -3,7 +3,10 @@ from __future__ import annotations
 BODY = r'''    @QtCore.Slot()
     def refreshEncoders(self) -> None:
         candidate = self.ffmpegPath or self.ffmpeg_service.ffmpeg_path or ""
-        if candidate and (Path(candidate).expanduser().exists() or shutil.which(candidate)):
+        if candidate and (
+            Path(candidate).expanduser().exists()
+            or (os.environ.get("MEDIA_CONVERTER_ALLOW_PATH_BINARIES", "").strip().lower() in {"1", "true", "yes"} and shutil.which(candidate))
+        ):
             self.ffmpeg_service.ffmpeg_path = candidate
         else:
             self.ffmpeg_service.ffmpeg_path = ""

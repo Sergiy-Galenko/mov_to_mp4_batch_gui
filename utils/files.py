@@ -1,5 +1,4 @@
 ﻿import hashlib
-import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -74,17 +73,10 @@ def file_sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
 
 
 def partial_hash(path: Path, chunk_size: int = 65536) -> str:
-    digest = hashlib.md5()
     try:
-        size = os.path.getsize(path)
-        with path.open("rb") as fh:
-            digest.update(fh.read(chunk_size))
-            if size > chunk_size:
-                fh.seek(-min(chunk_size, size), os.SEEK_END)
-                digest.update(fh.read(chunk_size))
+        return file_sha256(path, max(chunk_size, 1024 * 1024))
     except OSError:
         return ""
-    return digest.hexdigest()
 
 
 class _TemplateDict(dict):

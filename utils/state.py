@@ -36,6 +36,8 @@ def save_json_file(path: Path, state: Any) -> None:
             tmp_fd = -1
             json.dump(state, fh, ensure_ascii=False, indent=2)
         os.replace(tmp_path, path)
+        with contextlib.suppress(OSError):
+            os.chmod(path, 0o600)
     except Exception:
         if tmp_fd != -1:
             with contextlib.suppress(OSError):

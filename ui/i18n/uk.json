@@ -79,7 +79,7 @@
   "privacy_security": "Безпека / Приватність",
   "blur_regions": "Зони блюру",
   "checksum_algorithm": "Checksum",
-  "secure_delete_original": "Безпечно видалити оригінал",
+  "secure_delete_original": "Best-effort безпечне видалення оригіналу",
   "sanitize_metadata": "Очистити metadata",
   "privacy_security_hint": "Зони блюру задаються вручну як x:y:w:h. Secure delete перезаписує оригінал після успішної конвертації; для SSD абсолютної гарантії відновлення немає.",
   "cloud_integration": "Хмарна інтеграція",

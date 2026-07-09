@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import os
+import platform
 import time
 import uuid
 from collections.abc import Iterable
@@ -58,7 +59,8 @@ class LicenseService:
     """Offline-verifiable licensing and trial state."""
 
     def __init__(self, secret: str | None = None, now_func=time.time) -> None:
-        self.secret = (secret or os.environ.get("MEDIA_CONVERTER_LICENSE_SECRET") or "media-converter-dev-license-secret").encode("utf-8")
+        self.secret = self._resolve_license_secret(secret)
+        self.trial_secret = self.secret or self._local_trial_secret()
         self.now_func = now_func
 
     def info_from_state(self, state: dict[str, Any]) -> LicenseInfo:
@@ -68,16 +70,18 @@ class LicenseService:
             if info.is_license_active:
                 return info
         trial_started = float(state.get("trial_started_at") or 0.0)
-        trial = self.trial_info(trial_started)
+        trial = self.trial_info(trial_started, str(state.get("trial_signature") or ""))
         if trial.is_trial_active:
             return trial
         if isinstance(payload, dict):
             return self.validate_package(payload, source=str(payload.get("source") or "license"))
-        return trial if trial.status == "trial_expired" else LicenseInfo(message="No license activated.")
+        return trial if trial.status in {"trial_expired", "trial_invalid"} else LicenseInfo(message="No license activated.")
 
-    def trial_info(self, started_at: float) -> LicenseInfo:
+    def trial_info(self, started_at: float, signature: str = "") -> LicenseInfo:
         if started_at <= 0:
             return LicenseInfo(status="unlicensed", plan="Free", message="Trial not started.")
+        if not self._valid_trial_signature(started_at, signature):
+            return LicenseInfo(status="trial_invalid", plan="Free", source="trial", message="Trial state signature is invalid.")
         ends_at = started_at + TRIAL_DAYS * 86400
         if self.now_func() <= ends_at:
             return LicenseInfo(
@@ -103,7 +107,9 @@ class LicenseService:
         if started > 0:
             return dict(state)
         updated = dict(state)
-        updated["trial_started_at"] = self.now_func()
+        started_at = self.now_func()
+        updated["trial_started_at"] = started_at
+        updated["trial_signature"] = self._trial_signature(started_at)
         return updated
 
     def trial_days_remaining(self, started_at: float) -> int:
@@ -146,6 +152,8 @@ class LicenseService:
     def validate_package(self, payload: dict[str, Any], *, source: str = "license") -> LicenseInfo:
         if not isinstance(payload, dict):
             return LicenseInfo(status="invalid", source=source, message="License payload is invalid.")
+        if not self.secret:
+            return LicenseInfo(status="invalid", source=source, message="License secret is not configured.")
         expected = self._signature(payload)
         provided = str(payload.get("signature") or "")
         if not provided or not hmac.compare_digest(provided, expected):
@@ -187,6 +195,8 @@ class LicenseService:
         features: Iterable[str] | None = None,
         license_id: str | None = None,
     ) -> dict[str, Any]:
+        if not self.secret:
+            raise RuntimeError("MEDIA_CONVERTER_LICENSE_SECRET is required to create license packages.")
         payload: dict[str, Any] = {
             "version": 1,
             "license_id": license_id or str(uuid.uuid4()),
@@ -211,9 +221,35 @@ class LicenseService:
         return values or list(DEFAULT_LICENSE_FEATURES)
 
     def _signature(self, payload: dict[str, Any]) -> str:
+        if not self.secret:
+            return ""
         signing_payload = {key: value for key, value in payload.items() if key not in {"signature", "source"}}
         raw = json.dumps(signing_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         return hmac.new(self.secret, raw, hashlib.sha256).hexdigest()
+
+    def _trial_signature(self, started_at: float) -> str:
+        raw = f"{started_at:.6f}:{self._machine_fingerprint()}".encode()
+        return hmac.new(self.trial_secret, raw, hashlib.sha256).hexdigest()
+
+    def _valid_trial_signature(self, started_at: float, signature: str) -> bool:
+        if not signature:
+            return False
+        return hmac.compare_digest(str(signature), self._trial_signature(started_at))
+
+    def _resolve_license_secret(self, secret: str | None) -> bytes:
+        value = str(secret or os.environ.get("MEDIA_CONVERTER_LICENSE_SECRET") or "")
+        if value:
+            return value.encode("utf-8")
+        if os.environ.get("MEDIA_CONVERTER_ALLOW_DEV_LICENSE_SECRET", "").strip().lower() in {"1", "true", "yes"}:
+            return b"media-converter-dev-license-secret"
+        return b""
+
+    def _local_trial_secret(self) -> bytes:
+        raw = "media-converter-local-trial-v1:" + self._machine_fingerprint()
+        return hashlib.sha256(raw.encode("utf-8")).digest()
+
+    def _machine_fingerprint(self) -> str:
+        return f"{platform.node()}:{uuid.getnode()}"
 
     def _is_expired(self, expires_at: str) -> bool:
         try:

@@ -56,6 +56,7 @@ BODY = r'''            self._save_state()
             telegram_chat_id=self._telegram_chat_id,
             license_payload=self._license_payload,
             trial_started_at=self._trial_started_at,
+            trial_signature=self._trial_signature,
             paid_auto_update_enabled=self._paid_auto_update_enabled,
             paid_update_manifest_url=self._paid_update_manifest_url,
         )

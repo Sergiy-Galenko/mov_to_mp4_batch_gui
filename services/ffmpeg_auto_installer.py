@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import hmac
 import json
 import os
 import platform
 import shutil
+import stat
 import time
 import urllib.request
 import zipfile
@@ -14,9 +16,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.paths import APP_DATA_DIR, find_ffprobe
+from services.url_security import env_flag, env_hosts, validate_https_url
 
 FFMPEG_WIN64_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
 DEFAULT_CHECK_INTERVAL_SEC = 24 * 60 * 60
+DEFAULT_ALLOWED_DOWNLOAD_HOSTS = {"github.com"}
+MAX_FFMPEG_ARCHIVE_BYTES = 512 * 1024 * 1024
+MAX_ZIP_ENTRIES = 10_000
+MAX_ZIP_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 
 ProgressCallback = Callable[[str], None]
 DownloadFunc = Callable[[str, Path, ProgressCallback | None], None]
@@ -42,6 +49,9 @@ class FfmpegAutoInstaller:
         download_func: DownloadFunc | None = None,
         now_func: Callable[[], float] = time.time,
         platform_key: str | None = None,
+        expected_sha256: str | None = None,
+        allowed_hosts: set[str] | None = None,
+        allow_unverified: bool | None = None,
     ) -> None:
         self.install_dir = Path(install_dir or (APP_DATA_DIR / "ffmpeg")).expanduser()
         self.download_url = download_url
@@ -49,6 +59,9 @@ class FfmpegAutoInstaller:
         self.download_func = download_func or self._download_file
         self.now_func = now_func
         self.platform_key = platform_key
+        self.expected_sha256 = self._normalize_sha256(expected_sha256 or os.environ.get("MEDIA_CONVERTER_FFMPEG_SHA256", ""))
+        self.allowed_hosts = allowed_hosts or env_hosts("MEDIA_CONVERTER_FFMPEG_HOSTS") or set(DEFAULT_ALLOWED_DOWNLOAD_HOSTS)
+        self.allow_unverified = env_flag("MEDIA_CONVERTER_ALLOW_UNVERIFIED_FFMPEG") if allow_unverified is None else bool(allow_unverified)
 
     @property
     def current_dir(self) -> Path:
@@ -124,6 +137,16 @@ class FfmpegAutoInstaller:
                 ffprobe_path=find_ffprobe(str(current or "")) or "",
                 error="unsupported_platform",
             )
+        try:
+            self._validate_download_policy()
+        except Exception as exc:
+            return FfmpegAutoInstallResult(
+                status="error",
+                message=f"FFmpeg auto-install is blocked: {exc}",
+                ffmpeg_path=str(current or "") if current_exists else "",
+                ffprobe_path=find_ffprobe(str(current or "")) or "",
+                error=str(exc),
+            )
 
         self.install_dir.mkdir(parents=True, exist_ok=True)
         archive_path = self.install_dir / "ffmpeg-download.zip"
@@ -132,6 +155,7 @@ class FfmpegAutoInstaller:
                 progress_cb("Downloading FFmpeg...")
             self.download_func(self.download_url, archive_path, progress_cb)
             archive_sha256 = self._sha256(archive_path)
+            self._verify_archive_hash(archive_sha256)
             ffmpeg_path = self._install_zip(archive_path)
             ffprobe_path = str(self.managed_ffprobe_path()) if self.managed_ffprobe_path().exists() else (find_ffprobe(ffmpeg_path) or "")
             self._write_metadata(
@@ -177,9 +201,16 @@ class FfmpegAutoInstaller:
 
     def _download_file(self, url: str, destination: Path, progress_cb: ProgressCallback | None = None) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        request = urllib.request.Request(url, headers={"User-Agent": "MediaConverter/1.0"})
+        validated_url = validate_https_url(
+            url,
+            allowed_hosts=self.allowed_hosts,
+            allow_local=env_flag("MEDIA_CONVERTER_ALLOW_LOCAL_DOWNLOADS"),
+        )
+        request = urllib.request.Request(validated_url, headers={"User-Agent": "MediaConverter/1.0"})
         with urllib.request.urlopen(request, timeout=60) as response:
             total = int(response.headers.get("Content-Length") or 0)
+            if total > MAX_FFMPEG_ARCHIVE_BYTES:
+                raise RuntimeError("FFmpeg archive is larger than the allowed limit")
             done = 0
             last_percent = -1
             with destination.open("wb") as fh:
@@ -189,6 +220,8 @@ class FfmpegAutoInstaller:
                         break
                     fh.write(chunk)
                     done += len(chunk)
+                    if done > MAX_FFMPEG_ARCHIVE_BYTES:
+                        raise RuntimeError("FFmpeg archive exceeded the allowed download limit")
                     if progress_cb and total > 0:
                         percent = int(done * 100 / total)
                         if percent >= last_percent + 10:
@@ -203,7 +236,7 @@ class FfmpegAutoInstaller:
         staging.mkdir(parents=True, exist_ok=True)
         try:
             with zipfile.ZipFile(archive_path) as zf:
-                zf.extractall(staging)
+                self._safe_extract_zip(zf, staging)
             ffmpeg_name = self._binary_name("ffmpeg")
             matches = list(staging.rglob(ffmpeg_name))
             if not matches:
@@ -219,6 +252,57 @@ class FfmpegAutoInstaller:
             self._safe_rmtree(staging)
             self._safe_rmtree(next_dir)
         return str(self.managed_ffmpeg_path())
+
+    def _validate_download_policy(self) -> None:
+        validate_https_url(
+            self.download_url,
+            allowed_hosts=self.allowed_hosts,
+            allow_local=env_flag("MEDIA_CONVERTER_ALLOW_LOCAL_DOWNLOADS"),
+        )
+        if not self.expected_sha256 and not self.allow_unverified:
+            raise RuntimeError(
+                "set MEDIA_CONVERTER_FFMPEG_SHA256 to the expected archive SHA-256 "
+                "or explicitly opt in with MEDIA_CONVERTER_ALLOW_UNVERIFIED_FFMPEG=1"
+            )
+
+    def _verify_archive_hash(self, archive_sha256: str) -> None:
+        if not self.expected_sha256:
+            return
+        if not hmac.compare_digest(archive_sha256.lower(), self.expected_sha256.lower()):
+            raise RuntimeError("FFmpeg archive SHA-256 does not match the pinned value")
+
+    def _safe_extract_zip(self, zf: zipfile.ZipFile, destination: Path) -> None:
+        infos = zf.infolist()
+        if len(infos) > MAX_ZIP_ENTRIES:
+            raise RuntimeError("FFmpeg archive contains too many files")
+        total_size = 0
+        base = destination.resolve()
+        for info in infos:
+            total_size += max(0, int(info.file_size))
+            if total_size > MAX_ZIP_UNCOMPRESSED_BYTES:
+                raise RuntimeError("FFmpeg archive expands beyond the allowed limit")
+            target = self._safe_zip_target(base, info.filename)
+            file_type = (info.external_attr >> 16) & 0o170000
+            if file_type == stat.S_IFLNK:
+                raise RuntimeError(f"refusing to extract symlink from FFmpeg archive: {info.filename}")
+            if info.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(info) as src, target.open("wb") as dst:
+                shutil.copyfileobj(src, dst, length=1024 * 1024)
+
+    @staticmethod
+    def _safe_zip_target(base: Path, name: str) -> Path:
+        normalized = str(name or "").replace("\\", "/")
+        if not normalized or normalized.startswith("/") or ":" in normalized.split("/", 1)[0]:
+            raise RuntimeError(f"unsafe path in FFmpeg archive: {name}")
+        target = (base / normalized).resolve()
+        try:
+            target.relative_to(base)
+        except ValueError as exc:
+            raise RuntimeError(f"unsafe path in FFmpeg archive: {name}") from exc
+        return target
 
     def _safe_rmtree(self, path: Path) -> None:
         if not path.exists():
@@ -246,3 +330,12 @@ class FfmpegAutoInstaller:
             for chunk in iter(lambda: fh.read(1024 * 1024), b""):
                 digest.update(chunk)
         return digest.hexdigest()
+
+    @staticmethod
+    def _normalize_sha256(value: str) -> str:
+        text = str(value or "").strip().lower()
+        if not text:
+            return ""
+        if len(text) != 64 or any(ch not in "0123456789abcdef" for ch in text):
+            raise ValueError("FFmpeg SHA-256 must be a 64-character hexadecimal value")
+        return text

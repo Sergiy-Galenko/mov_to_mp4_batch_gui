@@ -79,7 +79,7 @@
   "privacy_security": "Prywatność / Bezpieczeństwo",
   "blur_regions": "Regiony rozmycia",
   "checksum_algorithm": "Checksum",
-  "secure_delete_original": "Bezpiecznie usuń oryginał",
+  "secure_delete_original": "Usuń oryginał bezpiecznie best-effort",
   "sanitize_metadata": "Wyczyść metadane",
   "privacy_security_hint": "Regiony rozmycia są ręcznymi prostokątami x:y:w:h. Secure delete nadpisuje oryginał po udanej konwersji; na SSD nie daje absolutnej gwarancji odzyskania.",
   "cloud_integration": "Integracja z chmurą",

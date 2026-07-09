@@ -23,7 +23,7 @@ class MediaAnalysisService:
             return None
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            digest = hashlib.sha1(str(path).encode("utf-8", errors="ignore")).hexdigest()[:16]
+            digest = hashlib.sha256(str(path).encode(errors="ignore")).hexdigest()[:16]
             target = self.cache_dir / f"{digest}.jpg"
             if not target.exists():
                 cmd = [

@@ -79,7 +79,7 @@
   "privacy_security": "Datenschutz / Sicherheit",
   "blur_regions": "Blur-Regionen",
   "checksum_algorithm": "Checksumme",
-  "secure_delete_original": "Original sicher löschen",
+  "secure_delete_original": "Original bestmöglich sicher löschen",
   "sanitize_metadata": "Metadaten bereinigen",
   "privacy_security_hint": "Blur-Regionen sind manuelle x:y:w:h-Rechtecke. Secure delete überschreibt das Original nach erfolgreicher Konvertierung; bei SSDs gibt es keine absolute Wiederherstellungs-Garantie.",
   "cloud_integration": "Cloud-Integration",

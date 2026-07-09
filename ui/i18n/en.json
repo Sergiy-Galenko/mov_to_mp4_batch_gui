@@ -79,7 +79,7 @@
   "privacy_security": "Privacy / Security",
   "blur_regions": "Blur regions",
   "checksum_algorithm": "Checksum",
-  "secure_delete_original": "Secure delete original",
+  "secure_delete_original": "Best-effort secure delete original",
   "sanitize_metadata": "Sanitize metadata",
   "privacy_security_hint": "Blur regions are manual x:y:w:h rectangles. Secure delete overwrites the original file after successful conversion; SSD recovery guarantees cannot be absolute.",
   "cloud_integration": "Cloud integration",

@@ -39,9 +39,24 @@ def test_ensure_runtime_dependencies_runs_pip_for_missing_packages(tmp_path, mon
 
     monkeypatch.setattr(dependency_bootstrap.importlib.util, "find_spec", fake_find_spec)
     monkeypatch.setattr(dependency_bootstrap.subprocess, "run", fake_run)
+    monkeypatch.setenv("MEDIA_CONVERTER_AUTO_INSTALL_DEPS", "1")
 
     assert dependency_bootstrap.ensure_runtime_dependencies(requirements) == ["yt-dlp"]
     assert calls and calls[0][-2:] == ["-r", str(requirements.resolve())]
+
+
+def test_ensure_runtime_dependencies_blocks_auto_install_by_default(tmp_path, monkeypatch) -> None:
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("yt-dlp>=2025.1\n", encoding="utf-8")
+
+    monkeypatch.setattr(dependency_bootstrap.importlib.util, "find_spec", lambda name: None)
+
+    try:
+        dependency_bootstrap.ensure_runtime_dependencies(requirements)
+    except dependency_bootstrap.DependencyBootstrapError as exc:
+        assert "Missing Python libraries" in str(exc)
+    else:
+        raise AssertionError("expected dependency bootstrap to be blocked")
 
 
 def test_ensure_runtime_dependencies_can_be_disabled(tmp_path, monkeypatch) -> None:

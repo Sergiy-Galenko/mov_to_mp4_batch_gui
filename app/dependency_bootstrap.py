@@ -38,6 +38,12 @@ def ensure_runtime_dependencies(requirements_path: Path, *, stdout=None, stderr=
         return []
     if not requirements_path.exists():
         raise DependencyBootstrapError(f"requirements.txt not found: {requirements_path}")
+    if os.environ.get("MEDIA_CONVERTER_AUTO_INSTALL_DEPS", "").strip().lower() not in {"1", "true", "yes"}:
+        raise DependencyBootstrapError(
+            "Missing Python libraries: "
+            + ", ".join(missing)
+            + f". Install them with: {sys.executable} -m pip install -r {requirements_path}"
+        )
     cmd = [sys.executable, "-m", "pip", "install", "-r", str(requirements_path)]
     result = subprocess.run(cmd, stdout=stdout, stderr=stderr, text=True)
     if result.returncode != 0:

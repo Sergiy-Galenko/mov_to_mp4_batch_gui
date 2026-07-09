@@ -85,7 +85,14 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
         self.system_tray = SystemTrayService(parent=self, app_title=APP_TITLE)
         self._license_payload = self.settings_manager.license_payload()
         self._trial_started_at = self.settings_manager.trial_started_at()
-        self._license_info = self.license_service.info_from_state(self.settings_manager.state)
+        self._trial_signature = self.settings_manager.trial_signature()
+        self._license_info = self.license_service.info_from_state(
+            {
+                "license_payload": self._license_payload,
+                "trial_started_at": self._trial_started_at,
+                "trial_signature": self._trial_signature,
+            }
+        )
         self._paid_auto_update_enabled = self.settings_manager.paid_auto_update_enabled()
         self._paid_update_manifest_url = self.settings_manager.paid_update_manifest_url()
         self._paid_update_status = "Paid update check has not run."

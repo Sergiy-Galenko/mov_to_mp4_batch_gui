@@ -9,7 +9,8 @@ import zipfile
 import zlib
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from xml.etree import ElementTree as ET
+
+from defusedxml import ElementTree as ET
 
 TEXT_READ_ENCODINGS = ("utf-8-sig", "utf-8", "cp1251", "latin-1")
 SUPPORTED_TEXT_FORMATS = {
@@ -37,6 +38,9 @@ OOXML_SHEET_EXTS = {".xlsx", ".xlsm", ".xltx"}
 OOXML_PRESENTATION_EXTS = {".pptx", ".pptm", ".ppsx", ".potx"}
 ODF_EXTS = {".odt", ".ott", ".ods", ".ots", ".odp", ".otp"}
 LEGACY_OFFICE_EXTS = {".doc", ".xls", ".ppt"}
+MAX_OFFICE_ZIP_ENTRIES = 4096
+MAX_OFFICE_ZIP_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
+MAX_XML_MEMBER_BYTES = 32 * 1024 * 1024
 
 
 class TextConversionError(RuntimeError):
@@ -125,7 +129,7 @@ def _read_plain_text_file(path: Path) -> tuple[str, str]:
 
 def _read_docx(path: Path) -> str:
     with zipfile.ZipFile(path) as zf:
-        root = ET.fromstring(zf.read("word/document.xml"))
+        root = ET.fromstring(_read_xml_member(zf, "word/document.xml"))
     paragraphs = []
     for para in _iter_local(root, "p"):
         text = _ooxml_text(para).strip()
@@ -138,7 +142,7 @@ def _read_docx(path: Path) -> str:
 
 def _read_xlsx(path: Path) -> str:
     with zipfile.ZipFile(path) as zf:
-        names = set(zf.namelist())
+        names = set(_safe_zip_names(zf))
         shared = _read_xlsx_shared_strings(zf) if "xl/sharedStrings.xml" in names else []
         sheet_names = sorted(
             [name for name in names if name.startswith("xl/worksheets/") and name.endswith(".xml")],
@@ -146,7 +150,7 @@ def _read_xlsx(path: Path) -> str:
         )
         sections = []
         for index, name in enumerate(sheet_names, start=1):
-            root = ET.fromstring(zf.read(name))
+            root = ET.fromstring(_read_xml_member(zf, name))
             rows = []
             for row in _iter_local(root, "row"):
                 values = []
@@ -160,7 +164,7 @@ def _read_xlsx(path: Path) -> str:
 
 
 def _read_xlsx_shared_strings(zf: zipfile.ZipFile) -> list[str]:
-    root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+    root = ET.fromstring(_read_xml_member(zf, "xl/sharedStrings.xml"))
     values = []
     for item in _iter_local(root, "si"):
         values.append(_ooxml_text(item))
@@ -184,12 +188,12 @@ def _xlsx_cell_text(cell: ET.Element, shared_strings: Sequence[str]) -> str:
 def _read_pptx(path: Path) -> str:
     with zipfile.ZipFile(path) as zf:
         slide_names = sorted(
-            [name for name in zf.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")],
+            [name for name in _safe_zip_names(zf) if name.startswith("ppt/slides/slide") and name.endswith(".xml")],
             key=_natural_key,
         )
         slides = []
         for index, name in enumerate(slide_names, start=1):
-            root = ET.fromstring(zf.read(name))
+            root = ET.fromstring(_read_xml_member(zf, name))
             texts = [node.text or "" for node in _iter_local(root, "t") if node.text]
             if texts:
                 slides.append(f"Slide {index}\n" + "\n".join(texts))
@@ -198,7 +202,7 @@ def _read_pptx(path: Path) -> str:
 
 def _read_odf(path: Path) -> str:
     with zipfile.ZipFile(path) as zf:
-        root = ET.fromstring(zf.read("content.xml"))
+        root = ET.fromstring(_read_xml_member(zf, "content.xml"))
     paragraphs = []
     for element in root.iter():
         if _local_name(element.tag) in {"h", "p"}:
@@ -222,6 +226,31 @@ def _read_pdf(path: Path) -> str:
     if text.strip():
         return text
     raise TextConversionError(f"Cannot extract text from PDF: {path}")
+
+
+def _safe_zip_names(zf: zipfile.ZipFile) -> list[str]:
+    infos = zf.infolist()
+    if len(infos) > MAX_OFFICE_ZIP_ENTRIES:
+        raise TextConversionError("Document archive contains too many files.")
+    total_size = 0
+    names: list[str] = []
+    for info in infos:
+        total_size += max(0, int(info.file_size))
+        if total_size > MAX_OFFICE_ZIP_UNCOMPRESSED_BYTES:
+            raise TextConversionError("Document archive expands beyond the allowed size.")
+        names.append(info.filename)
+    return names
+
+
+def _read_xml_member(zf: zipfile.ZipFile, name: str) -> bytes:
+    _safe_zip_names(zf)
+    try:
+        info = zf.getinfo(name)
+    except KeyError as exc:
+        raise TextConversionError(f"Document XML member is missing: {name}") from exc
+    if info.file_size > MAX_XML_MEMBER_BYTES:
+        raise TextConversionError(f"Document XML member is too large: {name}")
+    return zf.read(info)
 
 
 def _read_pdf_with_pypdf(path: Path) -> str:

@@ -96,6 +96,7 @@ class SettingsManagerTest(unittest.TestCase):
                 telegram_chat_id="42",
                 license_payload={"license_id": "lic-001"},
                 trial_started_at=123.5,
+                trial_signature="sig-001",
                 paid_auto_update_enabled=True,
                 paid_update_manifest_url="https://example.test/updates.json",
             )
@@ -116,6 +117,7 @@ class SettingsManagerTest(unittest.TestCase):
             self.assertEqual(reloaded.telegram_chat_id(), "42")
             self.assertEqual(reloaded.license_payload(), {"license_id": "lic-001"})
             self.assertEqual(reloaded.trial_started_at(), 123.5)
+            self.assertEqual(reloaded.trial_signature(), "sig-001")
             self.assertTrue(reloaded.paid_auto_update_enabled())
             self.assertEqual(reloaded.paid_update_manifest_url(), "https://example.test/updates.json")
 

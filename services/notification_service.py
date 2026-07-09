@@ -5,7 +5,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+from services.url_security import env_flag, validate_https_url
 
 
 @dataclass
@@ -31,13 +34,14 @@ class NotificationService:
         timeout: float = 5.0,
     ) -> list[NotificationResult]:
         results: list[NotificationResult] = []
+        safe_summary = self._redact_summary(summary)
         if webhook_url.strip():
-            payload = {"title": title, "message": message, "summary": dict(summary)}
+            payload = {"title": title, "message": message, "summary": safe_summary}
             results.append(self._post_json(webhook_url.strip(), payload, "webhook", timeout))
         if discord_webhook_url.strip():
             payload = {
                 "content": f"**{title}**\n{message}",
-                "embeds": [{"title": title, "description": message, "fields": self._discord_fields(summary)}],
+                "embeds": [{"title": title, "description": message, "fields": self._discord_fields(safe_summary)}],
             }
             results.append(self._post_json(discord_webhook_url.strip(), payload, "discord", timeout))
         if telegram_bot_token.strip() and telegram_chat_id.strip():
@@ -61,9 +65,17 @@ class NotificationService:
         return self._post_json(url, payload, "telegram", timeout)
 
     def _post_json(self, url: str, payload: dict[str, Any], target: str, timeout: float) -> NotificationResult:
+        try:
+            validated_url = validate_https_url(
+                url,
+                allowed_hosts={"discord.com", "discordapp.com"} if target == "discord" else None,
+                allow_local=env_flag("MEDIA_CONVERTER_ALLOW_LOCAL_WEBHOOKS"),
+            )
+        except Exception as exc:
+            return NotificationResult(target, False, f"blocked URL: {exc}")
         data = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
-            url,
+            validated_url,
             data=data,
             headers={"Content-Type": "application/json", "User-Agent": "MediaConverter/1.0"},
             method="POST",
@@ -78,3 +90,14 @@ class NotificationService:
             return NotificationResult(target, False, f"HTTP {exc.code}")
         except Exception as exc:
             return NotificationResult(target, False, str(exc))
+
+    def _redact_summary(self, summary: dict[str, Any]) -> dict[str, Any]:
+        safe: dict[str, Any] = {}
+        for key, value in dict(summary).items():
+            key_text = str(key)
+            if key_text.endswith("_path") or key_text.endswith("_dir"):
+                name = Path(str(value or "")).name
+                safe[key_text] = name or "[redacted]"
+            else:
+                safe[key_text] = value
+        return safe

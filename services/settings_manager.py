@@ -1,10 +1,12 @@
 ﻿from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 from app.constants import RECENT_FOLDERS_LIMIT, STATE_STORE
 from app.localization import normalize_language
+from services.secret_store import protect_text, unprotect_text
 from utils.state import load_json_state, save_json_state
 
 
@@ -96,19 +98,19 @@ class SettingsManager:
         return bool(self.state.get("webhook_enabled", False))
 
     def webhook_url(self) -> str:
-        return str(self.state.get("webhook_url") or "")
+        return self._secret_string("webhook_url")
 
     def discord_webhook_url(self) -> str:
-        return str(self.state.get("discord_webhook_url") or "")
+        return self._secret_string("discord_webhook_url")
 
     def telegram_bot_token(self) -> str:
-        return str(self.state.get("telegram_bot_token") or "")
+        return self._secret_string("telegram_bot_token")
 
     def telegram_chat_id(self) -> str:
         return str(self.state.get("telegram_chat_id") or "")
 
     def license_payload(self) -> dict[str, Any]:
-        value = self.state.get("license_payload")
+        value = self._secret_value("license_payload")
         return dict(value) if isinstance(value, dict) else {}
 
     def trial_started_at(self) -> float:
@@ -116,6 +118,9 @@ class SettingsManager:
             return float(self.state.get("trial_started_at") or 0.0)
         except (TypeError, ValueError):
             return 0.0
+
+    def trial_signature(self) -> str:
+        return str(self.state.get("trial_signature") or "")
 
     def paid_auto_update_enabled(self) -> bool:
         return bool(self.state.get("paid_auto_update_enabled", False))
@@ -155,6 +160,7 @@ class SettingsManager:
         telegram_chat_id: str = "",
         license_payload: dict[str, Any] | None = None,
         trial_started_at: float = 0.0,
+        trial_signature: str = "",
         paid_auto_update_enabled: bool = False,
         paid_update_manifest_url: str = "",
     ) -> None:
@@ -189,12 +195,13 @@ class SettingsManager:
             "scheduler_gpu_limit": max(1, min(100, int(scheduler_gpu_limit or 30))),
             "completion_action": completion_action_value,
             "webhook_enabled": bool(webhook_enabled),
-            "webhook_url": str(webhook_url or ""),
-            "discord_webhook_url": str(discord_webhook_url or ""),
-            "telegram_bot_token": str(telegram_bot_token or ""),
+            "webhook_url": self._protect_secret(str(webhook_url or "")),
+            "discord_webhook_url": self._protect_secret(str(discord_webhook_url or "")),
+            "telegram_bot_token": self._protect_secret(str(telegram_bot_token or "")),
             "telegram_chat_id": str(telegram_chat_id or ""),
-            "license_payload": dict(license_payload or {}),
+            "license_payload": self._protect_secret(json.dumps(dict(license_payload or {}), ensure_ascii=False, separators=(",", ":"))),
             "trial_started_at": float(trial_started_at or 0.0),
+            "trial_signature": str(trial_signature or ""),
             "paid_auto_update_enabled": bool(paid_auto_update_enabled),
             "paid_update_manifest_url": str(paid_update_manifest_url or ""),
         }
@@ -208,3 +215,22 @@ class SettingsManager:
         result = [item for item in folders if item != path]
         result.insert(0, path)
         return result[:RECENT_FOLDERS_LIMIT]
+
+    def _secret_string(self, key: str) -> str:
+        value = self._secret_value(key)
+        return str(value or "")
+
+    def _secret_value(self, key: str) -> Any:
+        value = self.state.get(key)
+        if isinstance(value, str):
+            unprotected = unprotect_text(value)
+            if key == "license_payload" and unprotected:
+                try:
+                    return json.loads(unprotected)
+                except json.JSONDecodeError:
+                    return {}
+            return unprotected
+        return value
+
+    def _protect_secret(self, value: str) -> str:
+        return protect_text(value)

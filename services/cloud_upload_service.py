@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -20,7 +22,7 @@ class CloudUploadService:
         remote = str(settings.cloud_remote_path or "").strip()
         if not remote:
             raise CloudUploadError("Cloud remote path is empty.")
-        tool = str(settings.cloud_rclone_path or "rclone").strip() or "rclone"
+        tool = self._resolve_rclone_path(str(settings.cloud_rclone_path or "rclone").strip() or "rclone")
         provider = str(settings.cloud_provider or "rclone").strip()
         if provider != "rclone" and log_cb:
             log_cb("INFO", f"Cloud provider '{provider}' uses rclone remote path: {remote}")
@@ -36,3 +38,15 @@ class CloudUploadService:
         if result.returncode != 0:
             details = (result.stderr or result.stdout or "").strip()
             raise CloudUploadError(details or f"Cloud upload failed with code {result.returncode}.")
+
+    def _resolve_rclone_path(self, tool: str) -> str:
+        path = Path(tool).expanduser()
+        has_path_separator = any(sep in tool for sep in ("/", "\\"))
+        if path.is_absolute() or has_path_separator:
+            if path.exists() and path.is_file():
+                return str(path.resolve())
+            raise CloudUploadError("Configured rclone path does not exist.")
+        resolved = shutil.which(tool)
+        if resolved and os.environ.get("MEDIA_CONVERTER_ALLOW_PATH_BINARIES", "").strip().lower() in {"1", "true", "yes"}:
+            return str(Path(resolved).resolve())
+        raise CloudUploadError("Set an absolute rclone path, or enable MEDIA_CONVERTER_ALLOW_PATH_BINARIES=1.")

@@ -261,4 +261,4 @@ def _cache_key(path: Path) -> str:
         raw = f"{path.resolve()}:{stat.st_size}:{stat.st_mtime_ns}"
     except OSError:
         raw = str(path.resolve())
-    return hashlib.md5(raw.encode()).hexdigest()[:16]
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]

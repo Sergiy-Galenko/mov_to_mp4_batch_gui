@@ -3,6 +3,9 @@ param(
     [string]$Mode = "run",
     [switch]$SkipDependencyInstall,
     [switch]$SkipDesktopExe,
+    [switch]$AllowSystemInstall,
+    [switch]$AllowDependencyInstall,
+    [switch]$AllowDesktopBuild,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$AppArgs
 )
@@ -67,6 +70,10 @@ function Find-CompatiblePython {
 }
 
 function Install-CompatiblePython {
+    if (-not $AllowSystemInstall -and $env:MEDIA_CONVERTER_ALLOW_SYSTEM_INSTALL -notin @("1", "true", "yes")) {
+        throw "Python $RequiredMajor.$RequiredMinor+ is required. Automatic system install is disabled; rerun with -AllowSystemInstall or install Python manually."
+    }
+
     if (-not (Get-Command "winget" -ErrorAction SilentlyContinue)) {
         throw "Python $RequiredMajor.$RequiredMinor+ is required, and winget was not found. Install Python manually from https://www.python.org/downloads/windows/."
     }
@@ -118,6 +125,10 @@ function Install-Requirements {
         Write-Host "Skipping Python package installation."
         return
     }
+    if (-not $AllowDependencyInstall -and $env:MEDIA_CONVERTER_AUTO_INSTALL_DEPS -notin @("1", "true", "yes")) {
+        Write-Host "Skipping automatic Python package installation. Use -AllowDependencyInstall or set MEDIA_CONVERTER_AUTO_INSTALL_DEPS=1 if dependencies are missing."
+        return
+    }
 
     if ($Mode -eq "build") {
         Invoke-Python $Python @("-m", "pip", "install", "-r", $RuntimeRequirements, "-r", $DevRequirements)
@@ -135,6 +146,10 @@ function Install-BuildRequirements {
 
     if ($SkipDependencyInstall -or $env:MEDIA_CONVERTER_SKIP_DEP_BOOTSTRAP -in @("1", "true", "yes")) {
         Write-Host "Skipping build dependency installation."
+        return
+    }
+    if (-not $AllowDependencyInstall -and $env:MEDIA_CONVERTER_AUTO_INSTALL_DEPS -notin @("1", "true", "yes")) {
+        Write-Host "Skipping automatic build dependency installation. Use -AllowDependencyInstall or set MEDIA_CONVERTER_AUTO_INSTALL_DEPS=1 if PyInstaller is missing."
         return
     }
 
@@ -201,6 +216,10 @@ function Ensure-DesktopExe {
         Write-Host "Skipping Desktop executable creation."
         return
     }
+    if (-not $AllowDesktopBuild -and $env:MEDIA_CONVERTER_ALLOW_DESKTOP_BUILD -notin @("1", "true", "yes")) {
+        Write-Host "Skipping automatic Desktop executable creation. Use -AllowDesktopBuild or set MEDIA_CONVERTER_ALLOW_DESKTOP_BUILD=1 to build on launch."
+        return
+    }
 
     $desktopExe = Join-Path (Get-DesktopPath) "MediaConverter.exe"
     $needsBuild = Test-NeedsDesktopBuild
@@ -248,7 +267,8 @@ Push-Location $ProjectRoot
 try {
     if ($Mode -eq "build") {
         Invoke-Python $python @("scripts/build_pyinstaller.py")
-        if ($LASTEXITCODE -eq 0 -and -not ($SkipDesktopExe -or $env:MEDIA_CONVERTER_SKIP_DESKTOP_EXE -in @("1", "true", "yes"))) {
+        $desktopCopyAllowed = $AllowDesktopBuild -or $env:MEDIA_CONVERTER_ALLOW_DESKTOP_BUILD -in @("1", "true", "yes")
+        if ($LASTEXITCODE -eq 0 -and $desktopCopyAllowed -and -not ($SkipDesktopExe -or $env:MEDIA_CONVERTER_SKIP_DESKTOP_EXE -in @("1", "true", "yes"))) {
             $desktopExe = Join-Path (Get-DesktopPath) "MediaConverter.exe"
             Copy-Item -LiteralPath $DistExe -Destination $desktopExe -Force
             Write-Host "Desktop executable ready: $desktopExe"

@@ -59,6 +59,7 @@ class LicenseServiceTest(unittest.TestCase):
         info = service.info_from_state(updated)
 
         self.assertEqual(updated["trial_started_at"], started_at)
+        self.assertTrue(updated["trial_signature"])
         self.assertEqual(info.status, "trial")
         self.assertTrue(info.pro_enabled)
         self.assertFalse(info.commercial_export_allowed)
@@ -66,9 +67,25 @@ class LicenseServiceTest(unittest.TestCase):
         self.assertEqual(service.trial_days_remaining(started_at), 14)
 
         expired_service = LicenseService(secret="test-secret", now_func=lambda: started_at + 15 * 86400)
-        expired_info = expired_service.info_from_state({"trial_started_at": started_at})
+        expired_info = expired_service.info_from_state(updated)
         self.assertEqual(expired_info.status, "trial_expired")
         self.assertFalse(expired_info.pro_enabled)
+
+    def test_trial_timestamp_without_signature_is_rejected(self) -> None:
+        service = LicenseService(secret="test-secret", now_func=lambda: 1_000.0)
+
+        info = service.info_from_state({"trial_started_at": 1_000.0})
+
+        self.assertEqual(info.status, "trial_invalid")
+        self.assertFalse(info.pro_enabled)
+
+    def test_license_secret_is_required_outside_dev_override(self) -> None:
+        service = LicenseService(now_func=lambda: 1_700_000_000.0)
+
+        info = service.info_from_state({"license_payload": {"signature": "bad"}})
+
+        self.assertEqual(info.status, "invalid")
+        self.assertIn("secret", info.message)
 
 
 if __name__ == "__main__":

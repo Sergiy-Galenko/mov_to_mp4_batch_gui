@@ -309,6 +309,7 @@ BODY = r'''        return self.shortcut_manager.all_shortcuts()
         state = dict(self.settings_manager.state)
         state["license_payload"] = dict(self._license_payload)
         state["trial_started_at"] = float(self._trial_started_at or 0.0)
+        state["trial_signature"] = str(self._trial_signature or "")
         return state
 
     def _refresh_license_info(self) -> None:
@@ -420,6 +421,7 @@ BODY = r'''        return self.shortcut_manager.all_shortcuts()
             return
         updated = self.license_service.start_trial(self._license_state())
         self._trial_started_at = float(updated.get("trial_started_at") or 0.0)
+        self._trial_signature = str(updated.get("trial_signature") or "")
         self._refresh_license_info()
         self._save_state()
         self._append_log("OK", "Trial started.")
@@ -504,7 +506,7 @@ BODY = r'''        return self.shortcut_manager.all_shortcuts()
 
     @QtCore.Slot()
     def openPaidUpdateDownload(self) -> None:
-        if self._paid_update_download_url:
+        if self._paid_update_download_url.startswith("https://"):
             QtGui.QDesktopServices.openUrl(QtCore.QUrl(self._paid_update_download_url))
 
     @QtCore.Slot()

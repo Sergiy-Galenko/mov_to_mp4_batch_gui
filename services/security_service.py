@@ -26,6 +26,7 @@ def write_checksum_sidecar(path: Path, algorithm: str) -> Path:
 
 
 def secure_delete(path: Path, *, passes: int = 1) -> None:
+    """Best-effort overwrite and unlink; SSDs, snapshots, and journaling can keep copies."""
     if not path.exists() or not path.is_file():
         return
     size = path.stat().st_size
