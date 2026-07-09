@@ -98,7 +98,7 @@ def drain_events(event_queue: "queue.Queue[tuple]") -> list[tuple]:
 class ConverterServiceTest(unittest.TestCase):
     def test_skip_existing_marks_task_as_skipped(self) -> None:
         fake = FakeFfmpegService()
-        events: "queue.Queue[tuple]" = queue.Queue()
+        events: queue.Queue[tuple] = queue.Queue()
         service = MockConverterService(fake, events)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -119,7 +119,7 @@ class ConverterServiceTest(unittest.TestCase):
 
     def test_audio_only_uses_audio_builder_and_marks_success(self) -> None:
         fake = FakeFfmpegService()
-        events: "queue.Queue[tuple]" = queue.Queue()
+        events: queue.Queue[tuple] = queue.Queue()
         service = MockConverterService(fake, events)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -139,7 +139,7 @@ class ConverterServiceTest(unittest.TestCase):
 
     def test_missing_file_marks_failed(self) -> None:
         fake = FakeFfmpegService()
-        events: "queue.Queue[tuple]" = queue.Queue()
+        events: queue.Queue[tuple] = queue.Queue()
         service = MockConverterService(fake, events)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -154,7 +154,7 @@ class ConverterServiceTest(unittest.TestCase):
     def test_auto_subtitle_uses_transcriber(self) -> None:
         fake = FakeFfmpegService()
         transcriber = FakeTranscriber()
-        events: "queue.Queue[tuple]" = queue.Queue()
+        events: queue.Queue[tuple] = queue.Queue()
         service = MockConverterService(fake, events)
         service.transcriber = transcriber
 
@@ -175,7 +175,7 @@ class ConverterServiceTest(unittest.TestCase):
 
     def test_convert_audio_source_uses_audio_builder(self) -> None:
         fake = FakeFfmpegService()
-        events: "queue.Queue[tuple]" = queue.Queue()
+        events: queue.Queue[tuple] = queue.Queue()
         service = MockConverterService(fake, events)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -196,7 +196,7 @@ class ConverterServiceTest(unittest.TestCase):
     def test_text_conversion_does_not_require_ffmpeg(self) -> None:
         fake = FakeFfmpegService()
         fake.ffmpeg_path = None
-        events: "queue.Queue[tuple]" = queue.Queue()
+        events: queue.Queue[tuple] = queue.Queue()
         service = MockConverterService(fake, events)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -219,7 +219,7 @@ class ConverterServiceTest(unittest.TestCase):
     def test_parallel_conversion_preserves_output_template_index(self) -> None:
         fake = FakeFfmpegService()
         fake.encoder_caps = {"h264_nvenc"}
-        events: "queue.Queue[tuple]" = queue.Queue()
+        events: queue.Queue[tuple] = queue.Queue()
         service = MockConverterService(fake, events)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -246,7 +246,7 @@ class ConverterServiceTest(unittest.TestCase):
 
     def test_successful_conversion_writes_checksum_sidecar(self) -> None:
         fake = FakeFfmpegService()
-        events: "queue.Queue[tuple]" = queue.Queue()
+        events: queue.Queue[tuple] = queue.Queue()
         service = MockConverterService(fake, events)
 
         with tempfile.TemporaryDirectory() as tmpdir:

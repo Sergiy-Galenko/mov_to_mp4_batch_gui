@@ -1,16 +1,16 @@
 ﻿from __future__ import annotations
 
 import argparse
-import json
 import queue
 import sys
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any
 
-from app.paths import find_ffmpeg, find_ffprobe
 from app.localization import normalize_language, translate
 from app.models import ConversionSettings
+from app.paths import find_ffmpeg, find_ffprobe
 from app.performance_profiles import PROFILE_NAMES
 from app.settings import settings_map_to_model
 from services.converter_service import ConverterService
@@ -21,8 +21,8 @@ from services.youtube_download_service import DownloadProgress, YouTubeDownloadE
 from utils.state import load_json_file
 
 
-def _flatten_inputs(values: Iterable[Any]) -> List[Path]:
-    paths: List[Path] = []
+def _flatten_inputs(values: Iterable[Any]) -> list[Path]:
+    paths: list[Path] = []
     for value in values:
         if isinstance(value, (list, tuple)):
             paths.extend(_flatten_inputs(value))
@@ -103,10 +103,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: List[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     language = normalize_language(args.language)
-    settings_map: Dict[str, Any] = {}
+    settings_map: dict[str, Any] = {}
 
     if args.preset:
         preset = PresetManager().get(args.preset)
@@ -150,7 +150,7 @@ def main(argv: List[str] | None = None) -> int:
         print(translate("backend.output_dir_error", language, error=exc), file=sys.stderr)
         return 2
 
-    downloaded_paths: List[Path] = []
+    downloaded_paths: list[Path] = []
     if args.download_url:
         downloader = YouTubeDownloadService(ffmpeg_path)
         for url in args.download_url:
@@ -191,7 +191,7 @@ def main(argv: List[str] | None = None) -> int:
 
     ffmpeg = FfmpegService(ffmpeg_path, ffprobe_path)
     ffmpeg.encoder_caps = ffmpeg.detect_encoders()
-    events: "queue.Queue[tuple]" = queue.Queue()
+    events: queue.Queue[tuple] = queue.Queue()
     converter = ConverterService(ffmpeg, events)
     settings = settings_map_to_model(settings_map, defaults=ConversionSettings())
 

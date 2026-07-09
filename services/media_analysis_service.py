@@ -3,21 +3,20 @@
 import hashlib
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from app.models import MediaInfo
 from services.ffmpeg_service import FfmpegService
 
 
 class MediaAnalysisService:
-    def __init__(self, ffmpeg: FfmpegService, cache_dir: Optional[Path] = None) -> None:
+    def __init__(self, ffmpeg: FfmpegService, cache_dir: Path | None = None) -> None:
         self.ffmpeg = ffmpeg
         self.cache_dir = cache_dir or (Path.home() / ".media_converter_gui_thumbnails")
 
-    def probe(self, path: Path) -> Optional[MediaInfo]:
+    def probe(self, path: Path) -> MediaInfo | None:
         return self.ffmpeg.probe_media(path)
 
-    def thumbnail_for(self, path: Path, media_kind: str) -> Optional[str]:
+    def thumbnail_for(self, path: Path, media_kind: str) -> str | None:
         if media_kind == "image" and path.exists():
             return str(path)
         if media_kind != "video" or not self.ffmpeg.ffmpeg_path:

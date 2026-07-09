@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import List, Optional
 
 from app.models import ConversionSettings, MediaInfo
 
@@ -16,7 +15,7 @@ class SmartRecommendation:
     reason: str
 
 
-def _normalize_codec(codec: Optional[str]) -> str:
+def _normalize_codec(codec: str | None) -> str:
     value = str(codec or "").strip().lower()
     if value in {"h264", "avc", "libx264"}:
         return "h264"
@@ -29,7 +28,7 @@ def _normalize_codec(codec: Optional[str]) -> str:
     return value
 
 
-def classify_content(info: Optional[MediaInfo], source_path: Optional[Path] = None, override: str = "auto") -> str:
+def classify_content(info: MediaInfo | None, source_path: Path | None = None, override: str = "auto") -> str:
     requested = str(override or "auto").strip().lower()
     if requested in {"animation", "live_action", "screencast"}:
         return requested
@@ -46,13 +45,20 @@ def classify_content(info: Optional[MediaInfo], source_path: Optional[Path] = No
             return "animation"
         if info.fps and info.fps <= 18:
             return "animation"
-        if info.width and info.height and info.fps and info.fps <= 30:
-            if info.width >= 1280 and info.height >= 720 and (info.frame_rate_mode or "").upper() == "CFR":
-                return "screencast"
+        if (
+            info.width
+            and info.height
+            and info.fps
+            and info.fps <= 30
+            and info.width >= 1280
+            and info.height >= 720
+            and (info.frame_rate_mode or "").upper() == "CFR"
+        ):
+            return "screencast"
     return "live_action"
 
 
-def recommend_settings(settings: ConversionSettings, info: Optional[MediaInfo], source_path: Optional[Path] = None) -> SmartRecommendation:
+def recommend_settings(settings: ConversionSettings, info: MediaInfo | None, source_path: Path | None = None) -> SmartRecommendation:
     content_type = classify_content(info, source_path, settings.smart_content_type)
     quality = str(settings.smart_quality_target or "balanced").strip().lower()
     if quality not in {"small", "balanced", "quality"}:
@@ -87,10 +93,10 @@ def recommend_settings(settings: ConversionSettings, info: Optional[MediaInfo], 
 
 def apply_smart_settings(
     settings: ConversionSettings,
-    info: Optional[MediaInfo],
+    info: MediaInfo | None,
     *,
     media_type: str,
-    source_path: Optional[Path] = None,
+    source_path: Path | None = None,
 ) -> ConversionSettings:
     if not settings.smart_convert_enabled or media_type != "video" or settings.operation not in {"convert", "subtitle_burn"}:
         return settings
@@ -104,8 +110,8 @@ def apply_smart_settings(
     )
 
 
-def parse_ab_crfs(value: str) -> List[int]:
-    result: List[int] = []
+def parse_ab_crfs(value: str) -> list[int]:
+    result: list[int] = []
     for part in str(value or "").replace(";", ",").split(","):
         text = part.strip()
         if not text:

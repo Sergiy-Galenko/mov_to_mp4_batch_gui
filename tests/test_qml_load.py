@@ -3,9 +3,9 @@ import unittest
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QUrl
-from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtQuickControls2 import QQuickStyle
+from PySide6.QtWidgets import QApplication
 
 from ui.backend import Backend
 

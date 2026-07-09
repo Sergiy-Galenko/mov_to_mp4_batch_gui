@@ -5,7 +5,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
@@ -23,14 +23,14 @@ class NotificationService:
         *,
         title: str,
         message: str,
-        summary: Dict[str, Any],
+        summary: dict[str, Any],
         webhook_url: str = "",
         discord_webhook_url: str = "",
         telegram_bot_token: str = "",
         telegram_chat_id: str = "",
         timeout: float = 5.0,
-    ) -> List[NotificationResult]:
-        results: List[NotificationResult] = []
+    ) -> list[NotificationResult]:
+        results: list[NotificationResult] = []
         if webhook_url.strip():
             payload = {"title": title, "message": message, "summary": dict(summary)}
             results.append(self._post_json(webhook_url.strip(), payload, "webhook", timeout))
@@ -45,8 +45,8 @@ class NotificationService:
             results.append(self._send_telegram(telegram_bot_token.strip(), telegram_chat_id.strip(), text, timeout))
         return results
 
-    def _discord_fields(self, summary: Dict[str, Any]) -> List[Dict[str, str]]:
-        fields: List[Dict[str, str]] = []
+    def _discord_fields(self, summary: dict[str, Any]) -> list[dict[str, str]]:
+        fields: list[dict[str, str]] = []
         for key in ("completed", "failed", "skipped", "cancelled", "output_dir"):
             value = summary.get(key)
             if value in (None, ""):
@@ -60,7 +60,7 @@ class NotificationService:
         payload = {"chat_id": chat_id, "text": text[:4096]}
         return self._post_json(url, payload, "telegram", timeout)
 
-    def _post_json(self, url: str, payload: Dict[str, Any], target: str, timeout: float) -> NotificationResult:
+    def _post_json(self, url: str, payload: dict[str, Any], target: str, timeout: float) -> NotificationResult:
         data = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             url,

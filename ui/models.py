@@ -1,7 +1,7 @@
 ﻿import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from PySide6 import QtCore
 
@@ -35,9 +35,9 @@ class QueueModel(QtCore.QAbstractListModel):
     PinnedRole = QtCore.Qt.UserRole + 23
     PriorityRole = QtCore.Qt.UserRole + 24
 
-    def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
+    def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
-        self._items: List[TaskItem] = []
+        self._items: list[TaskItem] = []
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         if parent.isValid():
@@ -105,7 +105,7 @@ class QueueModel(QtCore.QAbstractListModel):
             return int(item.priority)
         return None
 
-    def roleNames(self) -> Dict[int, bytes]:
+    def roleNames(self) -> dict[int, bytes]:
         return {
             self.NameRole: b"name",
             self.TypeRole: b"mediaType",
@@ -133,15 +133,15 @@ class QueueModel(QtCore.QAbstractListModel):
             self.PriorityRole: b"priority",
         }
 
-    def items(self) -> List[TaskItem]:
+    def items(self) -> list[TaskItem]:
         return list(self._items)
 
-    def item_at(self, index: int) -> Optional[TaskItem]:
+    def item_at(self, index: int) -> TaskItem | None:
         if index < 0 or index >= len(self._items):
             return None
         return self._items[index]
 
-    def item_by_path(self, task_path: Path) -> Optional[TaskItem]:
+    def item_by_path(self, task_path: Path) -> TaskItem | None:
         task_path = task_path.expanduser()
         for item in self._items:
             if item.path == task_path:
@@ -155,7 +155,7 @@ class QueueModel(QtCore.QAbstractListModel):
                 return idx
         return -1
 
-    def add_items(self, items: List[TaskItem]) -> None:
+    def add_items(self, items: list[TaskItem]) -> None:
         if not items:
             return
         start = len(self._items)
@@ -164,7 +164,7 @@ class QueueModel(QtCore.QAbstractListModel):
         self._items.extend(items)
         self.endInsertRows()
 
-    def set_items(self, items: List[TaskItem]) -> None:
+    def set_items(self, items: list[TaskItem]) -> None:
         self.beginResetModel()
         self._items = list(items)
         self.endResetModel()
@@ -337,7 +337,7 @@ class QueueModel(QtCore.QAbstractListModel):
     def paths_set(self) -> set[Path]:
         return {item.path for item in self._items}
 
-    def clear_statuses(self, *, paths: Optional[set[Path]] = None) -> None:
+    def clear_statuses(self, *, paths: set[Path] | None = None) -> None:
         for idx, item in enumerate(self._items):
             if paths is not None and item.path not in paths:
                 continue
@@ -356,9 +356,9 @@ class LogModel(QtCore.QAbstractListModel):
     MessageRole = QtCore.Qt.UserRole + 3
     LineRole = QtCore.Qt.UserRole + 4
 
-    def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
+    def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
-        self._items: List[Dict[str, str]] = []
+        self._items: list[dict[str, str]] = []
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         if parent.isValid():
@@ -381,7 +381,7 @@ class LogModel(QtCore.QAbstractListModel):
             return item.get("line", "")
         return None
 
-    def roleNames(self) -> Dict[int, bytes]:
+    def roleNames(self) -> dict[int, bytes]:
         return {
             self.TimeRole: b"timeText",
             self.LevelRole: b"level",
@@ -417,9 +417,9 @@ class HistoryModel(QtCore.QAbstractListModel):
     OutputRole = QtCore.Qt.UserRole + 6
     StatusRole = QtCore.Qt.UserRole + 7
 
-    def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
+    def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
-        self._entries: List[Dict[str, Any]] = []
+        self._entries: list[dict[str, Any]] = []
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         if parent.isValid():
@@ -451,7 +451,7 @@ class HistoryModel(QtCore.QAbstractListModel):
             return "stopped" if entry.get("stopped") else ("failed" if failed else "success")
         return None
 
-    def roleNames(self) -> Dict[int, bytes]:
+    def roleNames(self) -> dict[int, bytes]:
         return {
             self.StartedRole: b"startedText",
             self.OperationRole: b"operation",
@@ -462,12 +462,12 @@ class HistoryModel(QtCore.QAbstractListModel):
             self.StatusRole: b"runStatus",
         }
 
-    def set_entries(self, entries: List[Dict[str, Any]]) -> None:
+    def set_entries(self, entries: list[dict[str, Any]]) -> None:
         self.beginResetModel()
         self._entries = list(entries)
         self.endResetModel()
 
-    def entry_at(self, index: int) -> Optional[Dict[str, Any]]:
+    def entry_at(self, index: int) -> dict[str, Any] | None:
         if index < 0 or index >= len(self._entries):
             return None
         return self._entries[index]

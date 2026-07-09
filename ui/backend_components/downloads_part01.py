@@ -37,7 +37,7 @@ BODY = r'''    @QtCore.Slot()
         if not filt:
             self.addFiles()
             return
-        files, _ = QtWidgets.QFileDialog.getOpenFileNames(None, "Р”РѕРґР°С‚Рё С„Р°Р№Р»Рё", "", filt)
+        files, _ = QtWidgets.QFileDialog.getOpenFileNames(None, "Додати файли", "", filt)
         paths = [Path(path) for path in files]
         if paths:
             self._remember_folder(str(paths[0].parent))

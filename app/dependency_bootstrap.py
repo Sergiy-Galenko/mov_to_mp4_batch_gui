@@ -4,9 +4,8 @@ import importlib.util
 import os
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
-
 
 REQUIREMENT_IMPORTS = {
     "PySide6": "PySide6",
@@ -21,8 +20,8 @@ class DependencyBootstrapError(RuntimeError):
     pass
 
 
-def missing_runtime_dependencies(requirements_path: Path) -> List[str]:
-    missing: List[str] = []
+def missing_runtime_dependencies(requirements_path: Path) -> list[str]:
+    missing: list[str] = []
     for package in _requirement_names(requirements_path):
         module_name = REQUIREMENT_IMPORTS.get(package, package.replace("-", "_"))
         if importlib.util.find_spec(module_name) is None:
@@ -30,7 +29,7 @@ def missing_runtime_dependencies(requirements_path: Path) -> List[str]:
     return missing
 
 
-def ensure_runtime_dependencies(requirements_path: Path, *, stdout=None, stderr=None) -> List[str]:
+def ensure_runtime_dependencies(requirements_path: Path, *, stdout=None, stderr=None) -> list[str]:
     if os.environ.get("MEDIA_CONVERTER_SKIP_DEP_BOOTSTRAP", "").strip() in {"1", "true", "yes"}:
         return []
     requirements_path = requirements_path.expanduser().resolve()
@@ -56,7 +55,7 @@ def ensure_runtime_dependencies(requirements_path: Path, *, stdout=None, stderr=
 def _requirement_names(requirements_path: Path) -> Sequence[str]:
     if not requirements_path.exists():
         return []
-    result: List[str] = []
+    result: list[str] = []
     for raw_line in requirements_path.read_text(encoding="utf-8").splitlines():
         name = _requirement_name(raw_line)
         if name:

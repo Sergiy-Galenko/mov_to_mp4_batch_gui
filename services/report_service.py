@@ -11,7 +11,7 @@ import io
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class ReportService:
@@ -19,11 +19,11 @@ class ReportService:
 
     @staticmethod
     def to_csv(
-        results: List[Dict[str, Any]],
+        results: list[dict[str, Any]],
         *,
-        settings: Optional[Dict[str, Any]] = None,
+        settings: dict[str, Any] | None = None,
         output_dir: str = "",
-        started_at: Optional[float] = None,
+        started_at: float | None = None,
     ) -> str:
         """Render session results as a CSV string."""
         output = io.StringIO()
@@ -64,11 +64,11 @@ class ReportService:
 
     @staticmethod
     def to_json(
-        results: List[Dict[str, Any]],
+        results: list[dict[str, Any]],
         *,
-        settings: Optional[Dict[str, Any]] = None,
+        settings: dict[str, Any] | None = None,
         output_dir: str = "",
-        started_at: Optional[float] = None,
+        started_at: float | None = None,
     ) -> str:
         """Render session results as a formatted JSON string."""
         total = len(results)
@@ -96,11 +96,11 @@ class ReportService:
 
     @staticmethod
     def to_html(
-        results: List[Dict[str, Any]],
+        results: list[dict[str, Any]],
         *,
-        settings: Optional[Dict[str, Any]] = None,
+        settings: dict[str, Any] | None = None,
         output_dir: str = "",
-        started_at: Optional[float] = None,
+        started_at: float | None = None,
     ) -> str:
         """Render session results as a standalone HTML report."""
         total = len(results)
@@ -153,12 +153,12 @@ class ReportService:
     @staticmethod
     def export_file(
         path: Path,
-        results: List[Dict[str, Any]],
+        results: list[dict[str, Any]],
         *,
         fmt: str = "csv",
-        settings: Optional[Dict[str, Any]] = None,
+        settings: dict[str, Any] | None = None,
         output_dir: str = "",
-        started_at: Optional[float] = None,
+        started_at: float | None = None,
     ) -> Path:
         """Export results to a file. Format can be 'csv', 'json', or 'html'.
 

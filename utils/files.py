@@ -3,7 +3,6 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from app.constants import AUDIO_EXTS, IMAGE_EXTS, SUBTITLE_EXTS, TEXT_EXTS, VIDEO_EXTS
 
@@ -28,7 +27,7 @@ def is_text(path: Path) -> bool:
     return path.suffix.lower() in TEXT_EXTS
 
 
-def media_type(path: Path) -> Optional[str]:
+def media_type(path: Path) -> str | None:
     if is_video(path):
         return "video"
     if is_image(path):

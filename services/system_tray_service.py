@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from PySide6 import QtCore, QtGui, QtWidgets
 
 
@@ -18,12 +16,12 @@ class SystemTrayService(QtCore.QObject):
 
     def __init__(
         self,
-        parent: Optional[QtCore.QObject] = None,
+        parent: QtCore.QObject | None = None,
         app_title: str = "Media Converter",
     ) -> None:
         super().__init__(parent)
         self._app_title = app_title
-        self._tray: Optional[QtWidgets.QSystemTrayIcon] = None
+        self._tray: QtWidgets.QSystemTrayIcon | None = None
         self._default_icon = QtGui.QIcon()
         self._progress = 0.0
         self._is_running = False

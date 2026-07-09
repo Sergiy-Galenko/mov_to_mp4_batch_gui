@@ -1,11 +1,10 @@
 ﻿import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from utils.state import save_json_file
 
-
-DEFAULT_PRESETS: Dict[str, Dict[str, Any]] = {
+DEFAULT_PRESETS: dict[str, dict[str, Any]] = {
     "H.264 • Баланс (MP4)": {
         "out_video_fmt": "mp4",
         "crf": 23,
@@ -199,7 +198,7 @@ DEFAULT_PRESETS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def load_presets(path: Path) -> Dict[str, Dict[str, Any]]:
+def load_presets(path: Path) -> dict[str, dict[str, Any]]:
     if not path.exists():
         return dict(DEFAULT_PRESETS)
     try:
@@ -214,7 +213,7 @@ def load_presets(path: Path) -> Dict[str, Dict[str, Any]]:
     return dict(DEFAULT_PRESETS)
 
 
-def save_presets(path: Path, presets: Dict[str, Dict[str, Any]]) -> None:
+def save_presets(path: Path, presets: dict[str, dict[str, Any]]) -> None:
     try:
         save_json_file(path, presets)
     except Exception:

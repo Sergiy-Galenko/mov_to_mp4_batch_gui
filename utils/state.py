@@ -1,11 +1,12 @@
+import contextlib
 import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
-def load_json_state(path: Path) -> Dict[str, Any]:
+def load_json_state(path: Path) -> dict[str, Any]:
     data = load_json_file(path)
     return data if isinstance(data, dict) else {}
 
@@ -21,7 +22,7 @@ def load_json_file(path: Path) -> Any:
     return data
 
 
-def save_json_state(path: Path, state: Dict[str, Any]) -> None:
+def save_json_state(path: Path, state: dict[str, Any]) -> None:
     save_json_file(path, state)
 
 
@@ -37,21 +38,17 @@ def save_json_file(path: Path, state: Any) -> None:
         os.replace(tmp_path, path)
     except Exception:
         if tmp_fd != -1:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(tmp_fd)
-            except OSError:
-                pass
         if tmp_path:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 os.unlink(tmp_path)
-            except FileNotFoundError:
-                pass
         raise
 
 
-def load_state(state_path: Path) -> Dict[str, Any]:
+def load_state(state_path: Path) -> dict[str, Any]:
     return load_json_state(state_path)
 
 
-def save_state(state_path: Path, data: Dict[str, Any]) -> None:
+def save_state(state_path: Path, data: dict[str, Any]) -> None:
     save_json_state(state_path, data)

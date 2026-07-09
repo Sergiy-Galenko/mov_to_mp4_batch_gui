@@ -1,4 +1,5 @@
-﻿import os
+﻿import contextlib
+import os
 import signal
 import subprocess
 import threading
@@ -7,12 +8,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from queue import Queue
-from typing import Dict, List, Optional, Tuple
 
 from app.constants import PROGRESS_THROTTLE_SEC
 from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
-from services.ffmpeg_service import FfmpegService, parse_progress_line
 from services.cloud_upload_service import CloudUploadError, CloudUploadService
+from services.ffmpeg_service import FfmpegService, parse_progress_line
 from services.security_service import secure_delete, write_checksum_sidecar
 from services.smart_convert_service import apply_smart_settings, parse_ab_crfs, recommend_settings
 from services.text_conversion_service import convert_text_file
@@ -22,7 +22,7 @@ from utils.files import build_merge_output_path, build_output_path, sanitize_fil
 from utils.formatting import format_bytes, format_time, parse_ffmpeg_time
 
 
-def _estimate_eta(elapsed: float, progress: float) -> Optional[float]:
+def _estimate_eta(elapsed: float, progress: float) -> float | None:
     if progress <= 0:
         return None
     total = elapsed / progress
@@ -32,7 +32,7 @@ def _estimate_eta(elapsed: float, progress: float) -> Optional[float]:
 class ConverterService:
     SKIP_RC = -32001
 
-    def __init__(self, ffmpeg: FfmpegService, event_queue: Queue, transcriber: Optional[TranscriptionService] = None):
+    def __init__(self, ffmpeg: FfmpegService, event_queue: Queue, transcriber: TranscriptionService | None = None):
         self.ffmpeg = ffmpeg
         self.queue = event_queue
         self.transcriber = transcriber or TranscriptionService()
@@ -40,17 +40,17 @@ class ConverterService:
         self.stop_event = threading.Event()
         self.pause_event = threading.Event()
         self.skip_event = threading.Event()
-        self.thread: Optional[threading.Thread] = None
-        self.current_proc: Optional[subprocess.Popen] = None
-        self.child_services: List["ConverterService"] = []
-        self.progress_task_path: Optional[Path] = None
-        self.current_output_path: Optional[Path] = None
-        self.media_info: Dict[Path, MediaInfo] = {}
-        self.prefetched_media_info: Dict[Path, MediaInfo] = {}
+        self.thread: threading.Thread | None = None
+        self.current_proc: subprocess.Popen | None = None
+        self.child_services: list[ConverterService] = []
+        self.progress_task_path: Path | None = None
+        self.current_output_path: Path | None = None
+        self.media_info: dict[Path, MediaInfo] = {}
+        self.prefetched_media_info: dict[Path, MediaInfo] = {}
         self.prefetch_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="converter-ffprobe")
 
-    def _result_output_paths(self, result_output: str) -> List[Path]:
-        paths: List[Path] = []
+    def _result_output_paths(self, result_output: str) -> list[Path]:
+        paths: list[Path] = []
         for raw in str(result_output or "").split(";"):
             text = raw.strip()
             if not text:
@@ -105,7 +105,7 @@ class ConverterService:
             except Exception as exc:
                 self._log("WARN", f"Secure delete не виконано для {task.path.name}: {exc}")
 
-    def start(self, tasks: List[TaskItem], settings: ConversionSettings, out_dir: Path) -> None:
+    def start(self, tasks: list[TaskItem], settings: ConversionSettings, out_dir: Path) -> None:
         if self.thread and self.thread.is_alive():
             return
         self.stop_event.clear()
@@ -148,7 +148,7 @@ class ConverterService:
             child.skip_current()
         self._terminate_process(self.current_proc)
 
-    def _terminate_process(self, proc: Optional[subprocess.Popen], timeout: float = 3.0) -> None:
+    def _terminate_process(self, proc: subprocess.Popen | None, timeout: float = 3.0) -> None:
         if not proc or proc.poll() is not None:
             return
         try:
@@ -178,10 +178,8 @@ class ConverterService:
         if os.name == "nt":
             self._set_windows_process_suspended(proc.pid, suspend)
             return
-        try:
+        with contextlib.suppress(Exception):
             os.kill(proc.pid, signal.SIGSTOP if suspend else signal.SIGCONT)
-        except Exception:
-            pass
 
     def _set_windows_process_suspended(self, pid: int, suspend: bool) -> None:
         try:
@@ -240,7 +238,7 @@ class ConverterService:
         info = self.media_info.get(task.path)
         return apply_smart_settings(base, info, media_type=task.media_type, source_path=task.path)
 
-    def _can_use_two_pass(self, settings: ConversionSettings, cmd: List[str], allow_fast: bool) -> bool:
+    def _can_use_two_pass(self, settings: ConversionSettings, cmd: list[str], allow_fast: bool) -> bool:
         if allow_fast or not settings.smart_two_pass or not settings.target_size_mb:
             return False
         joined = " ".join(cmd)
@@ -251,17 +249,15 @@ class ConverterService:
 
     def _cleanup_passlog(self, passlog: Path) -> None:
         for candidate in passlog.parent.glob(passlog.name + "*"):
-            try:
+            with contextlib.suppress(Exception):
                 candidate.unlink(missing_ok=True)
-            except Exception:
-                pass
 
     def _run_video_command(
         self,
-        cmd: List[str],
+        cmd: list[str],
         outp: Path,
         settings: ConversionSettings,
-        duration: Optional[float],
+        duration: float | None,
         done_duration: float,
         total_duration: float,
         done_files: int,
@@ -281,7 +277,7 @@ class ConverterService:
         self._cleanup_passlog(passlog)
         return rc
 
-    def _run_ab_samples(self, task: TaskItem, outp: Path, settings: ConversionSettings, info: Optional[MediaInfo]) -> None:
+    def _run_ab_samples(self, task: TaskItem, outp: Path, settings: ConversionSettings, info: MediaInfo | None) -> None:
         if not settings.smart_ab_test or task.media_type != "video":
             return
         crfs = parse_ab_crfs(settings.smart_ab_crfs)
@@ -368,7 +364,7 @@ class ConverterService:
         stem = sanitize_file_stem(f"{base_output.stem} - {chapter_index:02d} {chapter_name}")
         return base_output.with_name(f"{stem}{suffix}")
 
-    def _run_hook(self, command: str, stage: str, *, env: Dict[str, str]) -> None:
+    def _run_hook(self, command: str, stage: str, *, env: dict[str, str]) -> None:
         command = command.strip()
         if not command:
             return
@@ -395,7 +391,7 @@ class ConverterService:
         out_dir: Path,
         total_files: int,
         stopped: bool,
-        results: List[Dict[str, str]],
+        results: list[dict[str, str]],
         started_at: float,
     ) -> None:
         summary = {
@@ -426,12 +422,12 @@ class ConverterService:
         }
         self._emit("run_summary", summary)
 
-    def _validate_operation(self, task: TaskItem, settings: ConversionSettings) -> Tuple[bool, str]:
+    def _validate_operation(self, task: TaskItem, settings: ConversionSettings) -> tuple[bool, str]:
         if not operation_supports_media(settings.operation, task.media_type):
             return False, "Операція не підтримує тип цього файлу"
         return True, ""
 
-    def _total_duration_for(self, tasks: List[TaskItem], defaults: ConversionSettings) -> float:
+    def _total_duration_for(self, tasks: list[TaskItem], defaults: ConversionSettings) -> float:
         total_duration = 0.0
         for task in tasks:
             settings = self._effective_settings(task, defaults)
@@ -439,7 +435,7 @@ class ConverterService:
                 total_duration += self._task_duration(task)
         return total_duration
 
-    def _can_run_parallel(self, tasks: List[TaskItem], defaults: ConversionSettings) -> bool:
+    def _can_run_parallel(self, tasks: list[TaskItem], defaults: ConversionSettings) -> bool:
         if self.conversion_worker_limit() < 2 or len(tasks) < 2:
             return False
         for task in tasks:
@@ -496,18 +492,18 @@ class ConverterService:
 
     def _run_parallel_tasks(
         self,
-        tasks: List[TaskItem],
+        tasks: list[TaskItem],
         settings: ConversionSettings,
         out_dir: Path,
         total_files: int,
         total_start: float,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         worker_count = min(self.conversion_worker_limit(), len(tasks))
         self._log("INFO", f"Parallel conversion enabled: {worker_count} workers")
-        result_queue: "Queue[tuple]" = Queue()
-        run_results: List[Dict[str, str]] = []
+        result_queue: Queue[tuple] = Queue()
+        run_results: list[dict[str, str]] = []
         completed_paths: set[Path] = set()
-        progress_by_path: Dict[Path, float] = {task.path: 0.0 for task in tasks}
+        progress_by_path: dict[Path, float] = {task.path: 0.0 for task in tasks}
 
         def run_child(task: TaskItem, index: int) -> None:
             child = self._create_child_service(result_queue)
@@ -525,10 +521,8 @@ class ConverterService:
                 self._wait_for_resource_budget(child_task.resolved_settings or child_settings)
                 child._run([child_task], child_settings, out_dir, start_index=index)
             finally:
-                try:
+                with contextlib.suppress(ValueError):
                     self.child_services.remove(child)
-                except ValueError:
-                    pass
 
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="converter-worker") as executor:
             futures = [executor.submit(run_child, task, index) for index, task in enumerate(tasks, start=1)]
@@ -543,15 +537,15 @@ class ConverterService:
                     if etype in {"log", "status", "task_state"}:
                         self._emit(*event)
                         if etype == "task_state":
-                            _, path, status, message, output_path = event
+                            _, path, status, _message, _output_path = event
                             if status in {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.SKIPPED, TaskStatus.CANCELLED}:
                                 completed_paths.add(path)
                                 progress_by_path[path] = 1.0
                     elif etype == "progress_for":
                         if len(event) >= 9:
-                            _, path, file_pct, out_time, duration, file_eta, _child_total, _child_eta, speed = event
+                            _, path, file_pct, _out_time, _duration, file_eta, _child_total, _child_eta, speed = event
                         else:
-                            _, path, file_pct, out_time, duration, file_eta, _child_total, _child_eta = event
+                            _, path, file_pct, _out_time, _duration, file_eta, _child_total, _child_eta = event
                             speed = None
                         if path is not None and file_pct is not None:
                             progress_by_path[path] = max(progress_by_path.get(path, 0.0), float(file_pct))
@@ -591,13 +585,13 @@ class ConverterService:
         done_files: int,
         total_files: int,
         total_start: float,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         info = self.media_info.get(task.path)
         if not info or not info.chapters:
             return False, "У файлі немає глав для split by chapters"
 
         base_output = self._resolve_output_path(task, settings, out_dir, index)
-        chapter_outputs: List[str] = []
+        chapter_outputs: list[str] = []
         chapter_done = 0.0
         for chapter in info.chapters:
             chapter_duration = max(chapter.end - chapter.start, 0.0)
@@ -629,7 +623,7 @@ class ConverterService:
             self._log("OK", f"Глава {chapter.index}: {outp.name}")
         return True, "; ".join(chapter_outputs)
 
-    def _run(self, tasks: List[TaskItem], settings: ConversionSettings, out_dir: Path, *, start_index: int = 1) -> None:
+    def _run(self, tasks: list[TaskItem], settings: ConversionSettings, out_dir: Path, *, start_index: int = 1) -> None:
         if not tasks:
             self._log("WARN", "Черга порожня.")
             self._emit("done", True)
@@ -648,12 +642,12 @@ class ConverterService:
         total_files = len(tasks)
         done_files = 0
         total_start = time.time()
-        run_results: List[Dict[str, str]] = []
+        run_results: list[dict[str, str]] = []
 
         self.media_info.clear()
         self.media_info.update(self.prefetched_media_info)
         if self.ffmpeg.ffprobe_path:
-            missing_probe: List[Path] = []
+            missing_probe: list[Path] = []
             for task in tasks:
                 self._task_state(task.path, TaskStatus.ANALYZING)
                 if task.media_type == "text":
@@ -753,7 +747,7 @@ class ConverterService:
                 for task in merge_candidates:
                     self._task_state(task.path, "running")
                 try:
-                    filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
+                    _filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
                         merge_candidates[0].path,
                         settings,
                         outp.suffix,
@@ -791,10 +785,8 @@ class ConverterService:
                             total_start,
                         )
                     finally:
-                        try:
+                        with contextlib.suppress(Exception):
                             Path(list_path).unlink(missing_ok=True)
-                        except Exception:
-                            pass
                     success = rc == 0 and outp.exists()
                     message = "" if success else f"Помилка merge (код {rc})"
                     if success:
@@ -832,7 +824,7 @@ class ConverterService:
                         )
 
         remaining_tasks = [task for task in tasks if task.path not in merged_video_paths]
-        parallel_results: Optional[List[Dict[str, str]]] = None
+        parallel_results: list[dict[str, str]] | None = None
         if not merge_enabled and self._can_run_parallel(remaining_tasks, settings):
             parallel_results = self._run_parallel_tasks(remaining_tasks, settings, out_dir, total_files, total_start)
             run_results.extend(parallel_results)
@@ -902,7 +894,7 @@ class ConverterService:
                     if op in {"convert", "subtitle_burn"}:
                         if task.media_type == "video":
                             info = self.media_info.get(task.path)
-                            filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
+                            _filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
                                 task.path,
                                 settings_for_task,
                                 outp.suffix,
@@ -1143,8 +1135,8 @@ class ConverterService:
 
     def _run_ffmpeg(
         self,
-        cmd: List[str],
-        duration: Optional[float],
+        cmd: list[str],
+        duration: float | None,
         total_done: float,
         total_duration: float,
         done_files: int,
@@ -1155,7 +1147,7 @@ class ConverterService:
             return -1
         output_path = Path(cmd[-1])
         output_existed_before = output_path.exists()
-        cmd_with_progress = cmd[:2] + ["-progress", "pipe:1", "-nostats", "-hide_banner"] + cmd[2:]
+        cmd_with_progress = [*cmd[:2], "-progress", "pipe:1", "-nostats", "-hide_banner", *cmd[2:]]
         proc = subprocess.Popen(
             cmd_with_progress,
             stdout=subprocess.PIPE,
@@ -1175,7 +1167,7 @@ class ConverterService:
         out_time = 0.0
         speed = None
         last_progress_emit = 0.0
-        pending_progress: Optional[Tuple[Optional[float], float, Optional[float], Optional[float], float, Optional[float], Optional[float]]] = None
+        pending_progress: tuple[float | None, float, float | None, float | None, float, float | None, float | None] | None = None
         if proc.stdout is not None:
             for line in proc.stdout:
                 self._wait_if_paused()
@@ -1192,19 +1184,15 @@ class ConverterService:
                 if value in {"", "N/A"}:
                     continue
                 if key in {"out_time_ms", "out_time_us"}:
-                    try:
+                    with contextlib.suppress(ValueError):
                         out_time = int(value) / 1_000_000
-                    except ValueError:
-                        pass
                 elif key == "out_time":
                     parsed = parse_ffmpeg_time(value)
                     if parsed is not None:
                         out_time = parsed
                 elif key == "speed":
-                    try:
+                    with contextlib.suppress(ValueError):
                         speed = float(value.replace("x", ""))
-                    except ValueError:
-                        pass
 
                 file_pct = None
                 file_eta = None
@@ -1242,10 +1230,8 @@ class ConverterService:
             self.current_proc = None
             self.current_output_path = None
         if (self.skip_event.is_set() or self.stop_event.is_set()) and not output_existed_before:
-            try:
+            with contextlib.suppress(Exception):
                 output_path.unlink(missing_ok=True)
-            except Exception:
-                pass
         if self.skip_event.is_set():
             return self.SKIP_RC
         return rc

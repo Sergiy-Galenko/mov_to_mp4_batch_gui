@@ -1,8 +1,9 @@
 ﻿from __future__ import annotations
 
+import contextlib
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.models import ConversionSettings, MediaInfo, PreviewItem, PreviewSummary, TaskItem
 from app.settings import merge_settings_maps, settings_map_to_model
@@ -18,12 +19,12 @@ class PreviewBuilder:
 
     def build(
         self,
-        settings_map: Dict[str, Any],
+        settings_map: dict[str, Any],
         *,
-        tasks: List[TaskItem],
+        tasks: list[TaskItem],
         output_dir: str,
         selected_path: str = "",
-        media_info: Optional[Dict[Path, MediaInfo]] = None,
+        media_info: dict[Path, MediaInfo] | None = None,
         max_lines: int = 20,
     ) -> PreviewSummary:
         if not tasks:
@@ -31,12 +32,12 @@ class PreviewBuilder:
 
         info_cache = media_info or {}
         out_dir = Path(output_dir).expanduser()
-        items: List[PreviewItem] = []
-        lines: List[str] = []
+        items: list[PreviewItem] = []
+        lines: list[str] = []
         selected = Path(selected_path).expanduser() if selected_path else None
-        selected_item: Optional[PreviewItem] = None
+        selected_item: PreviewItem | None = None
         base_settings = settings_map_to_model(settings_map, defaults=ConversionSettings())
-        resolved_by_path: Dict[Path, ConversionSettings] = {}
+        resolved_by_path: dict[Path, ConversionSettings] = {}
         for task in tasks:
             merged_map = merge_settings_maps(settings_map, task.overrides)
             resolved = settings_map_to_model(merged_map, defaults=ConversionSettings())
@@ -54,8 +55,8 @@ class PreviewBuilder:
         ]
         merge_enabled = base_settings.merge and len(merge_candidates) >= 2
         merge_paths = {task.path for task in merge_candidates} if merge_enabled else set()
-        merge_desired_path: Optional[Path] = None
-        merge_preview_path: Optional[Path] = None
+        merge_desired_path: Path | None = None
+        merge_preview_path: Path | None = None
         merge_command = ""
         if merge_enabled:
             merge_desired_path = build_merge_output_path(
@@ -120,9 +121,7 @@ class PreviewBuilder:
                 command=command,
             )
             items.append(preview)
-            if selected and task.path == selected:
-                selected_item = preview
-            elif selected_item is None and index == 1:
+            if (selected and task.path == selected) or (selected_item is None and index == 1):
                 selected_item = preview
 
             warning_text = f" | {'; '.join(warnings)}" if warnings else ""
@@ -135,7 +134,7 @@ class PreviewBuilder:
         visible_lines = lines
         if len(visible_lines) > max_lines:
             remaining = len(visible_lines) - max_lines
-            visible_lines = visible_lines[:max_lines] + [f"... ще {remaining} файлів"]
+            visible_lines = [*visible_lines[:max_lines], f"... ще {remaining} файлів"]
 
         summary = PreviewSummary(
             items=items,
@@ -153,7 +152,7 @@ class PreviewBuilder:
         task: TaskItem,
         settings: ConversionSettings,
         output_path: Path,
-        media_info: Optional[Dict[Path, MediaInfo]] = None,
+        media_info: dict[Path, MediaInfo] | None = None,
     ) -> str:
         if not operation_supports_media(settings.operation, task.media_type):
             return "Операція не підтримує тип цього файлу"
@@ -169,7 +168,7 @@ class PreviewBuilder:
             if op in {"convert", "subtitle_burn"}:
                 if task.media_type == "video":
                     info = info_cache.get(task.path)
-                    filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(task.path, settings, output_path.suffix)
+                    _filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(task.path, settings, output_path.suffix)
                     audio_processing = self.ffmpeg.has_audio_processing(settings) or bool(settings.replace_audio_path.strip())
                     allow_fast, _ = self.ffmpeg.fast_copy_allowed(
                         task.path,
@@ -228,10 +227,10 @@ class PreviewBuilder:
 
     def build_merge_command(
         self,
-        tasks: List[TaskItem],
+        tasks: list[TaskItem],
         settings: ConversionSettings,
         output_path: Path,
-        media_info: Optional[Dict[Path, MediaInfo]] = None,
+        media_info: dict[Path, MediaInfo] | None = None,
     ) -> str:
         if not self.ffmpeg.ffmpeg_path:
             return "FFmpeg не задано"
@@ -243,7 +242,7 @@ class PreviewBuilder:
             paths = [task.path for task in tasks]
             allow_fast = False
             if settings.fast_copy:
-                filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
+                _filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
                     paths[0],
                     settings,
                     output_path.suffix,
@@ -269,12 +268,10 @@ class PreviewBuilder:
             return f"Не вдалося зібрати merge dry-run команду: {exc}"
         finally:
             if list_path:
-                try:
+                with contextlib.suppress(Exception):
                     Path(list_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
 
-    def _format_command(self, cmd: List[Any]) -> str:
+    def _format_command(self, cmd: list[Any]) -> str:
         return subprocess.list2cmdline([str(part) for part in cmd])
 
     def _warnings_for(
@@ -283,8 +280,8 @@ class PreviewBuilder:
         settings: ConversionSettings,
         desired_path: Path,
         preview_path: Path,
-    ) -> List[str]:
-        warnings: List[str] = []
+    ) -> list[str]:
+        warnings: list[str] = []
         if not operation_supports_media(settings.operation, task.media_type):
             warnings.append("операція не підтримує цей тип")
         if desired_path.exists():
@@ -296,8 +293,8 @@ class PreviewBuilder:
                 warnings.append(f"буде перейменовано в {preview_path.name}")
         return warnings
 
-    def _parameter_summary(self, media_type_name: str, settings: ConversionSettings) -> List[str]:
-        params: List[str] = []
+    def _parameter_summary(self, media_type_name: str, settings: ConversionSettings) -> list[str]:
+        params: list[str] = []
         if media_type_name == "merge":
             params.append(settings.out_video_format)
             params.append(settings.video_codec)

@@ -2,7 +2,6 @@
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 from app.models import ConversionSettings
 
@@ -28,7 +27,7 @@ class TranscriptionService:
             return requested
         return "srt"
 
-    def _resolve_cli(self, settings: ConversionSettings) -> Optional[str]:
+    def _resolve_cli(self, settings: ConversionSettings) -> str | None:
         engine = settings.subtitle_engine.strip().lower()
         if engine in {"", "auto", "whisper", "openai-whisper"}:
             return shutil.which("whisper")

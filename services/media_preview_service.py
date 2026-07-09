@@ -9,11 +9,8 @@ Uses FFmpeg/FFprobe to create visual previews of media files:
 from __future__ import annotations
 
 import hashlib
-import os
 import subprocess
-import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from app.paths import APP_DATA_DIR
 
@@ -35,7 +32,7 @@ class MediaPreviewService:
         count: int = 8,
         thumb_width: int = 160,
         thumb_height: int = 90,
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate a strip of equally-spaced thumbnails from a video.
 
         Returns a list of file paths to generated thumbnail images.
@@ -56,7 +53,7 @@ class MediaPreviewService:
         if duration <= 0:
             return []
 
-        results: List[str] = []
+        results: list[str] = []
         for i in range(count):
             timestamp = (duration / (count + 1)) * (i + 1)
             output_path = cache_dir / f"thumb_{i:03d}.jpg"
@@ -96,7 +93,7 @@ class MediaPreviewService:
         height: int = 120,
         color: str = "0x3D8EFF",
         bg_color: str = "0x151820",
-    ) -> Optional[str]:
+    ) -> str | None:
         """Generate a waveform PNG for an audio file.
 
         Returns path to the generated waveform image, or None on failure.
@@ -140,7 +137,7 @@ class MediaPreviewService:
         *,
         width: int = 640,
         height: int = 360,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Capture a single frame at the given timestamp.
 
         Returns path to the captured frame image, or None on failure.

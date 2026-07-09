@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple
 
 
 @dataclass
@@ -53,7 +52,7 @@ class PaidUpdateService:
             message=message,
         )
 
-    def _version_tuple(self, version: str) -> Tuple[int, ...]:
+    def _version_tuple(self, version: str) -> tuple[int, ...]:
         parts = []
         for chunk in str(version or "").replace("-", ".").split("."):
             digits = "".join(ch for ch in chunk if ch.isdigit())

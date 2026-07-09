@@ -7,11 +7,10 @@ glob-based exclude patterns, and file size constraints.
 from __future__ import annotations
 
 import fnmatch
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set
 
 from utils.files import media_type
-
 
 # Default patterns to always exclude
 _DEFAULT_EXCLUDES = {
@@ -33,8 +32,8 @@ class FolderScanner:
     def __init__(
         self,
         *,
-        type_filter: Optional[str] = None,
-        exclude_patterns: Optional[Iterable[str]] = None,
+        type_filter: str | None = None,
+        exclude_patterns: Iterable[str] | None = None,
         min_size_bytes: int = 0,
         max_size_bytes: int = 0,
         include_hidden: bool = False,
@@ -48,17 +47,17 @@ class FolderScanner:
             include_hidden: Include hidden files/folders (starting with dot).
         """
         self.type_filter = type_filter
-        self.exclude_patterns: Set[str] = set(exclude_patterns or set()) | _DEFAULT_EXCLUDES
+        self.exclude_patterns: set[str] = set(exclude_patterns or set()) | _DEFAULT_EXCLUDES
         self.min_size_bytes = max(0, min_size_bytes)
         self.max_size_bytes = max(0, max_size_bytes)
         self.include_hidden = include_hidden
 
-    def scan(self, folder: Path) -> List[Path]:
+    def scan(self, folder: Path) -> list[Path]:
         """Recursively scan folder and return filtered file list."""
         if not folder.exists() or not folder.is_dir():
             return []
 
-        results: List[Path] = []
+        results: list[Path] = []
         try:
             for item in sorted(folder.rglob("*")):
                 if not item.is_file():
@@ -70,9 +69,9 @@ class FolderScanner:
             pass
         return results
 
-    def scan_with_stats(self, folder: Path) -> Dict[str, object]:
+    def scan_with_stats(self, folder: Path) -> dict[str, object]:
         """Scan folder and return results with statistics."""
-        all_files: List[Path] = []
+        all_files: list[Path] = []
         excluded_count = 0
         type_filtered_count = 0
         size_filtered_count = 0
@@ -159,15 +158,9 @@ class FolderScanner:
     def _matches_exclude(self, filename: str) -> bool:
         """Check if filename matches any exclude pattern."""
         lower = filename.lower()
-        for pattern in self.exclude_patterns:
-            if fnmatch.fnmatch(lower, pattern.lower()):
-                return True
-        return False
+        return any(fnmatch.fnmatch(lower, pattern.lower()) for pattern in self.exclude_patterns)
 
 
 def _is_hidden(path: Path) -> bool:
     """Check if file or any parent starts with dot."""
-    for part in path.parts:
-        if part.startswith(".") and part not in {".", ".."}:
-            return True
-    return False
+    return any(part.startswith(".") and part not in {".", ".."} for part in path.parts)

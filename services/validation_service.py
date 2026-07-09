@@ -1,17 +1,17 @@
 ﻿from __future__ import annotations
 
 import shutil
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 from app.constants import OUT_AUDIO_FORMATS, OUT_IMAGE_FORMATS, OUT_SUBTITLE_FORMATS, OUT_TEXT_FORMATS, OUT_VIDEO_FORMATS
-from app.paths import find_ffprobe
 from app.models import ConversionSettings, TaskItem
+from app.paths import find_ffprobe
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
 from utils.files import build_merge_output_path, build_output_path, is_subtitle
 from utils.formatting import parse_float, parse_time_to_seconds
-
 
 OPERATION_LABELS = {
     "convert": "Конвертація",
@@ -42,17 +42,17 @@ class ValidationService:
 
     def validate(
         self,
-        raw: Dict[str, Any],
+        raw: dict[str, Any],
         *,
         tasks: Iterable[TaskItem],
         output_dir: str,
         ffmpeg_path: str,
         include_queue: bool = True,
         require_output_dir: bool = True,
-        only_paths: Optional[set[Path]] = None,
-    ) -> Dict[str, Any]:
-        errors: Dict[str, str] = {}
-        warnings: List[str] = []
+        only_paths: set[Path] | None = None,
+    ) -> dict[str, Any]:
+        errors: dict[str, str] = {}
+        warnings: list[str] = []
 
         def add_error(field: str, message: str) -> None:
             errors.setdefault(field, message)
@@ -111,7 +111,7 @@ class ValidationService:
         summary = " | ".join(summary_bits) if summary_bits else "Перевірка пройдена."
         return {"ok": not errors, "errors": errors, "warnings": warnings, "summary": summary}
 
-    def _validate_fields(self, raw: Dict[str, Any], add_error) -> None:
+    def _validate_fields(self, raw: dict[str, Any], add_error) -> None:
         positive_int_fields = {
             "resize_w": "Ширина resize",
             "resize_h": "Висота resize",
@@ -187,8 +187,8 @@ class ValidationService:
 
     def _validate_queue(
         self,
-        queue_items: List[TaskItem],
-        raw: Dict[str, Any],
+        queue_items: list[TaskItem],
+        raw: dict[str, Any],
         settings: ConversionSettings,
         output_dir: Path,
         add_error,
@@ -206,7 +206,7 @@ class ValidationService:
                 add_error("queue", f"Файл не знайдено: {item.path}")
                 break
 
-        resolved_by_path: Dict[Path, ConversionSettings] = {}
+        resolved_by_path: dict[Path, ConversionSettings] = {}
         for item in queue_items:
             merged = merge_settings_maps(raw, item.overrides)
             resolved_by_path[item.path] = settings_map_to_model(merged, defaults=ConversionSettings())
@@ -219,7 +219,7 @@ class ValidationService:
         merge_enabled = settings.merge and len(merge_candidates) >= 2
         merge_paths = {item.path for item in merge_candidates} if merge_enabled else set()
 
-        seen_outputs: Dict[Path, str] = {}
+        seen_outputs: dict[Path, str] = {}
         if merge_enabled:
             desired = build_merge_output_path(
                 output_dir,
@@ -270,7 +270,7 @@ class ValidationService:
                 else:
                     add_warning(f"{desired.name}: є конфлікт імені, буде створено безпечну копію.")
 
-    def _validate_format_compat(self, raw: Dict[str, Any], add_warning) -> None:
+    def _validate_format_compat(self, raw: dict[str, Any], add_warning) -> None:
         out_video = str(raw.get("out_video_fmt", "")).strip().lower()
         out_image = str(raw.get("out_image_fmt", "")).strip().lower()
         out_audio = str(raw.get("out_audio_fmt", "")).strip().lower()
@@ -293,7 +293,7 @@ class ValidationService:
         if out_video in {"mp4", "mov", "avi"} and codec == "VP9 (WebM)":
             add_warning("VP9 краще виводити у WebM; для MP4/MOV буде заміна на H.264.")
 
-    def _validate_disk_space(self, queue_items: List[TaskItem], output_dir: Path, add_warning) -> None:
+    def _validate_disk_space(self, queue_items: list[TaskItem], output_dir: Path, add_warning) -> None:
         try:
             source_size = sum(item.path.stat().st_size for item in queue_items if item.path.exists())
             free = shutil.disk_usage(output_dir).free

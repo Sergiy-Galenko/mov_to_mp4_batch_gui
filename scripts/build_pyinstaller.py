@@ -11,10 +11,10 @@ SPEC_FILE = PROJECT_ROOT / "build" / "media_converter.spec"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.paths import find_ffmpeg, find_ffprobe
-
 
 def main() -> int:
+    from app.paths import find_ffmpeg, find_ffprobe
+
     ffmpeg = find_ffmpeg()
     ffprobe = find_ffprobe(ffmpeg)
 

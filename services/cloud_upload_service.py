@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from app.models import ConversionSettings
-
 
 LogCallback = Callable[[str, str], None]
 
@@ -15,7 +14,7 @@ class CloudUploadError(RuntimeError):
 
 
 class CloudUploadService:
-    def upload(self, output_path: Path, settings: ConversionSettings, log_cb: Optional[LogCallback] = None) -> None:
+    def upload(self, output_path: Path, settings: ConversionSettings, log_cb: LogCallback | None = None) -> None:
         if not settings.cloud_upload_enabled:
             return
         remote = str(settings.cloud_remote_path or "").strip()

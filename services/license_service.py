@@ -7,10 +7,10 @@ import json
 import os
 import time
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
-
+from typing import Any
 
 TRIAL_DAYS = 14
 LICENSE_KEY_PREFIX = "MC-PRO"
@@ -31,7 +31,7 @@ class LicenseInfo:
     holder: str = ""
     license_id: str = ""
     expires_at: str = ""
-    features: List[str] = field(default_factory=list)
+    features: list[str] = field(default_factory=list)
     source: str = ""
     message: str = ""
     trial_started_at: float = 0.0
@@ -57,11 +57,11 @@ class LicenseInfo:
 class LicenseService:
     """Offline-verifiable licensing and trial state."""
 
-    def __init__(self, secret: Optional[str] = None, now_func=time.time) -> None:
+    def __init__(self, secret: str | None = None, now_func=time.time) -> None:
         self.secret = (secret or os.environ.get("MEDIA_CONVERTER_LICENSE_SECRET") or "media-converter-dev-license-secret").encode("utf-8")
         self.now_func = now_func
 
-    def info_from_state(self, state: Dict[str, Any]) -> LicenseInfo:
+    def info_from_state(self, state: dict[str, Any]) -> LicenseInfo:
         payload = state.get("license_payload")
         if isinstance(payload, dict):
             info = self.validate_package(payload, source=str(payload.get("source") or "license"))
@@ -98,7 +98,7 @@ class LicenseService:
             trial_ends_at=ends_at,
         )
 
-    def start_trial(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def start_trial(self, state: dict[str, Any]) -> dict[str, Any]:
         started = float(state.get("trial_started_at") or 0.0)
         if started > 0:
             return dict(state)
@@ -112,7 +112,7 @@ class LicenseService:
         remaining = int((started_at + TRIAL_DAYS * 86400 - self.now_func() + 86399) // 86400)
         return max(0, remaining)
 
-    def activate_key(self, key: str) -> Dict[str, Any]:
+    def activate_key(self, key: str) -> dict[str, Any]:
         token = str(key or "").strip()
         if not token.startswith(LICENSE_KEY_PREFIX + "-"):
             raise ValueError("Unsupported license key format.")
@@ -129,7 +129,7 @@ class LicenseService:
         payload["source"] = "key"
         return payload
 
-    def load_offline_file(self, path: Path) -> Dict[str, Any]:
+    def load_offline_file(self, path: Path) -> dict[str, Any]:
         try:
             payload = json.loads(path.expanduser().read_text(encoding="utf-8"))
         except Exception as exc:
@@ -143,7 +143,7 @@ class LicenseService:
         payload["source"] = "offline"
         return payload
 
-    def validate_package(self, payload: Dict[str, Any], *, source: str = "license") -> LicenseInfo:
+    def validate_package(self, payload: dict[str, Any], *, source: str = "license") -> LicenseInfo:
         if not isinstance(payload, dict):
             return LicenseInfo(status="invalid", source=source, message="License payload is invalid.")
         expected = self._signature(payload)
@@ -174,7 +174,7 @@ class LicenseService:
             message="Commercial license active.",
         )
 
-    def feature_allowed(self, feature: str, state: Dict[str, Any]) -> bool:
+    def feature_allowed(self, feature: str, state: dict[str, Any]) -> bool:
         info = self.info_from_state(state)
         return info.pro_enabled and feature in set(info.features)
 
@@ -184,10 +184,10 @@ class LicenseService:
         holder: str,
         plan: str = "Commercial",
         expires_at: str = "",
-        features: Optional[Iterable[str]] = None,
-        license_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {
+        features: Iterable[str] | None = None,
+        license_id: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "version": 1,
             "license_id": license_id or str(uuid.uuid4()),
             "holder": holder,
@@ -199,18 +199,18 @@ class LicenseService:
         payload["signature"] = self._signature(payload)
         return payload
 
-    def encode_license_key(self, payload: Dict[str, Any]) -> str:
+    def encode_license_key(self, payload: dict[str, Any]) -> str:
         raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         encoded = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
         return f"{LICENSE_KEY_PREFIX}-{encoded}"
 
-    def _features(self, raw: Any) -> List[str]:
+    def _features(self, raw: Any) -> list[str]:
         if not isinstance(raw, list):
             return list(DEFAULT_LICENSE_FEATURES)
         values = [str(item).strip() for item in raw if str(item or "").strip()]
         return values or list(DEFAULT_LICENSE_FEATURES)
 
-    def _signature(self, payload: Dict[str, Any]) -> str:
+    def _signature(self, payload: dict[str, Any]) -> str:
         signing_payload = {key: value for key, value in payload.items() if key not in {"signature", "source"}}
         raw = json.dumps(signing_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         return hmac.new(self.secret, raw, hashlib.sha256).hexdigest()

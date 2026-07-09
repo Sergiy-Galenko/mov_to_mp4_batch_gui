@@ -9,7 +9,6 @@ Provides a centralized registry of keyboard shortcuts with:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
 
 from app.paths import APP_DATA_DIR
 from utils.state import load_json_state, save_json_state
@@ -17,7 +16,7 @@ from utils.state import load_json_state, save_json_state
 SHORTCUTS_PATH = APP_DATA_DIR / "shortcuts.json"
 
 # Default keyboard shortcuts
-DEFAULT_SHORTCUTS: Dict[str, Dict[str, str]] = {
+DEFAULT_SHORTCUTS: dict[str, dict[str, str]] = {
     # Conversion actions
     "start_conversion": {"key": "F5", "label": "Start conversion", "category": "conversion"},
     "stop_conversion": {"key": "Escape", "label": "Stop conversion", "category": "conversion"},
@@ -61,7 +60,7 @@ class ShortcutManager:
 
     def __init__(self, path: Path = SHORTCUTS_PATH) -> None:
         self.path = path
-        self._overrides: Dict[str, str] = {}
+        self._overrides: dict[str, str] = {}
         self._load()
 
     def _load(self) -> None:
@@ -105,9 +104,9 @@ class ShortcutManager:
         self._overrides.clear()
         self._save()
 
-    def all_shortcuts(self) -> List[Dict[str, str]]:
+    def all_shortcuts(self) -> list[dict[str, str]]:
         """Return all shortcuts as a list of dicts."""
-        result: List[Dict[str, str]] = []
+        result: list[dict[str, str]] = []
         for action_id, default in DEFAULT_SHORTCUTS.items():
             result.append({
                 "action": action_id,
@@ -119,10 +118,10 @@ class ShortcutManager:
             })
         return result
 
-    def shortcuts_by_category(self) -> Dict[str, List[Dict[str, str]]]:
+    def shortcuts_by_category(self) -> dict[str, list[dict[str, str]]]:
         """Return shortcuts grouped by category."""
         all_items = self.all_shortcuts()
-        grouped: Dict[str, List[Dict[str, str]]] = {}
+        grouped: dict[str, list[dict[str, str]]] = {}
         for item in all_items:
             cat = item["category"]
             if cat not in grouped:
@@ -130,14 +129,14 @@ class ShortcutManager:
             grouped[cat].append(item)
         return grouped
 
-    def export_config(self) -> Dict[str, str]:
+    def export_config(self) -> dict[str, str]:
         """Export current shortcut configuration."""
-        config: Dict[str, str] = {}
+        config: dict[str, str] = {}
         for action_id in DEFAULT_SHORTCUTS:
             config[action_id] = self.get_key(action_id)
         return config
 
-    def import_config(self, data: Dict[str, str]) -> int:
+    def import_config(self, data: dict[str, str]) -> int:
         """Import shortcut configuration. Returns count of imported bindings."""
         if not isinstance(data, dict):
             return 0
@@ -149,7 +148,7 @@ class ShortcutManager:
         self._save()
         return count
 
-    def find_conflict(self, key: str, exclude_action: str = "") -> Optional[str]:
+    def find_conflict(self, key: str, exclude_action: str = "") -> str | None:
         """Check if a key binding conflicts with another action.
 
         Returns the conflicting action_id, or None if no conflict.

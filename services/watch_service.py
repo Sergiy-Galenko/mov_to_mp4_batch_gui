@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List, Optional, Set
 
 from app.constants import WATCH_DEBOUNCE_SEC
 
@@ -19,7 +19,7 @@ class WatchService:
 
     def __init__(
         self,
-        on_new_files: Optional[Callable[[List[Path]], None]] = None,
+        on_new_files: Callable[[list[Path]], None] | None = None,
         debounce_sec: float = WATCH_DEBOUNCE_SEC,
         poll_interval_sec: float = 3.0,
     ) -> None:
@@ -27,11 +27,11 @@ class WatchService:
         self.debounce_sec = debounce_sec
         self.poll_interval_sec = poll_interval_sec
 
-        self._folder: Optional[Path] = None
-        self._seen: Set[Path] = set()
+        self._folder: Path | None = None
+        self._seen: set[Path] = set()
         self._pending: dict[Path, tuple[float, int]] = {}
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
     @property
@@ -39,7 +39,7 @@ class WatchService:
         return self._running
 
     @property
-    def folder(self) -> Optional[Path]:
+    def folder(self) -> Path | None:
         return self._folder
 
     def start(self, folder: Path) -> None:
@@ -64,7 +64,7 @@ class WatchService:
             self._thread.join(timeout=5.0)
         self._thread = None
 
-    def scan_once(self) -> List[Path]:
+    def scan_once(self) -> list[Path]:
         """Single scan pass; returns newly detected files."""
         if not self._folder or not self._folder.exists():
             return []
@@ -75,7 +75,7 @@ class WatchService:
 
         # Debounce: only emit files whose size has stabilized
         now = time.time()
-        stable: List[Path] = []
+        stable: list[Path] = []
         for p in new_paths:
             self._pending[p] = (now, self._file_size(p))
 

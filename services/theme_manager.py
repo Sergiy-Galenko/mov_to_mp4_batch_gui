@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.paths import APP_DATA_DIR
 from utils.state import load_json_state, save_json_state
@@ -20,7 +20,7 @@ from utils.state import load_json_state, save_json_state
 THEME_STATE_PATH = APP_DATA_DIR / "theme_config.json"
 
 # Pre-defined accent color palettes
-ACCENT_PRESETS: List[Dict[str, str]] = [
+ACCENT_PRESETS: list[dict[str, str]] = [
     {"name": "Blue", "color": "#3D8EFF"},
     {"name": "Purple", "color": "#8B5CF6"},
     {"name": "Teal", "color": "#14B8A6"},
@@ -87,7 +87,7 @@ class ThemeManager:
         self._state["layout_mode"] = mode if mode in LAYOUT_MODES else "comfortable"
         self._save()
 
-    def layout_config(self) -> Dict[str, Any]:
+    def layout_config(self) -> dict[str, Any]:
         """Return the current layout configuration dict."""
         mode = self.layout_mode()
         return dict(LAYOUT_MODES.get(mode, LAYOUT_MODES["comfortable"]))
@@ -103,7 +103,7 @@ class ThemeManager:
         self._state["font_scale"] = max(0.7, min(float(scale), 1.5))
         self._save()
 
-    def window_state(self) -> Dict[str, int]:
+    def window_state(self) -> dict[str, int]:
         """Return saved window geometry: {x, y, width, height}."""
         return dict(self._state.get("window_state") or {})
 
@@ -131,11 +131,11 @@ class ThemeManager:
         self._state["beginner_mode"] = bool(enabled)
         self._save()
 
-    def accent_presets(self) -> List[Dict[str, str]]:
+    def accent_presets(self) -> list[dict[str, str]]:
         """Return list of accent color presets."""
         return list(ACCENT_PRESETS)
 
-    def export_theme(self) -> Dict[str, Any]:
+    def export_theme(self) -> dict[str, Any]:
         """Export current theme configuration."""
         return {
             "accent_color": self.accent_color(),
@@ -146,7 +146,7 @@ class ThemeManager:
             "beginner_mode": self.beginner_mode(),
         }
 
-    def import_theme(self, data: Dict[str, Any]) -> None:
+    def import_theme(self, data: dict[str, Any]) -> None:
         """Import theme configuration from a dict."""
         if not isinstance(data, dict):
             return

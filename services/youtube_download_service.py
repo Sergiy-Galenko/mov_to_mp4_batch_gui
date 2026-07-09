@@ -1,19 +1,20 @@
 from __future__ import annotations
 
+import contextlib
 import http.cookiejar
 import mimetypes
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any
 
 from app.constants import AUDIO_EXTS, VIDEO_EXTS
 from utils.formatting import format_bytes, format_time
-
 
 ProgressCallback = Callable[["DownloadProgress"], None]
 
@@ -29,11 +30,11 @@ class YouTubeDownloadCancelled(YouTubeDownloadError):
 @dataclass(frozen=True)
 class DownloadProgress:
     status: str
-    percent: Optional[float]
-    downloaded_bytes: Optional[int]
-    total_bytes: Optional[int]
-    speed: Optional[float]
-    eta: Optional[float]
+    percent: float | None
+    downloaded_bytes: int | None
+    total_bytes: int | None
+    speed: float | None
+    eta: float | None
     filename: str
     message: str
 
@@ -71,7 +72,7 @@ class YouTubeDownloadService:
         "application/ogg": ".ogg",
     }
 
-    def __init__(self, ffmpeg_path: Optional[str] = None) -> None:
+    def __init__(self, ffmpeg_path: str | None = None) -> None:
         self.ffmpeg_path = str(ffmpeg_path or "").strip()
 
     @staticmethod
@@ -93,9 +94,9 @@ class YouTubeDownloadService:
         playlist: bool = False,
         subtitles: bool = False,
         cookies_file: str = "",
-        rate_limit: Optional[int] = None,
-        cancel_event: Optional[Event] = None,
-        progress_callback: Optional[ProgressCallback] = None,
+        rate_limit: int | None = None,
+        cancel_event: Event | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> Path:
         outputs = self.download_many(
             url,
@@ -125,10 +126,10 @@ class YouTubeDownloadService:
         playlist: bool = False,
         subtitles: bool = False,
         cookies_file: str = "",
-        rate_limit: Optional[int] = None,
-        cancel_event: Optional[Event] = None,
-        progress_callback: Optional[ProgressCallback] = None,
-    ) -> List[Path]:
+        rate_limit: int | None = None,
+        cancel_event: Event | None = None,
+        progress_callback: ProgressCallback | None = None,
+    ) -> list[Path]:
         clean_url = str(url or "").strip()
         if not clean_url:
             raise YouTubeDownloadError("Video/source URL is empty.")
@@ -142,8 +143,8 @@ class YouTubeDownloadService:
         output_dir.mkdir(parents=True, exist_ok=True)
         before = self._snapshot_files(output_dir)
 
-        ytdlp_error: Optional[YouTubeDownloadError] = None
-        prepared_path: Optional[Path] = None
+        ytdlp_error: YouTubeDownloadError | None = None
+        prepared_path: Path | None = None
         try:
             YoutubeDL = self._youtube_dl_class()
             opts = self._options(
@@ -210,12 +211,12 @@ class YouTubeDownloadService:
         *,
         playlist: bool = False,
         cookies_file: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         clean_url = str(url or "").strip()
         if not clean_url:
             raise YouTubeDownloadError("Video/source URL is empty.")
 
-        opts: Dict[str, Any] = {
+        opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
             "extract_flat": "in_playlist" if playlist else False,
@@ -284,11 +285,11 @@ class YouTubeDownloadService:
         mode: str,
         audio_format: str,
         cookies_file: str,
-        rate_limit: Optional[int],
-        cancel_event: Optional[Event],
-        progress_callback: Optional[ProgressCallback],
+        rate_limit: int | None,
+        cancel_event: Event | None,
+        progress_callback: ProgressCallback | None,
     ) -> Path:
-        tmp_path: Optional[Path] = None
+        tmp_path: Path | None = None
         try:
             with self._open_direct_url(url, cookies_file) as response:
                 headers = getattr(response, "headers", {})
@@ -301,10 +302,8 @@ class YouTubeDownloadService:
                 filename = self._direct_filename(url, headers, content_type, mode, audio_format)
                 output_path = self._unique_output_path(output_dir / filename)
                 tmp_path = output_path.with_suffix(output_path.suffix + ".part")
-                try:
+                with contextlib.suppress(OSError):
                     tmp_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
 
                 total = self._optional_int(self._header_value(headers, "Content-Length"))
                 downloaded = 0
@@ -355,10 +354,8 @@ class YouTubeDownloadService:
                 return output_path
         except YouTubeDownloadCancelled:
             if tmp_path and tmp_path.exists():
-                try:
+                with contextlib.suppress(OSError):
                     tmp_path.unlink()
-                except OSError:
-                    pass
             raise
         except urllib.error.HTTPError as exc:
             raise YouTubeDownloadError(f"HTTP {exc.code}: {exc.reason}") from exc
@@ -402,7 +399,7 @@ class YouTubeDownloadService:
             raise YouTubeDownloadError(f"Could not load cookies file: {exc}") from exc
         return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
-    def _direct_preview(self, url: str) -> Optional[Dict[str, Any]]:
+    def _direct_preview(self, url: str) -> dict[str, Any] | None:
         if not self._is_http_url(url):
             return None
         name = self._filename_from_url(url)
@@ -423,7 +420,7 @@ class YouTubeDownloadService:
             "extractor": "direct",
         }
 
-    def _preview_item(self, info: Any) -> Dict[str, Any]:
+    def _preview_item(self, info: Any) -> dict[str, Any]:
         if not isinstance(info, dict):
             return {}
         entries = info.get("entries")
@@ -481,7 +478,7 @@ class YouTubeDownloadService:
             ext = str(item.get("ext") or "").lower()
             if vcodec in {"", "none"} and acodec not in {"", "none"} and ext:
                 audio_exts.add(ext)
-        parts: List[str] = []
+        parts: list[str] = []
         if heights:
             top = sorted(heights)[-3:]
             parts.append(", ".join(f"{height}p" for height in top))
@@ -631,12 +628,12 @@ class YouTubeDownloadService:
 
     def _emit_direct_progress(
         self,
-        callback: Optional[ProgressCallback],
+        callback: ProgressCallback | None,
         status: str,
         downloaded: int,
-        total: Optional[int],
-        speed: Optional[float],
-        eta: Optional[float],
+        total: int | None,
+        speed: float | None,
+        eta: float | None,
         filename: str,
     ) -> None:
         if not callback:
@@ -677,11 +674,11 @@ class YouTubeDownloadService:
         playlist: bool,
         subtitles: bool,
         cookies_file: str,
-        rate_limit: Optional[int],
-        cancel_event: Optional[Event],
-        progress_callback: Optional[ProgressCallback],
-    ) -> Dict[str, Any]:
-        opts: Dict[str, Any] = {
+        rate_limit: int | None,
+        cancel_event: Event | None,
+        progress_callback: ProgressCallback | None,
+    ) -> dict[str, Any]:
+        opts: dict[str, Any] = {
             "paths": {"home": str(output_dir)},
             "outtmpl": "%(title).200B [%(id)s].%(ext)s",
             "noplaylist": not playlist,
@@ -731,7 +728,7 @@ class YouTubeDownloadService:
             )
         return opts
 
-    def _throttle_direct_download(self, downloaded: int, started: float, rate_limit: Optional[int]) -> None:
+    def _throttle_direct_download(self, downloaded: int, started: float, rate_limit: int | None) -> None:
         if not rate_limit or rate_limit <= 0:
             return
         target_elapsed = downloaded / float(rate_limit)
@@ -740,7 +737,7 @@ class YouTubeDownloadService:
         if delay > 0:
             time.sleep(min(delay, 1.0))
 
-    def _normalize_rate_limit(self, value: Optional[int]) -> Optional[int]:
+    def _normalize_rate_limit(self, value: int | None) -> int | None:
         try:
             normalized = int(value or 0)
         except (TypeError, ValueError):
@@ -749,10 +746,10 @@ class YouTubeDownloadService:
 
     def _progress_hook(
         self,
-        callback: Optional[ProgressCallback],
-        cancel_event: Optional[Event],
-    ) -> Callable[[Dict[str, Any]], None]:
-        def hook(payload: Dict[str, Any]) -> None:
+        callback: ProgressCallback | None,
+        cancel_event: Event | None,
+    ) -> Callable[[dict[str, Any]], None]:
+        def hook(payload: dict[str, Any]) -> None:
             if cancel_event and cancel_event.is_set():
                 raise YouTubeDownloadCancelled("Download cancelled.")
             if not callback:
@@ -761,7 +758,7 @@ class YouTubeDownloadService:
 
         return hook
 
-    def _progress_from_payload(self, payload: Dict[str, Any]) -> DownloadProgress:
+    def _progress_from_payload(self, payload: dict[str, Any]) -> DownloadProgress:
         status = str(payload.get("status") or "")
         downloaded = self._optional_int(payload.get("downloaded_bytes"))
         total = self._optional_int(payload.get("total_bytes") or payload.get("total_bytes_estimate"))
@@ -798,11 +795,11 @@ class YouTubeDownloadService:
     def _candidate_paths(
         self,
         info: Any,
-        prepared_path: Optional[Path],
+        prepared_path: Path | None,
         mode: str,
         audio_format: str,
-    ) -> List[Path]:
-        candidates: List[Path] = []
+    ) -> list[Path]:
+        candidates: list[Path] = []
         if prepared_path:
             candidates.append(prepared_path)
 
@@ -810,12 +807,12 @@ class YouTubeDownloadService:
             candidates.append(Path(value).expanduser())
 
         if mode == "audio":
-            audio_candidates: List[Path] = []
+            audio_candidates: list[Path] = []
             for path in candidates:
                 audio_candidates.append(path.with_suffix(f".{audio_format}"))
             candidates = audio_candidates + candidates
 
-        unique: List[Path] = []
+        unique: list[Path] = []
         seen: set[str] = set()
         for path in candidates:
             key = str(path)
@@ -827,7 +824,7 @@ class YouTubeDownloadService:
     def _path_values_from_info(self, info: Any) -> Iterable[str]:
         if not isinstance(info, dict):
             return []
-        values: List[str] = []
+        values: list[str] = []
         for key in ("filepath", "_filename", "filename"):
             value = info.get(key)
             if value:
@@ -853,9 +850,9 @@ class YouTubeDownloadService:
         before: set[Path],
         candidates: Iterable[Path],
         mode: str,
-    ) -> List[Path]:
+    ) -> list[Path]:
         allowed_exts = AUDIO_EXTS if mode == "audio" else VIDEO_EXTS
-        output_paths: List[Path] = []
+        output_paths: list[Path] = []
         seen: set[str] = set()
         for candidate in candidates:
             if candidate.exists() and candidate.is_file():
@@ -864,7 +861,7 @@ class YouTubeDownloadService:
                     output_paths.append(candidate)
                     seen.add(key)
 
-        new_files: List[Path] = []
+        new_files: list[Path] = []
         for path in output_dir.iterdir():
             if not path.is_file() or path.suffix.lower() not in allowed_exts:
                 continue
@@ -909,13 +906,13 @@ class YouTubeDownloadService:
             return "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]/bv*[height<=720]+ba/best[height<=720]/best"
         return "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/best"
 
-    def _optional_int(self, value: Any) -> Optional[int]:
+    def _optional_int(self, value: Any) -> int | None:
         try:
             return int(value)
         except (TypeError, ValueError):
             return None
 
-    def _optional_float(self, value: Any) -> Optional[float]:
+    def _optional_float(self, value: Any) -> float | None:
         try:
             return float(value)
         except (TypeError, ValueError):

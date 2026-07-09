@@ -1,8 +1,8 @@
 import os
 import shutil
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Optional
 
 
 def get_app_data_dir() -> Path:
@@ -46,7 +46,7 @@ def _runtime_roots() -> Iterable[Path]:
             yield Path(meipass)
 
 
-def _find_binary(filename: str, explicit_path: str = "") -> Optional[str]:
+def _find_binary(filename: str, explicit_path: str = "") -> str | None:
     if explicit_path:
         path = Path(explicit_path).expanduser()
         if path.exists() and path.is_file():
@@ -58,13 +58,13 @@ def _find_binary(filename: str, explicit_path: str = "") -> Optional[str]:
     return shutil.which(filename)
 
 
-def find_ffmpeg() -> Optional[str]:
+def find_ffmpeg() -> str | None:
     exe = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
     explicit = os.environ.get("MEDIA_CONVERTER_FFMPEG", "").strip()
     return _find_binary(exe, explicit)
 
 
-def find_ffprobe(ffmpeg_path: Optional[str]) -> Optional[str]:
+def find_ffprobe(ffmpeg_path: str | None) -> str | None:
     exe = "ffprobe.exe" if os.name == "nt" else "ffprobe"
     candidates = []
     if ffmpeg_path:

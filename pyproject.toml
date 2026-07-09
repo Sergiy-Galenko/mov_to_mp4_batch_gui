@@ -26,6 +26,7 @@ ignore = [
     "B008",   # do not perform function calls in argument defaults
     "SIM108", # use ternary operator (reduces readability)
     "UP007",  # use X | Y for unions (keep Optional for 3.12 compat)
+    "RUF001", # localized Cyrillic user-facing strings
     "RUF012", # mutable class attributes (dataclass fields)
 ]
 

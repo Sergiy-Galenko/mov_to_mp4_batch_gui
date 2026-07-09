@@ -1,14 +1,15 @@
 ﻿from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any
 
 from app.models import TASK_STATUSES, TaskItem, TaskStatus
 from utils.files import media_type, partial_hash
 
 
 class QueueManager:
-    def serialize_task(self, item: TaskItem) -> Dict[str, Any]:
+    def serialize_task(self, item: TaskItem) -> dict[str, Any]:
         return {
             "path": str(item.path),
             "media_type": item.media_type,
@@ -36,10 +37,10 @@ class QueueManager:
             "priority": item.priority,
         }
 
-    def deserialize_tasks(self, payload: Any, *, pending_recovery: bool = False) -> List[TaskItem]:
+    def deserialize_tasks(self, payload: Any, *, pending_recovery: bool = False) -> list[TaskItem]:
         if not isinstance(payload, list):
             return []
-        items: List[TaskItem] = []
+        items: list[TaskItem] = []
         for raw in payload:
             if not isinstance(raw, dict):
                 continue
@@ -82,9 +83,9 @@ class QueueManager:
             )
         return items
 
-    def build_items(self, paths: Iterable[Path], existing: Iterable[Path]) -> Tuple[List[TaskItem], int, int]:
+    def build_items(self, paths: Iterable[Path], existing: Iterable[Path]) -> tuple[list[TaskItem], int, int]:
         existing_paths = {path.expanduser().resolve() for path in existing}
-        added: List[TaskItem] = []
+        added: list[TaskItem] = []
         duplicate_count = 0
         unsupported_count = 0
         for raw_path in paths:
@@ -103,9 +104,9 @@ class QueueManager:
             added.append(TaskItem(path=resolved, media_type=kind))
         return added, duplicate_count, unsupported_count
 
-    def deduplicate_by_path(self, items: Sequence[TaskItem]) -> Tuple[List[TaskItem], int]:
+    def deduplicate_by_path(self, items: Sequence[TaskItem]) -> tuple[list[TaskItem], int]:
         seen: set[Path] = set()
-        unique: List[TaskItem] = []
+        unique: list[TaskItem] = []
         removed = 0
         for item in items:
             if item.path in seen:
@@ -115,11 +116,11 @@ class QueueManager:
             unique.append(item)
         return unique, removed
 
-    def deduplicate_by_hash(self, items: Sequence[TaskItem]) -> Tuple[List[TaskItem], int, List[str]]:
-        seen: Dict[tuple[int, str], TaskItem] = {}
-        unique: List[TaskItem] = []
+    def deduplicate_by_hash(self, items: Sequence[TaskItem]) -> tuple[list[TaskItem], int, list[str]]:
+        seen: dict[tuple[int, str], TaskItem] = {}
+        unique: list[TaskItem] = []
         removed = 0
-        log_lines: List[str] = []
+        log_lines: list[str] = []
         for item in items:
             try:
                 size = item.path.stat().st_size
@@ -151,7 +152,7 @@ class QueueManager:
                 normalized.add(Path(text).expanduser())
         return normalized
 
-    def reorder(self, items: Sequence[TaskItem], indices: Iterable[int], direction: str) -> List[TaskItem]:
+    def reorder(self, items: Sequence[TaskItem], indices: Iterable[int], direction: str) -> list[TaskItem]:
         result = list(items)
         selected = sorted({idx for idx in indices if 0 <= idx < len(result)})
         if not selected:
@@ -174,16 +175,16 @@ class QueueManager:
             result = rest + moved
         return result
 
-    def remove_indices(self, items: Sequence[TaskItem], indices: Iterable[int]) -> Tuple[List[TaskItem], int]:
+    def remove_indices(self, items: Sequence[TaskItem], indices: Iterable[int]) -> tuple[list[TaskItem], int]:
         selected = {idx for idx in indices if 0 <= idx < len(items)}
         if not selected:
             return list(items), 0
         return [item for idx, item in enumerate(items) if idx not in selected], len(selected)
 
-    def remove_paths(self, items: Sequence[TaskItem], paths: Iterable[Path]) -> Tuple[List[TaskItem], int]:
+    def remove_paths(self, items: Sequence[TaskItem], paths: Iterable[Path]) -> tuple[list[TaskItem], int]:
         selected = {path.expanduser() for path in paths}
         removed = 0
-        kept: List[TaskItem] = []
+        kept: list[TaskItem] = []
         for item in items:
             if item.path in selected:
                 removed += 1
@@ -191,13 +192,13 @@ class QueueManager:
                 kept.append(item)
         return kept, removed
 
-    def selected_indices_for_paths(self, items: Sequence[TaskItem], paths: Iterable[Path]) -> List[int]:
+    def selected_indices_for_paths(self, items: Sequence[TaskItem], paths: Iterable[Path]) -> list[int]:
         selected = {path.expanduser() for path in paths}
         return [idx for idx, item in enumerate(items) if item.path in selected]
 
-    def move_path_to_index(self, items: Sequence[TaskItem], path: Path, target_index: int) -> List[TaskItem]:
+    def move_path_to_index(self, items: Sequence[TaskItem], path: Path, target_index: int) -> list[TaskItem]:
         result = list(items)
-        source_index: Optional[int] = None
+        source_index: int | None = None
         for idx, item in enumerate(result):
             if item.path == path.expanduser():
                 source_index = idx

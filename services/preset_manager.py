@@ -1,7 +1,7 @@
 ﻿from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.constants import PRESET_STORE
 from app.presets import load_presets, save_presets
@@ -10,16 +10,16 @@ from app.presets import load_presets, save_presets
 class PresetManager:
     def __init__(self, path: Path = PRESET_STORE) -> None:
         self.path = path
-        self.presets: Dict[str, Dict[str, Any]] = load_presets(path)
+        self.presets: dict[str, dict[str, Any]] = load_presets(path)
 
-    def names(self) -> List[str]:
+    def names(self) -> list[str]:
         return sorted(self.presets.keys())
 
-    def get(self, name: str) -> Optional[Dict[str, Any]]:
+    def get(self, name: str) -> dict[str, Any] | None:
         data = self.presets.get(name)
         return dict(data) if isinstance(data, dict) else None
 
-    def save(self, name: str, settings_map: Dict[str, Any]) -> None:
+    def save(self, name: str, settings_map: dict[str, Any]) -> None:
         self.presets[name] = dict(settings_map)
         save_presets(self.path, self.presets)
 

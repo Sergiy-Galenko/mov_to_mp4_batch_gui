@@ -1,9 +1,9 @@
 ﻿from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from app.constants import DEFAULT_OUTPUT_DIR, RECENT_FOLDERS_LIMIT, STATE_STORE
+from app.constants import RECENT_FOLDERS_LIMIT, STATE_STORE
 from app.localization import normalize_language
 from utils.state import load_json_state, save_json_state
 
@@ -11,16 +11,16 @@ from utils.state import load_json_state, save_json_state
 class SettingsManager:
     def __init__(self, path: Path = STATE_STORE) -> None:
         self.path = path
-        self.state: Dict[str, Any] = load_json_state(path)
+        self.state: dict[str, Any] = load_json_state(path)
 
-    def reload(self) -> Dict[str, Any]:
+    def reload(self) -> dict[str, Any]:
         self.state = load_json_state(self.path)
         return dict(self.state)
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.state.get(key, default)
 
-    def recent_folders(self) -> List[str]:
+    def recent_folders(self) -> list[str]:
         folders = self.state.get("recent_folders", [])
         if not isinstance(folders, list):
             return []
@@ -32,7 +32,7 @@ class SettingsManager:
     def output_dir_configured(self) -> bool:
         return bool(self.state.get("output_dir_configured")) and bool(str(self.state.get("output_dir") or "").strip())
 
-    def ffmpeg_path(self, fallback: Optional[str]) -> str:
+    def ffmpeg_path(self, fallback: str | None) -> str:
         return str(self.state.get("ffmpeg_path") or fallback or "")
 
     def watch_folder(self) -> str:
@@ -41,11 +41,11 @@ class SettingsManager:
     def ui_language(self) -> str:
         return normalize_language(str(self.state.get("ui_language") or self.state.get("language") or "uk"))
 
-    def last_settings(self) -> Dict[str, Any]:
+    def last_settings(self) -> dict[str, Any]:
         value = self.state.get("last_settings")
         return dict(value) if isinstance(value, dict) else {}
 
-    def youtube_history(self) -> List[str]:
+    def youtube_history(self) -> list[str]:
         value = self.state.get("youtube_history", [])
         if not isinstance(value, list):
             return []
@@ -107,7 +107,7 @@ class SettingsManager:
     def telegram_chat_id(self) -> str:
         return str(self.state.get("telegram_chat_id") or "")
 
-    def license_payload(self) -> Dict[str, Any]:
+    def license_payload(self) -> dict[str, Any]:
         value = self.state.get("license_payload")
         return dict(value) if isinstance(value, dict) else {}
 
@@ -126,17 +126,17 @@ class SettingsManager:
     def save(
         self,
         *,
-        recent_folders: List[str],
+        recent_folders: list[str],
         watch_folder: str,
         output_dir: str,
         output_dir_configured: bool,
         ffmpeg_path: str,
         ui_language: str,
-        last_settings: Dict[str, Any],
-        queue_items: List[Dict[str, Any]],
+        last_settings: dict[str, Any],
+        queue_items: list[dict[str, Any]],
         pending_recovery: bool,
         onboarding_completed: bool = True,
-        youtube_history: Optional[List[str]] = None,
+        youtube_history: list[str] | None = None,
         youtube_cookies_path: str = "",
         tray_enabled: bool = False,
         push_notifications_enabled: bool = True,
@@ -153,7 +153,7 @@ class SettingsManager:
         discord_webhook_url: str = "",
         telegram_bot_token: str = "",
         telegram_chat_id: str = "",
-        license_payload: Optional[Dict[str, Any]] = None,
+        license_payload: dict[str, Any] | None = None,
         trial_started_at: float = 0.0,
         paid_auto_update_enabled: bool = False,
         paid_update_manifest_url: str = "",
@@ -200,7 +200,7 @@ class SettingsManager:
         }
         save_json_state(self.path, self.state)
 
-    def remember_folder(self, folders: List[str], folder: str) -> List[str]:
+    def remember_folder(self, folders: list[str], folder: str) -> list[str]:
         value = str(folder or "").strip()
         if not value:
             return folders[:RECENT_FOLDERS_LIMIT]

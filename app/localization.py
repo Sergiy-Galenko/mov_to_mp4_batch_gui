@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict
-
+from typing import Any
 
 SUPPORTED_LANGUAGES = {"uk", "en", "pl", "de"}
 DEFAULT_LANGUAGE = "uk"
@@ -24,7 +24,7 @@ def translations_dir() -> Path:
 
 
 @lru_cache(maxsize=8)
-def load_translations(language: str) -> Dict[str, str]:
+def load_translations(language: str) -> dict[str, str]:
     normalized = normalize_language(language)
     path = translations_dir() / f"{normalized}.json"
     try:
@@ -41,8 +41,6 @@ def translate(key: str, language: str = DEFAULT_LANGUAGE, **kwargs: Any) -> str:
     normalized = normalize_language(language)
     text = load_translations(normalized).get(key) or load_translations("en").get(key) or key
     if kwargs:
-        try:
+        with contextlib.suppress(Exception):
             text = text.format(**kwargs)
-        except Exception:
-            pass
     return text

@@ -7,8 +7,7 @@ Useful for presenting actionable information in the UI instead of raw CLI output
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -22,7 +21,7 @@ class ErrorClassification:
 
 
 # (compiled pattern, category, user message, suggestion)
-_RULES: List[Tuple[re.Pattern[str], str, str, str]] = [
+_RULES: list[tuple[re.Pattern[str], str, str, str]] = [
     # File access
     (
         re.compile(r"No such file or directory", re.IGNORECASE),
@@ -210,13 +209,13 @@ def classify_error(stderr: str) -> ErrorClassification:
     )
 
 
-def classify_stderr_block(stderr_block: str) -> List[ErrorClassification]:
+def classify_stderr_block(stderr_block: str) -> list[ErrorClassification]:
     """Classify multiple lines of stderr.
 
     Returns a list of unique classifications (deduplicated by category+message).
     """
     seen = set()
-    results: List[ErrorClassification] = []
+    results: list[ErrorClassification] = []
 
     for line in stderr_block.splitlines():
         line = line.strip()

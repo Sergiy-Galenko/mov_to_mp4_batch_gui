@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Dict
 
 from app.models import ConversionSettings
-
 
 DEVICE_PROFILE_NAMES = [
     "None",
@@ -24,7 +22,7 @@ DEVICE_PROFILE_NAMES = [
 ]
 
 
-DEVICE_PROFILE_DEFAULTS: Dict[str, Dict[str, object]] = {
+DEVICE_PROFILE_DEFAULTS: dict[str, dict[str, object]] = {
     "iPhone 14/15/16": {"out_video_format": "mp4", "video_codec": "H.265 (HEVC)", "audio_codec": "aac", "crf": 22, "preset": "medium"},
     "iPad Pro": {"out_video_format": "mov", "video_codec": "ProRes", "audio_codec": "aac", "crf": 18, "preset": "slow"},
     "Apple TV 4K HDR": {"out_video_format": "mp4", "video_codec": "H.265 (HEVC)", "audio_codec": "aac", "crf": 20, "preset": "slow"},

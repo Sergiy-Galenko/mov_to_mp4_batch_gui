@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 class TaskStatus:
@@ -38,26 +38,26 @@ class MediaChapter:
 
 @dataclass
 class MediaInfo:
-    duration: Optional[float] = None
-    vcodec: Optional[str] = None
-    acodec: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    format_name: Optional[str] = None
-    size_bytes: Optional[int] = None
-    fps: Optional[float] = None
-    frame_rate_mode: Optional[str] = None
-    dynamic_range: Optional[str] = None
-    color_space: Optional[str] = None
-    color_transfer: Optional[str] = None
-    color_primaries: Optional[str] = None
-    pix_fmt: Optional[str] = None
-    rotation: Optional[int] = None
-    display_aspect_ratio: Optional[str] = None
+    duration: float | None = None
+    vcodec: str | None = None
+    acodec: str | None = None
+    width: int | None = None
+    height: int | None = None
+    format_name: str | None = None
+    size_bytes: int | None = None
+    fps: float | None = None
+    frame_rate_mode: str | None = None
+    dynamic_range: str | None = None
+    color_space: str | None = None
+    color_transfer: str | None = None
+    color_primaries: str | None = None
+    pix_fmt: str | None = None
+    rotation: int | None = None
+    display_aspect_ratio: str | None = None
     audio_streams: int = 0
     subtitle_streams: int = 0
-    chapters: List[MediaChapter] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    chapters: list[MediaChapter] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -66,7 +66,7 @@ class TaskItem:
     media_type: str
     status: str = "queued"
     last_error: str = ""
-    exit_code: Optional[int] = None
+    exit_code: int | None = None
     attempts: int = 0
     last_output: str = ""
     preview_output: str = ""
@@ -82,8 +82,8 @@ class TaskItem:
     eta_text: str = ""
     speed_text: str = ""
     elapsed_seconds: float = 0.0
-    probe_data: Optional[MediaInfo] = None
-    overrides: Dict[str, Any] = field(default_factory=dict)
+    probe_data: MediaInfo | None = None
+    overrides: dict[str, Any] = field(default_factory=dict)
     resolved_settings: Optional["ConversionSettings"] = None
     smart_recommendation: str = ""
     pinned: bool = False
@@ -95,19 +95,19 @@ class PreviewItem:
     source_path: Path
     output_path: Path
     operation: str
-    parameters: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    parameters: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     command: str = ""
 
 
 @dataclass
 class PreviewSummary:
-    items: List[PreviewItem] = field(default_factory=list)
+    items: list[PreviewItem] = field(default_factory=list)
     text: str = ""
     selected_source: str = "—"
     selected_output: str = "—"
     selected_command: str = "—"
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -132,7 +132,7 @@ class ConversionSettings:
     commercial_export: bool = False
     platform_profile: str = ""
     performance_profile: str = "Balanced"
-    target_size_mb: Optional[float] = None
+    target_size_mb: float | None = None
     cpu_load_limit: int = 95
     gpu_load_limit: int = 98
 
@@ -147,19 +147,19 @@ class ConversionSettings:
     smart_ab_crfs: str = "18,23,28"
     smart_ab_duration: int = 8
 
-    trim_start: Optional[float] = None
-    trim_end: Optional[float] = None
+    trim_start: float | None = None
+    trim_end: float | None = None
     merge: bool = False
     merge_name: str = "merged"
 
-    resize_w: Optional[int] = None
-    resize_h: Optional[int] = None
-    crop_w: Optional[int] = None
-    crop_h: Optional[int] = None
-    crop_x: Optional[int] = None
-    crop_y: Optional[int] = None
+    resize_w: int | None = None
+    resize_h: int | None = None
+    crop_w: int | None = None
+    crop_h: int | None = None
+    crop_x: int | None = None
+    crop_y: int | None = None
     rotate: str = "0"
-    speed: Optional[float] = None
+    speed: float | None = None
 
     subtitle_mode: str = "none"
     subtitle_path: str = ""
@@ -177,7 +177,7 @@ class ConversionSettings:
     subtitle_shadow: int = 0
     subtitle_alignment: int = 2
 
-    thumbnail_time: Optional[float] = None
+    thumbnail_time: float | None = None
     contact_sheet_cols: int = 4
     contact_sheet_rows: int = 4
     contact_sheet_width: int = 320
@@ -202,7 +202,7 @@ class ConversionSettings:
     video_profile: str = ""
     replace_audio_path: str = ""
     normalize_audio: str = "none"
-    audio_peak_limit_db: Optional[float] = None
+    audio_peak_limit_db: float | None = None
     trim_silence: bool = False
     silence_threshold_db: int = -50
     silence_duration: float = 0.3

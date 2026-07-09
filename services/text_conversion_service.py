@@ -7,10 +7,9 @@ import re
 import textwrap
 import zipfile
 import zlib
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence, Tuple
 from xml.etree import ElementTree as ET
-
 
 TEXT_READ_ENCODINGS = ("utf-8-sig", "utf-8", "cp1251", "latin-1")
 SUPPORTED_TEXT_FORMATS = {
@@ -44,7 +43,7 @@ class TextConversionError(RuntimeError):
     pass
 
 
-def read_text_file(path: Path) -> Tuple[str, str]:
+def read_text_file(path: Path) -> tuple[str, str]:
     suffix = path.suffix.lower()
     try:
         if suffix in OOXML_WORD_EXTS:
@@ -114,7 +113,7 @@ def convert_text_file(source: Path, output: Path, output_format: str) -> None:
         _write_odf_presentation(text, output, source)
 
 
-def _read_plain_text_file(path: Path) -> Tuple[str, str]:
+def _read_plain_text_file(path: Path) -> tuple[str, str]:
     last_error: Exception | None = None
     for encoding in TEXT_READ_ENCODINGS:
         try:
@@ -445,7 +444,7 @@ def _write_pdf_with_reportlab(text: str, output: Path, source: Path) -> bool:
         return False
     try:
         font_name = _register_reportlab_font(pdfmetrics, TTFont)
-        page_width, page_height = A4
+        _page_width, page_height = A4
         margin = 48
         line_height = 14
         c = canvas.Canvas(str(output), pagesize=A4)

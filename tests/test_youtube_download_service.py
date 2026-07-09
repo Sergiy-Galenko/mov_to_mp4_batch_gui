@@ -1,7 +1,8 @@
+import re
 import sys
-from threading import Event
 import types
 from pathlib import Path
+from threading import Event
 from unittest.mock import patch
 
 import pytest
@@ -171,7 +172,7 @@ def test_audio_download_returns_postprocessed_file(tmp_path):
 def test_missing_ytdlp_dependency_has_actionable_error(tmp_path):
     with patch.dict(sys.modules, {"yt_dlp": None}):
         service = YouTubeDownloadService()
-        with pytest.raises(YouTubeDownloadError, match="pip install -r requirements.txt"):
+        with pytest.raises(YouTubeDownloadError, match=re.escape("pip install -r requirements.txt")):
             service.download("https://youtu.be/example", tmp_path)
 
 

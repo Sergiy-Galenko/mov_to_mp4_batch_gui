@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -8,18 +9,17 @@ import shutil
 import time
 import urllib.request
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
 
 from app.paths import APP_DATA_DIR, find_ffprobe
-
 
 FFMPEG_WIN64_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
 DEFAULT_CHECK_INTERVAL_SEC = 24 * 60 * 60
 
 ProgressCallback = Callable[[str], None]
-DownloadFunc = Callable[[str, Path, Optional[ProgressCallback]], None]
+DownloadFunc = Callable[[str, Path, ProgressCallback | None], None]
 
 
 @dataclass(frozen=True)
@@ -35,13 +35,13 @@ class FfmpegAutoInstallResult:
 class FfmpegAutoInstaller:
     def __init__(
         self,
-        install_dir: Optional[Path] = None,
+        install_dir: Path | None = None,
         *,
         download_url: str = FFMPEG_WIN64_URL,
         check_interval_sec: int = DEFAULT_CHECK_INTERVAL_SEC,
-        download_func: Optional[DownloadFunc] = None,
+        download_func: DownloadFunc | None = None,
         now_func: Callable[[], float] = time.time,
-        platform_key: Optional[str] = None,
+        platform_key: str | None = None,
     ) -> None:
         self.install_dir = Path(install_dir or (APP_DATA_DIR / "ffmpeg")).expanduser()
         self.download_url = download_url
@@ -96,7 +96,7 @@ class FfmpegAutoInstaller:
         *,
         auto_update: bool = True,
         force: bool = False,
-        progress_cb: Optional[ProgressCallback] = None,
+        progress_cb: ProgressCallback | None = None,
     ) -> FfmpegAutoInstallResult:
         current = Path(str(current_ffmpeg_path or "")).expanduser() if current_ffmpeg_path else None
         current_exists = bool(current and current.exists())
@@ -153,10 +153,8 @@ class FfmpegAutoInstaller:
                 error=str(exc),
             )
         finally:
-            try:
+            with contextlib.suppress(OSError):
                 archive_path.unlink(missing_ok=True)
-            except OSError:
-                pass
 
         return FfmpegAutoInstallResult(
             status="updated" if current_exists else "downloaded",
@@ -177,7 +175,7 @@ class FfmpegAutoInstaller:
     def _binary_name(self, name: str) -> str:
         return f"{name}.exe" if self._platform_key() == "win64" else name
 
-    def _download_file(self, url: str, destination: Path, progress_cb: Optional[ProgressCallback] = None) -> None:
+    def _download_file(self, url: str, destination: Path, progress_cb: ProgressCallback | None = None) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         request = urllib.request.Request(url, headers={"User-Agent": "MediaConverter/1.0"})
         with urllib.request.urlopen(request, timeout=60) as response:

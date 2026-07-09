@@ -30,7 +30,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Pre-compiled pattern for template placeholders
 _PLACEHOLDER_RE = re.compile(r"\{(\w+)(?::(\d+))?\}")
@@ -60,11 +60,11 @@ def _format_duration(seconds: float) -> str:
 def render_template(
     template: str,
     *,
-    source_path: Optional[Path] = None,
+    source_path: Path | None = None,
     index: int = 1,
     operation: str = "",
     media_type_name: str = "",
-    probe_data: Optional[Dict[str, Any]] = None,
+    probe_data: dict[str, Any] | None = None,
     counter: int = 1,
 ) -> str:
     """Render an output filename template with the given context.
@@ -108,7 +108,7 @@ def render_template(
     # Content hash
     content_hash = str(info.get("content_hash") or "")
 
-    values: Dict[str, str] = {
+    values: dict[str, str] = {
         "name": source.stem,
         "ext": source.suffix.lstrip(".") if source.suffix else "",
         "index": str(index),
@@ -156,7 +156,7 @@ def render_template(
     return result.strip() or (source.stem if source_path else "output")
 
 
-def validate_template(template: str) -> Optional[str]:
+def validate_template(template: str) -> str | None:
     """Validate a template string. Returns error message or None if valid."""
     if not template:
         return None

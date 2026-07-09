@@ -1,11 +1,10 @@
 ﻿import re
-from typing import Optional, List
 
 
-def format_time(seconds: Optional[float]) -> str:
+def format_time(seconds: float | None) -> str:
     if seconds is None or seconds < 0:
         return "--:--"
-    total = int(round(seconds))
+    total = round(seconds)
     h = total // 3600
     m = (total % 3600) // 60
     s = total % 60
@@ -14,7 +13,7 @@ def format_time(seconds: Optional[float]) -> str:
     return f"{m:02d}:{s:02d}"
 
 
-def format_bytes(size: Optional[int]) -> str:
+def format_bytes(size: int | None) -> str:
     if size is None:
         return "--"
     value = float(size)
@@ -25,7 +24,7 @@ def format_bytes(size: Optional[int]) -> str:
     return f"{value:.1f} PB"
 
 
-def parse_time_to_seconds(text: str) -> Optional[float]:
+def parse_time_to_seconds(text: str) -> float | None:
     raw = text.strip()
     if not raw:
         return None
@@ -47,7 +46,7 @@ def parse_time_to_seconds(text: str) -> Optional[float]:
     return None
 
 
-def parse_float(text: str) -> Optional[float]:
+def parse_float(text: str) -> float | None:
     raw = text.strip()
     if not raw:
         return None
@@ -57,7 +56,7 @@ def parse_float(text: str) -> Optional[float]:
         return None
 
 
-def parse_int(text: str) -> Optional[int]:
+def parse_int(text: str) -> int | None:
     raw = text.strip()
     if not raw:
         return None
@@ -67,7 +66,7 @@ def parse_int(text: str) -> Optional[int]:
         return None
 
 
-def parse_ffmpeg_time(value: str) -> Optional[float]:
+def parse_ffmpeg_time(value: str) -> float | None:
     raw = value.strip()
     if not raw:
         return None
@@ -82,10 +81,10 @@ def parse_ffmpeg_time(value: str) -> Optional[float]:
     return None
 
 
-def build_atempo_chain(speed: float) -> List[float]:
+def build_atempo_chain(speed: float) -> list[float]:
     if speed <= 0:
         return []
-    factors: List[float] = []
+    factors: list[float] = []
     while speed > 2.0:
         factors.append(2.0)
         speed /= 2.0

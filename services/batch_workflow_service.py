@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import contextlib
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any
 
 from app.constants import OUT_AUDIO_FORMATS, OUT_IMAGE_FORMATS, OUT_SUBTITLE_FORMATS, OUT_TEXT_FORMATS, OUT_VIDEO_FORMATS
 from app.models import TaskItem
-
 
 DEFAULT_FOLDER_RULES = "Downloads -> mp4\nCamera -> h265\nAudio -> mp3"
 
@@ -15,7 +16,7 @@ DEFAULT_FOLDER_RULES = "Downloads -> mp4\nCamera -> h265\nAudio -> mp3"
 @dataclass
 class FolderRule:
     match: str
-    overrides: Dict[str, Any] = field(default_factory=dict)
+    overrides: dict[str, Any] = field(default_factory=dict)
     priority: int = 0
     pinned: bool = False
 
@@ -23,8 +24,8 @@ class FolderRule:
 class BatchWorkflowService:
     """Small rule engine for watch-folder batch automation."""
 
-    def parse_rules(self, text: str) -> List[FolderRule]:
-        rules: List[FolderRule] = []
+    def parse_rules(self, text: str) -> list[FolderRule]:
+        rules: list[FolderRule] = []
         for raw_line in str(text or "").splitlines():
             line = raw_line.strip()
             if not line or line.startswith("#"):
@@ -58,7 +59,7 @@ class BatchWorkflowService:
                 changed = True
         return changed
 
-    def preview_rules(self, text: str) -> List[Dict[str, Any]]:
+    def preview_rules(self, text: str) -> list[dict[str, Any]]:
         return [
             {
                 "match": rule.match,
@@ -81,8 +82,8 @@ class BatchWorkflowService:
             parts = []
         return needle in path_text or needle in parts
 
-    def _parse_action(self, action: str) -> Tuple[Dict[str, Any], int, bool]:
-        overrides: Dict[str, Any] = {"operation": "convert"}
+    def _parse_action(self, action: str) -> tuple[dict[str, Any], int, bool]:
+        overrides: dict[str, Any] = {"operation": "convert"}
         priority = 0
         pinned = False
         tokens = [token for token in re.split(r"[\s,;]+", str(action or "").strip()) if token]
@@ -95,10 +96,8 @@ class BatchWorkflowService:
             command = value_lower if sep else normalized
 
             if normalized in {"priority", "prio"} and sep:
-                try:
+                with contextlib.suppress(ValueError):
                     priority = max(0, min(5, int(raw_value)))
-                except ValueError:
-                    pass
                 continue
             if command in {"pin", "pinned"} or (normalized == "pinned" and value_lower in {"1", "true", "yes", "on"}):
                 pinned = True
@@ -146,7 +145,7 @@ class BatchWorkflowService:
             return normalized
         return "convert"
 
-    def _apply_codec(self, value: str, overrides: Dict[str, Any]) -> None:
+    def _apply_codec(self, value: str, overrides: dict[str, Any]) -> None:
         normalized = str(value or "").strip().lower()
         if normalized in {"h265", "hevc", "x265"}:
             overrides["codec"] = "H.265 (HEVC)"
@@ -161,7 +160,7 @@ class BatchWorkflowService:
         elif normalized in {"mpeg2", "mpeg-2"}:
             overrides["codec"] = "MPEG-2"
 
-    def _apply_format(self, value: str, overrides: Dict[str, Any]) -> None:
+    def _apply_format(self, value: str, overrides: dict[str, Any]) -> None:
         normalized = str(value or "").strip().lower().lstrip(".")
         if normalized in OUT_VIDEO_FORMATS:
             overrides["out_video_fmt"] = normalized
@@ -174,7 +173,7 @@ class BatchWorkflowService:
         elif normalized in OUT_TEXT_FORMATS:
             overrides["out_text_fmt"] = normalized
 
-    def _media_overrides(self, overrides: Dict[str, Any], media_type: str) -> Dict[str, Any]:
+    def _media_overrides(self, overrides: dict[str, Any], media_type: str) -> dict[str, Any]:
         allowed = {"operation", "output_template", "performance_profile", "codec"}
         if media_type == "video":
             allowed.update({"out_video_fmt", "out_audio_fmt"})

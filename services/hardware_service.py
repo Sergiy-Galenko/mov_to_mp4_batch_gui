@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Dict, List, Optional, Set
 
 
 @dataclass
 class HardwareCapabilities:
     nvidia_available: bool = False
-    nvidia_encoders: List[str] = field(default_factory=list)
+    nvidia_encoders: list[str] = field(default_factory=list)
     intel_qsv_available: bool = False
-    qsv_encoders: List[str] = field(default_factory=list)
+    qsv_encoders: list[str] = field(default_factory=list)
     amd_amf_available: bool = False
-    amf_encoders: List[str] = field(default_factory=list)
-    all_encoders: Set[str] = field(default_factory=set)
+    amf_encoders: list[str] = field(default_factory=list)
+    all_encoders: set[str] = field(default_factory=set)
     detection_error: str = ""
 
     @property
@@ -34,7 +32,7 @@ class HardwareCapabilities:
         return "cpu"
 
     def summary(self) -> str:
-        parts: List[str] = []
+        parts: list[str] = []
         if self.nvidia_available:
             parts.append(f"NVIDIA NVENC ({len(self.nvidia_encoders)} enc)")
         if self.intel_qsv_available:
@@ -52,11 +50,11 @@ _AMF_ENCODERS = {"h264_amf", "hevc_amf", "av1_amf"}
 
 
 class HardwareService:
-    def __init__(self, ffmpeg_path: Optional[str] = None) -> None:
+    def __init__(self, ffmpeg_path: str | None = None) -> None:
         self.ffmpeg_path = ffmpeg_path or ""
-        self._cache: Optional[HardwareCapabilities] = None
+        self._cache: HardwareCapabilities | None = None
 
-    def detect(self, ffmpeg_path: Optional[str] = None) -> HardwareCapabilities:
+    def detect(self, ffmpeg_path: str | None = None) -> HardwareCapabilities:
         if ffmpeg_path:
             self.ffmpeg_path = ffmpeg_path
             self._cache = None
@@ -88,12 +86,12 @@ class HardwareService:
         self._cache = caps
         return caps
 
-    def _list_encoders(self) -> Set[str]:
+    def _list_encoders(self) -> set[str]:
         result = subprocess.run(
             [self.ffmpeg_path, "-hide_banner", "-encoders"],
             capture_output=True, text=True, timeout=15,
         )
-        encoders: Set[str] = set()
+        encoders: set[str] = set()
         for line in result.stdout.splitlines():
             line = line.strip()
             if not line or line.startswith("=") or line.startswith("Encoders:"):
@@ -109,5 +107,5 @@ class HardwareService:
         self._cache = None
 
     @property
-    def cached(self) -> Optional[HardwareCapabilities]:
+    def cached(self) -> HardwareCapabilities | None:
         return self._cache

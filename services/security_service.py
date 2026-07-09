@@ -4,7 +4,6 @@ import hashlib
 import os
 from pathlib import Path
 
-
 SUPPORTED_CHECKSUMS = {"md5", "sha256"}
 
 

@@ -1,7 +1,6 @@
 ﻿from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 from app.models import ConversionSettings, TaskItem
 from services.converter_service import ConverterService
@@ -15,7 +14,7 @@ class ConversionRunner:
     def is_running(self) -> bool:
         return bool(self.converter.thread and self.converter.thread.is_alive())
 
-    def start(self, tasks: List[TaskItem], settings: ConversionSettings, out_dir: Path) -> None:
+    def start(self, tasks: list[TaskItem], settings: ConversionSettings, out_dir: Path) -> None:
         self.converter.start(tasks, settings, out_dir)
 
     def stop(self) -> None:

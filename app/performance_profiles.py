@@ -1,15 +1,13 @@
 ﻿from __future__ import annotations
 
 from dataclasses import replace
-from typing import Dict
 
 from app.models import ConversionSettings
-
 
 PROFILE_NAMES = ["Quality", "Balanced", "Fast", "Small file"]
 
 
-PROFILE_DEFAULTS: Dict[str, Dict[str, object]] = {
+PROFILE_DEFAULTS: dict[str, dict[str, object]] = {
     "Quality": {
         "crf": 18,
         "preset": "slow",

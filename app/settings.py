@@ -1,4 +1,5 @@
-﻿from typing import Any, Dict, Mapping, Optional
+﻿from collections.abc import Mapping
+from typing import Any
 
 from app.constants import (
     HW_ENCODER_MAP,
@@ -11,14 +12,13 @@ from app.constants import (
     OUT_VIDEO_FORMATS,
     POSITION_OPTIONS,
     ROTATE_OPTIONS,
-    VIDEO_CODEC_OPTIONS,
     VIDEO_CODEC_MAP,
+    VIDEO_CODEC_OPTIONS,
 )
-from app.models import ConversionSettings
 from app.device_profiles import DEVICE_PROFILE_NAMES, apply_device_profile
+from app.models import ConversionSettings
 from app.performance_profiles import apply_performance_profile, normalize_profile
 from utils.formatting import parse_float, parse_int, parse_time_to_seconds
-
 
 SETTINGS_SCHEMA = {
     "operation": (str, "convert"),
@@ -91,7 +91,7 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
-def _coerce_int(value: Any, default: int, *, minimum: Optional[int] = None, maximum: Optional[int] = None) -> int:
+def _coerce_int(value: Any, default: int, *, minimum: int | None = None, maximum: int | None = None) -> int:
     parsed = parse_int(str(value)) if value is not None else None
     result = parsed if parsed is not None else default
     if minimum is not None:
@@ -101,7 +101,7 @@ def _coerce_int(value: Any, default: int, *, minimum: Optional[int] = None, maxi
     return result
 
 
-def _coerce_float(value: Any, default: Optional[float] = None) -> Optional[float]:
+def _coerce_float(value: Any, default: float | None = None) -> float | None:
     if value in (None, ""):
         return default
     parsed = parse_float(str(value))
@@ -130,8 +130,8 @@ def _apply_hw_encoder(settings: ConversionSettings, value: Any) -> None:
         settings.hw_encoder = str(hw)
 
 
-def coerce_settings(raw: Mapping[str, Any]) -> Dict[str, Any]:
-    result: Dict[str, Any] = {}
+def coerce_settings(raw: Mapping[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
     for key, (typ, default) in SETTINGS_SCHEMA.items():
         value = raw.get(key, default)
         try:
@@ -148,7 +148,7 @@ def coerce_settings(raw: Mapping[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional[ConversionSettings] = None) -> ConversionSettings:
+def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: ConversionSettings | None = None) -> ConversionSettings:
     settings = defaults or ConversionSettings()
 
     operation_label = str(settings_map.get("operation") or "").strip()
@@ -350,7 +350,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     return settings
 
 
-def merge_settings_maps(base_map: Mapping[str, Any], override_map: Mapping[str, Any]) -> Dict[str, Any]:
+def merge_settings_maps(base_map: Mapping[str, Any], override_map: Mapping[str, Any]) -> dict[str, Any]:
     merged = dict(base_map)
     for key, value in override_map.items():
         if value not in (None, ""):

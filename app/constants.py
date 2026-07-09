@@ -1,4 +1,4 @@
-﻿from app.paths import DEFAULT_OUTPUT_DIR, HISTORY_PATH, PRESET_PATH, STATE_PATH, THEME_PATH
+﻿from app.paths import HISTORY_PATH, PRESET_PATH, STATE_PATH, THEME_PATH
 
 APP_TITLE = "Media Converter - Photo + Video + Text"
 APP_VERSION = "1.2.1"
