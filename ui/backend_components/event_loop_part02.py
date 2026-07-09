@@ -35,6 +35,7 @@ BODY = r'''                        self.speedHistoryChanged.emit(list(self._spee
                                 message,
                                 "error" if failed else "info",
                             )
+                    self._handle_batch_completion(stopped)
                 elif etype == "media_info":
                     _, path, info = event
                     self._probe_pending.discard(path)
@@ -59,6 +60,12 @@ BODY = r'''                        self.speedHistoryChanged.emit(list(self._spee
                     if remember_folder:
                         self._remember_folder(remember_folder)
                     self._add_paths(paths)
+                elif etype == "watch_paths":
+                    _, paths, remember_folder = event
+                    self._handle_watch_paths(paths, remember_folder)
+                elif etype == "paid_update_done":
+                    _, info = event
+                    self._apply_paid_update_result(info)
                 elif etype == "dedupe_hash_done":
                     _, unique, removed, log_lines = event
                     self.queue_model.set_items(unique)

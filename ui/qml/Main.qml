@@ -76,6 +76,7 @@ ApplicationWindow {
         { title: "subtitle_tools", icon: "📝", page: 5, target: "subtitle_tools" },
         { title: "privacy_security", icon: "🔐", page: 5, target: "privacy_security" },
         { title: "cloud_integration", icon: "☁️", page: 5, target: "cloud_integration" },
+        { title: "commercial_license", icon: "🔑", page: 5, target: "commercial_license" },
         { title: "run", icon: "🚀", page: 5, target: "run" },
         { title: "core", icon: "⚙️", page: 5, target: "core" },
         { title: "output", icon: "📤", page: 5, target: "output" },
@@ -102,9 +103,15 @@ ApplicationWindow {
     property var hwOptions: ["auto", "cpu", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"]
     property var performanceProfiles: ["Quality", "Balanced", "Fast", "Small file"]
     property var deviceProfiles: ["None", "iPhone 14/15/16", "iPad Pro", "Apple TV 4K HDR", "Android H.264 baseline", "Samsung TV", "PlayStation 5", "Xbox Series X", "Chromecast / Fire TV", "GoPro import", "DJI Drone import", "Steam Deck", "DVD compatible", "Blu-ray compatible"]
-    property var rotateOptions: ["0", "90° вправо", "90° вліво", "180°"]
-    property var portraitOptions: ["Вимкнено", "9:16 (1080x1920) - crop", "9:16 (1080x1920) - blur", "9:16 (720x1280) - crop", "9:16 (720x1280) - blur"]
-    property var positionOptions: ["Верх-ліворуч", "Верх-праворуч", "Низ-ліворуч", "Низ-праворуч", "Центр"]
+    property var rotateCanonicalOptions: ["0", "90° вправо", "90° вліво", "180°"]
+    property var rotateOptions: ["0", I18n.t("rotate_right"), I18n.t("rotate_left"), "180°"]
+    property var portraitCanonicalOptions: ["Вимкнено", "9:16 (1080x1920) - crop", "9:16 (1080x1920) - blur", "9:16 (720x1280) - crop", "9:16 (720x1280) - blur"]
+    property var portraitOptions: [I18n.t("off"), "9:16 (1080x1920) - crop", "9:16 (1080x1920) - blur", "9:16 (720x1280) - crop", "9:16 (720x1280) - blur"]
+    property var positionCanonicalOptions: ["Верх-ліворуч", "Верх-праворуч", "Низ-ліворуч", "Низ-праворуч", "Центр"]
+    property var positionOptions: [I18n.t("pos_top_left"), I18n.t("pos_top_right"), I18n.t("pos_bottom_left"), I18n.t("pos_bottom_right"), I18n.t("pos_center")]
+
+    property var schedulerModeOptions: ["time", "idle", "time_or_idle", "time_and_idle"]
+    property var completionActionOptions: ["none", "open_output", "sleep", "shutdown"]
 
     NumberAnimation on sharedShimmerPhase {
         from: 0
@@ -186,9 +193,9 @@ ApplicationWindow {
     }
 
     function workspaceTitle() {
-        if (root.activeWorkspaceMode === "photo") return "Фото"
-        if (root.activeWorkspaceMode === "video") return "Відео"
-        if (root.activeWorkspaceMode === "text") return "Текст"
+        if (root.activeWorkspaceMode === "photo") return I18n.t("workspace_photo")
+        if (root.activeWorkspaceMode === "video") return I18n.t("workspace_video")
+        if (root.activeWorkspaceMode === "text") return I18n.t("workspace_text")
         return I18n.t("queue")
     }
 
@@ -319,6 +326,22 @@ ApplicationWindow {
             combo.currentIndex = idx
     }
 
+    function setComboCanonical(combo, value, canonicalOptions) {
+        if (!combo || value === undefined || value === null || !canonicalOptions)
+            return
+        var idx = canonicalOptions.indexOf(String(value))
+        if (idx >= 0)
+            combo.currentIndex = idx
+        else
+            root.setComboText(combo, value)
+    }
+
+    function canonicalOption(canonicalOptions, index, fallback) {
+        if (canonicalOptions && index >= 0 && index < canonicalOptions.length)
+            return canonicalOptions[index]
+        return fallback
+    }
+
     function applyPreset(preset) {
         if (settingsPanel)
             settingsPanel.applyPreset(preset)
@@ -439,6 +462,31 @@ ApplicationWindow {
         return 0
     }
 
+    function currentLanguageCode() {
+        var code = backend ? (backend.currentLanguage || backend.uiLanguage) : I18n.language
+        return I18n.normalize(code)
+    }
+
+    function languageButtonLabel(revision) {
+        var code = currentLanguageCode()
+        if (code === "uk")
+            return "UA"
+        return code.toUpperCase()
+    }
+
+    function languageActive(code) {
+        return currentLanguageCode() === I18n.normalize(code)
+    }
+
+    function setAppLanguage(code) {
+        var normalized = I18n.normalize(code)
+        if (backend)
+            backend.setLanguage(normalized)
+        else
+            I18n.setLanguage(normalized)
+        root._langVersion += 1
+    }
+
     function runGlobalSearch(text) {
         globalSearchText = String(text || "")
         globalSearchResults = backend ? backend.globalSearch(globalSearchText) : []
@@ -524,7 +572,7 @@ ApplicationWindow {
         function onLanguageChanged() { root._langVersion += 1 }
         function onUiLanguageChanged() {
             I18n.setLanguage(backend.uiLanguage)
-            settingsPanel.syncLanguage()
+            root._langVersion += 1
         }
         function onWatermarkPicked(path) { settingsPanel.setPickedPath("watermark", path) }
         function onFontPicked(path) { settingsPanel.setPickedPath("font", path) }
@@ -598,13 +646,13 @@ ApplicationWindow {
 
                 RowLayout {
                     spacing: 4
-                    TopModeButton { mode: "convert"; text: "Конвертація" }
-                    TopModeButton { mode: "photo"; text: "Фото" }
-                    TopModeButton { mode: "video"; text: "Відео" }
-                    TopModeButton { mode: "text"; text: "Текст" }
-                    TopModeButton { mode: "montage"; text: "Монтаж" }
-                    TopModeButton { mode: "downloads"; text: "Downloads" }
-                    TopModeButton { mode: "analytics"; text: "Аналітика" }
+                    TopModeButton { mode: "convert"; text: I18n.t("convert") }
+                    TopModeButton { mode: "photo"; text: I18n.t("workspace_photo") }
+                    TopModeButton { mode: "video"; text: I18n.t("workspace_video") }
+                    TopModeButton { mode: "text"; text: I18n.t("workspace_text") }
+                    TopModeButton { mode: "montage"; text: I18n.t("workspace_montage") }
+                    TopModeButton { mode: "downloads"; text: I18n.t("downloads") }
+                    TopModeButton { mode: "analytics"; text: I18n.t("analytics") }
                 }
 
                 Item { Layout.fillWidth: true }
@@ -621,7 +669,7 @@ ApplicationWindow {
                     AppTextField {
                         id: globalSearchField
                         Layout.preferredWidth: 200
-                        placeholderText: "🔍 Пошук..."
+                        placeholderText: I18n.t("global_search")
                         text: root.globalSearchText
                         onTextChanged: root.runGlobalSearch(text)
                         Keys.onReturnPressed: {
@@ -634,6 +682,78 @@ ApplicationWindow {
                         Layout.preferredWidth: 50
                         text: "🔔 " + root.toastHistory.length
                         onClicked: notificationCenterPopup.open()
+                    }
+
+                    GhostButton {
+                        id: languageButton
+                        Layout.preferredWidth: 68
+                        text: "🌐 " + root.languageButtonLabel(root._langVersion)
+                        onClicked: languagePopup.open()
+
+                        Popup {
+                            id: languagePopup
+                            y: languageButton.height + 6
+                            width: 196
+                            padding: 8
+                            focus: true
+                            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+                            background: Rectangle {
+                                radius: Theme.radiusInput + 2
+                                color: Theme.panelAlt
+                                border.width: 1
+                                border.color: Theme.borderStrong
+                            }
+
+                            contentItem: ColumnLayout {
+                                spacing: 4
+
+                                Repeater {
+                                    model: backend ? backend.availableLanguages : []
+
+                                    delegate: Button {
+                                        id: languageOptionButton
+                                        Layout.fillWidth: true
+                                        implicitHeight: 38
+                                        text: modelData.label || ""
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            root.setAppLanguage(modelData.code)
+                                            languagePopup.close()
+                                        }
+
+                                        background: Rectangle {
+                                            radius: Theme.radiusSm
+                                            color: root.languageActive(modelData.code)
+                                                   ? Theme.accentSoft
+                                                   : languageOptionButton.hovered ? Theme.overlayHover : Theme.transparent
+                                            border.width: root.languageActive(modelData.code) ? 1 : 0
+                                            border.color: Theme.accentPrimary
+                                        }
+
+                                        contentItem: RowLayout {
+                                            spacing: 8
+
+                                            Label {
+                                                Layout.fillWidth: true
+                                                text: modelData.label || ""
+                                                color: Theme.textPrimary
+                                                font.pixelSize: Theme.fontSizeSm
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Label {
+                                                visible: root.languageActive(modelData.code)
+                                                text: "✓"
+                                                color: Theme.accentPrimary
+                                                font.pixelSize: Theme.fontSizeSm
+                                                font.bold: true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     GhostButton {
@@ -763,7 +883,7 @@ ApplicationWindow {
                     
                     SecondaryButton {
                         Layout.preferredWidth: 44
-                        text: "📁"
+                            text: "📁"
                         onClicked: backend && backend.pickOutputDir()
                     }
                     
@@ -771,7 +891,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         spacing: 2
                         Label {
-                            text: "Папка збереження"
+                            text: I18n.t("output_folder")
                             color: Theme.textDisabled
                             font.pixelSize: 11
                         }
@@ -805,7 +925,7 @@ ApplicationWindow {
                     PrimaryButton {
                         Layout.preferredWidth: 160
                         Layout.preferredHeight: 48
-                        text: "🚀 " + (backend && backend.isRunning ? I18n.t("running") : "Старт")
+                        text: "🚀 " + (backend && backend.isRunning ? I18n.t("running") : I18n.t("start"))
                         font.pixelSize: Theme.fontSizeLg
                         font.bold: true
                         enabled: backend ? (backend.queueCount > 0 && !backend.isRunning && formValid) : false
@@ -922,7 +1042,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Label {
                     Layout.fillWidth: true
-                    text: "Сповіщення"
+                    text: I18n.t("notifications")
                     color: Theme.textPrimary
                     font.pixelSize: Theme.fontSizeLg
                     font.bold: true
@@ -1264,25 +1384,25 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     AppCheckBox { text: I18n.t("show_thumbnail"); checked: root.queueShowThumbnail; onToggled: root.queueShowThumbnail = checked }
-                    AppCheckBox { text: "Розмір"; checked: root.queueShowSize; onToggled: root.queueShowSize = checked }
-                    AppCheckBox { text: "Тривалість"; checked: root.queueShowDuration; onToggled: root.queueShowDuration = checked }
-                    AppCheckBox { text: "Кодек"; checked: root.queueShowCodec; onToggled: root.queueShowCodec = checked }
-                    AppCheckBox { text: "Output"; checked: root.queueShowOutput; onToggled: root.queueShowOutput = checked }
+                    AppCheckBox { text: I18n.t("queue_show_size"); checked: root.queueShowSize; onToggled: root.queueShowSize = checked }
+                    AppCheckBox { text: I18n.t("queue_show_duration"); checked: root.queueShowDuration; onToggled: root.queueShowDuration = checked }
+                    AppCheckBox { text: I18n.t("queue_show_codec"); checked: root.queueShowCodec; onToggled: root.queueShowCodec = checked }
+                    AppCheckBox { text: I18n.t("queue_show_output"); checked: root.queueShowOutput; onToggled: root.queueShowOutput = checked }
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    AppCheckBox { text: "Progress"; checked: root.queueShowProgress; onToggled: root.queueShowProgress = checked }
+                    AppCheckBox { text: I18n.t("queue_show_progress"); checked: root.queueShowProgress; onToggled: root.queueShowProgress = checked }
                     AppCheckBox { text: I18n.t("show_metrics"); checked: root.queueShowMetrics; onToggled: root.queueShowMetrics = checked }
                     AppCheckBox { text: I18n.t("show_actions"); checked: root.queueShowActions; onToggled: root.queueShowActions = checked }
                     Item { Layout.fillWidth: true }
                     SecondaryButton {
                         Layout.fillWidth: false
-                        text: "🛡️ Preflight"
+                        text: "🛡️ " + I18n.t("preflight")
                         onClicked: backend && backend.refreshPreflight(collectSettings())
                     }
                     SecondaryButton {
                         Layout.fillWidth: false
-                        text: "📌 Priority"
+                        text: "📌 " + I18n.t("priority")
                         onClicked: backend && backend.sortQueueByPriority()
                     }
                     SecondaryButton {
@@ -1296,25 +1416,25 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     SecondaryButton {
                         Layout.fillWidth: false
-                        text: "🧹 Готові"
+                        text: "🧹 " + I18n.t("cleanup_done")
                         enabled: backend ? backend.queueCount > 0 : false
                         onClicked: backend && backend.cleanupQueue("done")
                     }
                     SecondaryButton {
                         Layout.fillWidth: false
-                        text: "🧹 Помилкові"
+                        text: "🧹 " + I18n.t("cleanup_failed")
                         enabled: backend ? backend.queueCount > 0 : false
                         onClicked: backend && backend.cleanupQueue("failed")
                     }
                     SecondaryButton {
                         Layout.fillWidth: false
-                        text: "🧹 Відсутні"
+                        text: "🧹 " + I18n.t("cleanup_missing")
                         enabled: backend ? backend.queueCount > 0 : false
                         onClicked: backend && backend.cleanupQueue("missing")
                     }
                     SecondaryButton {
                         Layout.fillWidth: false
-                        text: "📊 Оновити preview"
+                        text: "📊 " + I18n.t("refresh_preview")
                         enabled: backend ? backend.queueCount > 0 : false
                         onClicked: backend && backend.refreshOutputPreview(collectSettings())
                     }
@@ -1364,7 +1484,7 @@ ApplicationWindow {
                             }
                             Label {
                                 Layout.fillWidth: true
-                                text: backend ? "Причина: " + backend.lastErrorDetails : ""
+                                text: backend ? I18n.t("reason") + ": " + backend.lastErrorDetails : ""
                                 color: Theme.textSecondary
                                 font.pixelSize: Theme.fontSizeSm
                                 maximumLineCount: 2
@@ -1375,7 +1495,7 @@ ApplicationWindow {
                         SecondaryButton {
                             Layout.fillWidth: false
                             Layout.preferredWidth: 142
-                            text: "Скопіювати лог"
+                            text: I18n.t("copy_log")
                             onClicked: backend && backend.copyLastErrorLog()
                         }
                         SecondaryButton {
@@ -1393,7 +1513,7 @@ ApplicationWindow {
                 spacing: 12
 
                 Panel {
-                    title: "🛡️ Preflight"
+                    title: "🛡️ " + I18n.t("preflight")
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
                     RowLayout {
@@ -1408,7 +1528,7 @@ ApplicationWindow {
                         SecondaryButton {
                             Layout.fillWidth: false
                             Layout.preferredWidth: 110
-                            text: "Перевірити"
+                            text: I18n.t("check")
                             onClicked: backend && backend.refreshPreflight(collectSettings())
                         }
                     }
@@ -1435,7 +1555,7 @@ ApplicationWindow {
                 }
 
                 Panel {
-                    title: "📊 Output preview"
+                    title: "📊 " + I18n.t("output_preview")
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
                     Label {
@@ -1449,7 +1569,7 @@ ApplicationWindow {
                     }
                     Label {
                         Layout.fillWidth: true
-                        text: backend ? "Output: " + backend.selectedPreviewOutput : ""
+                        text: backend ? I18n.t("output") + ": " + backend.selectedPreviewOutput : ""
                         color: Theme.textSecondary
                         font.family: Theme.monoFont
                         font.pixelSize: Theme.fontMeta
@@ -1469,7 +1589,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         SecondaryButton {
                             Layout.fillWidth: false
-                            text: "📋 Команду"
+                            text: "📋 " + I18n.t("copy_command")
                             onClicked: backend && backend.copyDryRunCommand(collectSettings())
                         }
                         SecondaryButton {
@@ -1485,9 +1605,9 @@ ApplicationWindow {
             Panel {
                 id: selectedPreviewPanel
                 visible: root.selectedPath.length > 0 && ["image", "video", "text"].indexOf(root.selectedMediaType) >= 0
-                title: root.selectedMediaType === "image" ? "Фото preview"
-                     : root.selectedMediaType === "video" ? "Відео preview"
-                     : "Текст preview"
+                title: root.selectedMediaType === "image" ? I18n.t("photo_preview")
+                     : root.selectedMediaType === "video" ? I18n.t("video_preview")
+                     : I18n.t("text_preview")
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -1530,7 +1650,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             width: parent.width - 28
                             visible: root.selectedMediaType !== "text" && root.selectedThumbnailSource.length === 0
-                            text: root.selectedMediaType === "video" ? "Preview кадр ще не готовий" : "Preview недоступний"
+                            text: root.selectedMediaType === "video" ? I18n.t("preview_frame_pending") : I18n.t("preview_unavailable")
                             color: Theme.textSecondary
                             font.pixelSize: Theme.fontSmall
                             horizontalAlignment: Text.AlignHCenter
@@ -1566,7 +1686,7 @@ ApplicationWindow {
                             rowSpacing: 8
                             columnSpacing: 8
 
-                            FieldLabel { text: "Тип" }
+                            FieldLabel { text: I18n.t("media_type") }
                             Label {
                                 Layout.fillWidth: true
                                 text: root.selectedMediaType.toUpperCase()
@@ -1608,9 +1728,9 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             visible: root.selectedMediaType === "image"
                             spacing: 8
-                            SecondaryButton { text: "Якість фото"; onClicked: root.openSidebarSection(5, "images_sheets", root.navIndexFor(5, "images_sheets")) }
-                            SecondaryButton { text: "Resize / Crop"; onClicked: root.openSidebarSection(5, "video", root.navIndexFor(5, "video")) }
-                            SecondaryButton { text: "Watermark / Text"; onClicked: root.openSidebarSection(5, "watermark_text", root.navIndexFor(5, "watermark_text")) }
+                            SecondaryButton { text: I18n.t("photo_quality"); onClicked: root.openSidebarSection(5, "images_sheets", root.navIndexFor(5, "images_sheets")) }
+                            SecondaryButton { text: I18n.t("resize_crop"); onClicked: root.openSidebarSection(5, "video", root.navIndexFor(5, "video")) }
+                            SecondaryButton { text: I18n.t("watermark_text"); onClicked: root.openSidebarSection(5, "watermark_text", root.navIndexFor(5, "watermark_text")) }
                         }
 
                         RowLayout {
@@ -1618,7 +1738,7 @@ ApplicationWindow {
                             visible: root.selectedMediaType === "video"
                             spacing: 8
                             SecondaryButton { text: I18n.t("video_editor"); onClicked: root.openSidebarSection(5, "video_editor", root.navIndexFor(5, "video_editor")) }
-                            SecondaryButton { text: "Trim / Size"; onClicked: root.openSidebarSection(5, "video", root.navIndexFor(5, "video")) }
+                            SecondaryButton { text: I18n.t("trim_size"); onClicked: root.openSidebarSection(5, "video", root.navIndexFor(5, "video")) }
                             SecondaryButton { text: I18n.t("audio_subtitles"); onClicked: root.openSidebarSection(5, "audio_subtitles", root.navIndexFor(5, "audio_subtitles")) }
                         }
 
@@ -1626,7 +1746,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             visible: root.selectedMediaType === "text"
                             spacing: 8
-                            SecondaryButton { text: "Text formats"; onClicked: root.openSidebarSection(5, "core", root.navIndexFor(5, "core")) }
+                            SecondaryButton { text: I18n.t("text_formats"); onClicked: root.openSidebarSection(5, "core", root.navIndexFor(5, "core")) }
                             SecondaryButton { text: I18n.t("output"); onClicked: root.openSidebarSection(5, "output", root.navIndexFor(5, "output")) }
                         }
                     }
@@ -1689,7 +1809,7 @@ ApplicationWindow {
 
                         Label {
                             Layout.fillWidth: true
-                            text: "Відпустіть файли, щоб додати їх у чергу"
+                            text: I18n.t("drop_append_title")
                             color: Theme.textPrimary
                             font.family: Theme.displayFont
                             font.pixelSize: Theme.fontSizeLg
@@ -1700,7 +1820,7 @@ ApplicationWindow {
 
                         Label {
                             Layout.fillWidth: true
-                            text: "Можна докидати фото, відео, аудіо, документи або папки без очищення поточного списку."
+                            text: I18n.t("drop_append_hint")
                             color: Theme.textSecondary
                             font.pixelSize: Theme.fontSizeSm
                             horizontalAlignment: Text.AlignHCenter
@@ -2073,7 +2193,7 @@ ApplicationWindow {
                 id: youtubeVideoSegment
                 Layout.fillWidth: true
                 Layout.preferredHeight: 54
-                text: "🎬 Video"
+                text: "🎬 " + I18n.t("video")
                 hoverEnabled: true
                 onClicked: selectedDownloadMode = "video"
                 background: Rectangle {
@@ -2095,7 +2215,7 @@ ApplicationWindow {
                 id: youtubeAudioSegment
                 Layout.fillWidth: true
                 Layout.preferredHeight: 54
-                text: "🎧 Audio only"
+                text: "🎧 " + I18n.t("audio_only")
                 hoverEnabled: true
                 onClicked: selectedDownloadMode = "audio"
                 background: Rectangle {
@@ -2135,19 +2255,19 @@ ApplicationWindow {
             spacing: 8
             SecondaryButton {
                 Layout.fillWidth: true
-                text: "Import .txt/.csv"
+                text: I18n.t("import_urls")
                 enabled: backend ? true : false
                 onClicked: backend && backend.importDownloadUrlsFromFile(downloadOptions(""))
             }
             SecondaryButton {
                 Layout.fillWidth: true
-                text: backend && backend.ytdlpUpdateRunning ? "Updating yt-dlp..." : "Update yt-dlp"
+                text: backend && backend.ytdlpUpdateRunning ? I18n.t("updating_ytdlp") : I18n.t("update_ytdlp")
                 enabled: backend ? !backend.ytdlpUpdateRunning : false
                 onClicked: backend && backend.updateYtdlp()
             }
             SecondaryButton {
                 Layout.fillWidth: true
-                text: "Retry failed"
+                text: I18n.t("retry_failed")
                 enabled: backend ? backend.youtubeDownloadQueue.length > 0 : false
                 onClicked: backend && backend.retryFailedYoutubeDownloads()
             }
@@ -2179,7 +2299,7 @@ ApplicationWindow {
                         SecondaryButton {
                             Layout.fillWidth: false
                             Layout.preferredWidth: 104
-                            text: "Повторити"
+                            text: I18n.t("retry")
                             onClicked: {
                                 youtubeUrlField.text = modelData
                                 startDownload(selectedDownloadMode)
@@ -2228,7 +2348,7 @@ ApplicationWindow {
                 currentIndex: 0
                 enabled: backend ? true : false
             }
-            FieldLabel { text: "Speed limit KB/s" }
+            FieldLabel { text: I18n.t("speed_limit_kbps") }
             AppSpinBox {
                 id: youtubeRateLimitSpin
                 from: 0
@@ -2366,7 +2486,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             SecondaryButton {
                 Layout.fillWidth: true
-                text: "⬇️ Додати в чергу"
+                text: "⬇️ " + I18n.t("add_to_queue")
                 enabled: backend && String(youtubeUrlField.text).trim().length > 0
                 onClicked: startDownload(selectedDownloadMode)
             }
@@ -2406,7 +2526,7 @@ ApplicationWindow {
                 spacing: 8
                 Label {
                     Layout.fillWidth: true
-                    text: "⬇️ Черга завантажень"
+                    text: "⬇️ " + I18n.t("download_queue")
                     color: Theme.textPrimary
                     font.pixelSize: Theme.fontSizeSm
                     font.bold: true
@@ -2414,7 +2534,7 @@ ApplicationWindow {
                 Label {
                     Layout.fillWidth: true
                     visible: backend ? backend.youtubeDownloadQueue.length === 0 : true
-                    text: "Немає активних завантажень."
+                    text: I18n.t("no_active_downloads")
                     color: Theme.textMuted
                     font.pixelSize: Theme.fontMeta
                 }
@@ -2466,7 +2586,7 @@ ApplicationWindow {
                             }
                             Label {
                                 Layout.fillWidth: true
-                                text: "Speed: " + modelData.speedText + " | ETA: " + modelData.etaText + " | " + modelData.message
+                                text: I18n.t("speed") + ": " + modelData.speedText + " | " + I18n.t("eta") + ": " + modelData.etaText + " | " + modelData.message
                                 color: Theme.textMuted
                                 font.pixelSize: Theme.fontMeta
                                 elide: Text.ElideRight
@@ -2476,7 +2596,7 @@ ApplicationWindow {
                                 spacing: 8
                                 Label {
                                     Layout.fillWidth: true
-                                    text: modelData.rateLimitKbps > 0 ? "Limit: " + modelData.rateLimitKbps + " KB/s" : "Limit: none"
+                                    text: modelData.rateLimitKbps > 0 ? I18n.t("limit") + ": " + modelData.rateLimitKbps + " KB/s" : I18n.t("limit") + ": " + I18n.t("none")
                                     color: Theme.textDisabled
                                     font.family: Theme.monoFont
                                     font.pixelSize: Theme.fontMeta
@@ -2510,7 +2630,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Label {
                         Layout.fillWidth: true
-                        text: "Download log"
+                        text: I18n.t("download_log")
                         color: Theme.textPrimary
                         font.pixelSize: Theme.fontSizeSm
                         font.bold: true
@@ -2575,12 +2695,13 @@ ApplicationWindow {
             smartAbTestCheck.checked = !!preset.smart_ab_test
             smartAbCrfsField.text = preset.smart_ab_crfs || "18,23,28"
             if (preset.smart_ab_duration !== undefined) smartAbDurationSpin.value = Number(preset.smart_ab_duration)
-            if (preset.portrait) root.setComboText(portraitCombo, preset.portrait)
+            if (preset.portrait) root.setComboCanonical(portraitCombo, preset.portrait, root.portraitCanonicalOptions)
             if (preset.img_quality !== undefined) imgQualitySpin.value = Number(preset.img_quality)
             overwriteCheck.checked = !!preset.overwrite
             fastCopyCheck.checked = !!preset.fast_copy
             skipExistingCheck.checked = !!preset.skip_existing
             outputTemplateField.text = preset.output_template || "{stem}"
+            commercialExportCheck.checked = !!preset.commercial_export
             platformProfileField.text = preset.platform_profile || ""
             trimStartField.text = preset.trim_start || ""
             trimEndField.text = preset.trim_end || ""
@@ -2592,7 +2713,7 @@ ApplicationWindow {
             cropHField.text = preset.crop_h || ""
             cropXField.text = preset.crop_x || ""
             cropYField.text = preset.crop_y || ""
-            if (preset.rotate) root.setComboText(rotateCombo, preset.rotate)
+            if (preset.rotate) root.setComboCanonical(rotateCombo, preset.rotate, root.rotateCanonicalOptions)
             speedField.text = preset.speed || ""
             root.setComboText(subtitleModeCombo, preset.subtitle_mode || "none")
             subtitlePathField.text = preset.subtitle_path || ""
@@ -2606,11 +2727,11 @@ ApplicationWindow {
             if (preset.sheet_width !== undefined) sheetWidthSpin.value = Number(preset.sheet_width)
             if (preset.sheet_interval !== undefined) sheetIntervalSpin.value = Number(preset.sheet_interval)
             wmPathField.text = preset.wm_path || ""
-            if (preset.wm_pos) root.setComboText(wmPosCombo, preset.wm_pos)
+            if (preset.wm_pos) root.setComboCanonical(wmPosCombo, preset.wm_pos, root.positionCanonicalOptions)
             if (preset.wm_opacity !== undefined) wmOpacitySpin.value = Number(preset.wm_opacity)
             if (preset.wm_scale !== undefined) wmScaleSpin.value = Number(preset.wm_scale)
             textWatermarkField.text = preset.text_wm || ""
-            if (preset.text_pos) root.setComboText(textPosCombo, preset.text_pos)
+            if (preset.text_pos) root.setComboCanonical(textPosCombo, preset.text_pos, root.positionCanonicalOptions)
             if (preset.text_size !== undefined) textSizeSpin.value = Number(preset.text_size)
             textColorField.text = preset.text_color || "white"
             textBoxCheck.checked = !!preset.text_box
@@ -2641,6 +2762,7 @@ ApplicationWindow {
             metaTrackField.text = preset.meta_track || ""
             if (preset.device_profile) root.setComboText(deviceProfileCombo, preset.device_profile)
             privacyBlurRegionsField.text = preset.privacy_blur_regions || ""
+            aiBlurCheck.checked = !!preset.ai_blur_enabled
             checksumCombo.currentIndex = Math.max(0, checksumCombo.find(preset.checksum_algorithm || "none"))
             secureDeleteCheck.checked = !!preset.secure_delete_original
             subtitleSyncField.text = preset.subtitle_sync_ms || ""
@@ -2709,12 +2831,13 @@ ApplicationWindow {
                 smart_ab_test: smartAbTestCheck.checked,
                 smart_ab_crfs: smartAbCrfsField.text,
                 smart_ab_duration: smartAbDurationSpin.value,
-                portrait: portraitCombo.currentText,
+                portrait: root.canonicalOption(root.portraitCanonicalOptions, portraitCombo.currentIndex, portraitCombo.currentText),
                 img_quality: imgQualitySpin.value,
                 overwrite: overwriteCheck.checked,
                 fast_copy: fastCopyCheck.checked,
                 skip_existing: skipExistingCheck.checked,
                 output_template: outputTemplateField.text,
+                commercial_export: commercialExportCheck.checked,
                 platform_profile: platformProfileField.text,
                 trim_start: trimStartField.text,
                 trim_end: trimEndField.text,
@@ -2726,7 +2849,7 @@ ApplicationWindow {
                 crop_h: cropHField.text,
                 crop_x: cropXField.text,
                 crop_y: cropYField.text,
-                rotate: rotateCombo.currentText,
+                rotate: root.canonicalOption(root.rotateCanonicalOptions, rotateCombo.currentIndex, rotateCombo.currentText),
                 speed: speedField.text,
                 subtitle_mode: subtitleModeCombo.currentText,
                 subtitle_path: subtitlePathField.text,
@@ -2741,11 +2864,11 @@ ApplicationWindow {
                 sheet_width: sheetWidthSpin.value,
                 sheet_interval: sheetIntervalSpin.value,
                 wm_path: wmPathField.text,
-                wm_pos: wmPosCombo.currentText,
+                wm_pos: root.canonicalOption(root.positionCanonicalOptions, wmPosCombo.currentIndex, wmPosCombo.currentText),
                 wm_opacity: wmOpacitySpin.value,
                 wm_scale: wmScaleSpin.value,
                 text_wm: textWatermarkField.text,
-                text_pos: textPosCombo.currentText,
+                text_pos: root.canonicalOption(root.positionCanonicalOptions, textPosCombo.currentIndex, textPosCombo.currentText),
                 text_size: textSizeSpin.value,
                 text_color: textColorField.text,
                 text_box: textBoxCheck.checked,
@@ -2776,6 +2899,7 @@ ApplicationWindow {
                 meta_track: metaTrackField.text,
                 device_profile: deviceProfileCombo.currentText,
                 privacy_blur_regions: privacyBlurRegionsField.text,
+                ai_blur_enabled: aiBlurCheck.checked,
                 sanitize_metadata: stripMetadataCheck.checked,
                 checksum_algorithm: checksumCombo.currentText,
                 secure_delete_original: secureDeleteCheck.checked,
@@ -2820,9 +2944,7 @@ ApplicationWindow {
         }
 
         function syncLanguage() {
-            if (!backend)
-                return
-            languageCombo.syncFromBackend()
+            root._langVersion += 1
         }
 
         function loadTaskOverride(data) {
@@ -2835,7 +2957,7 @@ ApplicationWindow {
         function sectionY(section) {
             var target = String(section || "run")
             var panel = runPanel
-            if (["smart_convert", "device_profiles", "video_editor", "subtitle_tools", "privacy_security", "cloud_integration", "video", "audio_subtitles", "images_sheets", "watermark_text", "metadata_hooks", "selected_override", "ffmpeg_watch"].indexOf(target) >= 0)
+            if (["smart_convert", "device_profiles", "video_editor", "subtitle_tools", "privacy_security", "cloud_integration", "commercial_license", "video", "audio_subtitles", "images_sheets", "watermark_text", "metadata_hooks", "selected_override", "ffmpeg_watch"].indexOf(target) >= 0)
                 advancedToolsSection.expanded = true
             if (target === "smart_convert") panel = smartConvertPanel
             else if (target === "device_profiles") panel = deviceProfilesPanel
@@ -2843,6 +2965,7 @@ ApplicationWindow {
             else if (target === "subtitle_tools") panel = subtitleToolsPanel
             else if (target === "privacy_security") panel = privacySecurityPanel
             else if (target === "cloud_integration") panel = cloudIntegrationPanel
+            else if (target === "commercial_license") panel = commercialLicensePanel
             else if (target === "core") panel = corePanel
             else if (target === "output") panel = outputPanel
             else if (target === "video") panel = videoPanel
@@ -2858,10 +2981,6 @@ ApplicationWindow {
         Panel {
             id: runPanel
             title: I18n.t("run")
-            FieldLabel { text: I18n.t("language") }
-            LanguageSwitcher {
-                id: languageCombo
-            }
             RowLayout {
                 Layout.fillWidth: true
                 SecondaryButton { text: backend && backend.isRunning ? I18n.t("running") : I18n.t("start"); enabled: backend && !backend.isRunning && formValid; onClicked: startIfValid() }
@@ -2961,7 +3080,7 @@ ApplicationWindow {
                 AppComboBox { id: outAudioFmt; model: root.audioFormats; currentIndex: 0; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("subtitle") }
                 AppComboBox { id: outSubtitleFmt; model: root.subtitleFormats; currentIndex: 0; onActivated: scheduleSettingsSync() }
-                FieldLabel { text: "Text" }
+                FieldLabel { text: I18n.t("text") }
                 AppComboBox { id: outTextFmt; model: root.textFormats; currentIndex: 0; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("codec") }
                 AppComboBox { id: codecCombo; model: root.codecOptions; currentIndex: 0; onActivated: scheduleSettingsSync() }
@@ -2997,9 +3116,23 @@ ApplicationWindow {
                 SecondaryButton { text: I18n.t("choose"); onClicked: backend && backend.pickOutputDir() }
                 SecondaryButton { text: I18n.t("open"); onClicked: backend && backend.openOutputDir() }
                 SecondaryButton { text: I18n.t("preview"); onClicked: backend && backend.refreshOutputPreview(collectSettings()) }
+                SecondaryButton { text: I18n.t("copy_rename"); onClicked: backend && backend.copyRenamePreview(collectSettings()) }
+                SecondaryButton { text: "CSV"; onClicked: backend && backend.exportRenamePreviewCsv(collectSettings()) }
             }
             FieldLabel { text: I18n.t("template") }
             AppTextField { id: outputTemplateField; text: "{stem}"; onEditingFinished: scheduleSettingsSync() }
+            AppCheckBox {
+                id: commercialExportCheck
+                text: I18n.t("watermark_free_commercial_export")
+                onToggled: scheduleSettingsSync()
+            }
+            Label {
+                Layout.fillWidth: true
+                text: backend && backend.commercialExportAllowed ? I18n.t("commercial_export_licensed") : I18n.t("commercial_export_required")
+                color: backend && backend.commercialExportAllowed ? Theme.statusSuccess : Theme.accentWarn
+                font.pixelSize: Theme.fontMeta
+                wrapMode: Text.WordWrap
+            }
             FieldLabel { text: I18n.t("platform_profile") }
             AppTextField { id: platformProfileField; onEditingFinished: scheduleSettingsSync() }
             Label {
@@ -3261,6 +3394,11 @@ ApplicationWindow {
             title: I18n.t("privacy_security")
             FieldLabel { text: I18n.t("blur_regions") }
             AppTextField { id: privacyBlurRegionsField; placeholderText: "x:y:w:h; x:y:w:h"; onEditingFinished: scheduleSettingsSync() }
+            AppCheckBox {
+                id: aiBlurCheck
+                text: I18n.t("ai_blur_detection")
+                onToggled: scheduleSettingsSync()
+            }
             GridLayout {
                 Layout.fillWidth: true
                 columns: 2
@@ -3286,7 +3424,14 @@ ApplicationWindow {
         Panel {
             id: cloudIntegrationPanel
             title: I18n.t("cloud_integration")
-            AppCheckBox { id: cloudUploadCheck; text: I18n.t("cloud_upload_enabled"); onToggled: scheduleSettingsSync() }
+            AppCheckBox { id: cloudUploadCheck; text: I18n.t("cloud_upload_enabled") + " (Pro)"; enabled: backend ? backend.proFeaturesEnabled : false; onToggled: scheduleSettingsSync() }
+            Label {
+                Layout.fillWidth: true
+                text: backend && backend.proFeaturesEnabled ? I18n.t("cloud_pro_enabled") : I18n.t("cloud_pro_required")
+                color: backend && backend.proFeaturesEnabled ? Theme.textMuted : Theme.accentWarn
+                font.pixelSize: Theme.fontMeta
+                wrapMode: Text.WordWrap
+            }
             GridLayout {
                 Layout.fillWidth: true
                 columns: 2
@@ -3303,6 +3448,104 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 text: I18n.t("cloud_hint")
                 color: Theme.textMuted
+                font.pixelSize: Theme.fontMeta
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        Panel {
+            id: commercialLicensePanel
+            title: I18n.t("commercial_license")
+            Label {
+                Layout.fillWidth: true
+                text: backend ? backend.licenseStatusText : ""
+                color: backend && backend.licenseActive ? Theme.statusSuccess : backend && backend.trialActive ? Theme.accentWarn : Theme.textSecondary
+                font.pixelSize: Theme.fontSizeSm
+                wrapMode: Text.WordWrap
+            }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 8
+                columnSpacing: 8
+                FieldLabel { text: I18n.t("license_plan") }
+                Label { Layout.fillWidth: true; text: backend ? backend.licensePlan : ""; color: Theme.textPrimary; font.pixelSize: Theme.fontSizeSm; elide: Text.ElideRight }
+                FieldLabel { text: I18n.t("license_holder") }
+                Label { Layout.fillWidth: true; text: backend ? backend.licenseHolder : ""; color: Theme.textPrimary; font.pixelSize: Theme.fontSizeSm; elide: Text.ElideRight }
+                FieldLabel { text: I18n.t("license_expires") }
+                Label { Layout.fillWidth: true; text: backend ? backend.licenseExpiresAt : ""; color: Theme.textSecondary; font.pixelSize: Theme.fontSizeSm; elide: Text.ElideRight }
+                FieldLabel { text: I18n.t("trial") }
+                Label { Layout.fillWidth: true; text: backend ? backend.trialRemainingText : ""; color: Theme.textSecondary; font.pixelSize: Theme.fontSizeSm; elide: Text.ElideRight }
+                FieldLabel { text: I18n.t("commercial_export") }
+                Label { Layout.fillWidth: true; text: backend && backend.commercialExportAllowed ? I18n.t("allowed") : I18n.t("license_required"); color: backend && backend.commercialExportAllowed ? Theme.statusSuccess : Theme.accentWarn; font.pixelSize: Theme.fontSizeSm; elide: Text.ElideRight }
+            }
+            AppTextField {
+                id: licenseKeyField
+                placeholderText: I18n.t("license_key")
+                echoMode: TextInput.Password
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                SecondaryButton {
+                    text: I18n.t("activate_key")
+                    onClicked: backend && backend.activateLicenseKey(licenseKeyField.text)
+                }
+                SecondaryButton {
+                    text: I18n.t("offline_file")
+                    onClicked: backend && backend.loadOfflineLicenseFile()
+                }
+                SecondaryButton {
+                    text: I18n.t("start_trial")
+                    enabled: backend ? !backend.licenseActive : false
+                    onClicked: backend && backend.startTrial()
+                }
+                SecondaryButton {
+                    text: I18n.t("remove")
+                    enabled: backend ? backend.licenseActive : false
+                    onClicked: backend && backend.clearLicense()
+                }
+            }
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("pro_features_hint")
+                color: Theme.textMuted
+                font.pixelSize: Theme.fontMeta
+                wrapMode: Text.WordWrap
+            }
+            AppCheckBox {
+                text: I18n.t("paid_auto_update")
+                checked: backend ? backend.paidAutoUpdateEnabled : false
+                enabled: backend ? backend.commercialExportAllowed : false
+                onToggled: {
+                    if (backend)
+                        backend.paidAutoUpdateEnabled = checked
+                }
+            }
+            AppTextField {
+                text: backend ? backend.paidUpdateManifestUrl : ""
+                placeholderText: I18n.t("paid_update_manifest_url")
+                onEditingFinished: {
+                    if (backend)
+                        backend.paidUpdateManifestUrl = text
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                SecondaryButton {
+                    text: I18n.t("check_update")
+                    enabled: backend ? backend.commercialExportAllowed : false
+                    onClicked: backend && backend.checkPaidUpdate()
+                }
+                SecondaryButton {
+                    text: I18n.t("open_update")
+                    enabled: backend ? backend.paidUpdateAvailable : false
+                    onClicked: backend && backend.openPaidUpdateDownload()
+                }
+            }
+            Label {
+                Layout.fillWidth: true
+                text: backend ? backend.paidUpdateStatus : ""
+                color: backend && backend.paidUpdateAvailable ? Theme.statusSuccess : Theme.textSecondary
                 font.pixelSize: Theme.fontMeta
                 wrapMode: Text.WordWrap
             }
@@ -3350,6 +3593,108 @@ ApplicationWindow {
             }
             Label { Layout.fillWidth: true; text: backend ? backend.encoderInfo : ""; color: Theme.textMuted; wrapMode: Text.WordWrap; font.pixelSize: Theme.fontMeta }
             AppTextField { id: watchFolderField; text: backend ? backend.watchFolder : ""; placeholderText: I18n.t("watch_folder"); onEditingFinished: { if (backend) backend.watchFolder = text } }
+            AppCheckBox {
+                text: I18n.t("watch_auto_convert")
+                checked: backend ? backend.watchAutoConvertEnabled : false
+                onToggled: {
+                    if (backend)
+                        backend.watchAutoConvertEnabled = checked
+                }
+            }
+            FieldLabel { text: I18n.t("folder_rules") }
+            AppTextArea {
+                id: watchRulesArea
+                Layout.preferredHeight: 92
+                text: backend ? backend.watchRulesText : ""
+                placeholderText: "Downloads -> mp4\nCamera -> h265\nAudio -> mp3"
+                onActiveFocusChanged: {
+                    if (!activeFocus && backend)
+                        backend.watchRulesText = text
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                SecondaryButton {
+                    text: I18n.t("apply_rules")
+                    onClicked: {
+                        if (backend)
+                            backend.watchRulesText = watchRulesArea.text
+                    }
+                }
+                SecondaryButton {
+                    text: I18n.t("reset_rules")
+                    onClicked: {
+                        if (backend) {
+                            backend.resetWatchRules()
+                            watchRulesArea.text = backend.watchRulesText
+                        }
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                AppCheckBox {
+                    text: I18n.t("scheduler")
+                    checked: backend ? backend.schedulerEnabled : false
+                    onToggled: {
+                        if (backend)
+                            backend.schedulerEnabled = checked
+                    }
+                }
+                AppComboBox {
+                    Layout.preferredWidth: 150
+                    model: root.schedulerModeOptions
+                    currentIndex: backend ? Math.max(0, find(backend.schedulerMode)) : 0
+                    onActivated: {
+                        if (backend)
+                            backend.schedulerMode = currentText
+                    }
+                }
+                AppTextField {
+                    Layout.preferredWidth: 92
+                    text: backend ? backend.schedulerTime : "23:00"
+                    placeholderText: "23:00"
+                    onEditingFinished: {
+                        if (backend)
+                            backend.schedulerTime = text
+                    }
+                }
+            }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 8
+                columnSpacing: 8
+                FieldLabel { text: I18n.t("scheduler_cpu") }
+                AppSpinBox {
+                    from: 1
+                    to: 100
+                    value: backend ? backend.schedulerCpuLimit : 40
+                    onValueChanged: {
+                        if (backend)
+                            backend.schedulerCpuLimit = value
+                    }
+                }
+                FieldLabel { text: I18n.t("scheduler_gpu") }
+                AppSpinBox {
+                    from: 1
+                    to: 100
+                    value: backend ? backend.schedulerGpuLimit : 30
+                    onValueChanged: {
+                        if (backend)
+                            backend.schedulerGpuLimit = value
+                    }
+                }
+                FieldLabel { text: I18n.t("after_completion") }
+                AppComboBox {
+                    model: root.completionActionOptions
+                    currentIndex: backend ? Math.max(0, find(backend.completionAction)) : 0
+                    onActivated: {
+                        if (backend)
+                            backend.completionAction = currentText
+                    }
+                }
+            }
             RowLayout {
                 Layout.fillWidth: true
                 AppCheckBox {
@@ -3368,6 +3713,53 @@ ApplicationWindow {
                     onToggled: {
                         if (backend)
                             backend.pushNotificationsEnabled = checked
+                    }
+                }
+            }
+            AppCheckBox {
+                text: I18n.t("webhook_channels")
+                checked: backend ? backend.webhookEnabled : false
+                onToggled: {
+                    if (backend)
+                        backend.webhookEnabled = checked
+                }
+            }
+            AppTextField {
+                text: backend ? backend.webhookUrl : ""
+                placeholderText: I18n.t("generic_webhook_url")
+                onEditingFinished: {
+                    if (backend)
+                        backend.webhookUrl = text
+                }
+            }
+            AppTextField {
+                text: backend ? backend.discordWebhookUrl : ""
+                placeholderText: I18n.t("discord_webhook_url")
+                onEditingFinished: {
+                    if (backend)
+                        backend.discordWebhookUrl = text
+                }
+            }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 8
+                columnSpacing: 8
+                AppTextField {
+                    text: backend ? backend.telegramBotToken : ""
+                    placeholderText: I18n.t("telegram_bot_token")
+                    echoMode: TextInput.Password
+                    onEditingFinished: {
+                        if (backend)
+                            backend.telegramBotToken = text
+                    }
+                }
+                AppTextField {
+                    text: backend ? backend.telegramChatId : ""
+                    placeholderText: I18n.t("telegram_chat_id")
+                    onEditingFinished: {
+                        if (backend)
+                            backend.telegramChatId = text
                     }
                 }
             }

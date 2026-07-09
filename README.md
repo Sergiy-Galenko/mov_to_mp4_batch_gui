@@ -13,6 +13,7 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 - Batch conversion for video, image, audio, subtitle, and text files with automatic media-type aware output formats.
 - Right-click quick conversion: choose only the output format for one queued file and convert it immediately.
 - Queue controls for retry, skip, remove, reorder, multi-select, batch remove, and per-file overrides.
+- Batch workflow automation with watch-folder auto-convert, folder rules, scheduler, completion actions, and HTTP/Discord/Telegram notifications.
 - Explicit output-folder selection before any conversion or URL download starts.
 - Presets for common formats and platform targets (iPhone, PlayStation 5, etc).
 - FFmpeg/FFprobe integration for metadata, thumbnails, progress, ETA, and previews.
@@ -24,8 +25,10 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 - Subtitle tools for offset adjustment and styled burn-in output.
 - Privacy and security tools: manual blur regions, metadata sanitization, checksum sidecars, and secure-delete after conversion.
 - Optional cloud upload after conversion through an external `rclone` remote.
+- Commercial licensing with key activation, offline license files, trial mode, Pro feature gates, commercial export gating, and paid-build update checks.
 - GPU-aware parallel conversion when a supported hardware encoder is available.
 - Built-in analytics for speed, per-file timings, codec distribution, and system resources.
+- Full batch rename preview with copy/export to CSV before conversion starts.
 - JSON-based localization for Ukrainian, English, Polish, and German.
 - CLI mode for automation without starting the GUI.
 
@@ -192,9 +195,33 @@ Cloud upload is implemented through `rclone copy` after a successful conversion.
 
 The app does not store provider secrets directly.
 
+## Commercial License
+
+The Settings sidebar includes a Commercial License screen for paid/commercial builds:
+
+- Activate a license key or load an offline JSON license file.
+- Start a local trial mode for Pro features.
+- View license status, plan, holder, expiry, trial time, and commercial export availability.
+- Enable paid auto-update checks from a configured manifest URL.
+
+Pro-gated features include AI blur, batch automation, cloud upload, and advanced JSON/HTML reports. Watermark-free commercial export is blocked unless an active Commercial license is present. AI blur is license-gated here, but the automatic ML detector itself still requires a separate integration.
+
+Production licensing should set `MEDIA_CONVERTER_LICENSE_SECRET` during paid-build packaging; the built-in fallback secret is only suitable for local development and tests.
+
 ## Reports And History
 
 Conversion history is stored locally and can be rerun or reused for settings. The latest run can be exported from Analytics as CSV, JSON, or HTML.
+
+## Batch Workflow Automation
+
+The FFmpeg / Watch settings panel includes automation controls for longer unattended runs:
+
+- Watch-folder auto-convert starts conversion for newly detected stable files.
+- Folder rules can apply per-file overrides such as `Downloads -> mp4`, `Camera -> h265 priority=3`, or `Audio -> mp3`.
+- Scheduler modes can start queued work by time, by low CPU/GPU load, or by both conditions.
+- Completion actions can do nothing, open the output folder, sleep, or schedule shutdown.
+- Notifications can be sent through desktop tray notifications, a generic webhook, Discord webhook, or Telegram bot/chat.
+- Output preview can be copied or exported as `rename-preview.csv` before conversion.
 
 ## CLI Mode
 

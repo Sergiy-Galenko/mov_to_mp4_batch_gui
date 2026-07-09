@@ -44,6 +44,12 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
     errorStateChanged = QtCore.Signal()
     pushNotificationsChanged = QtCore.Signal()
     preflightChanged = QtCore.Signal()
+    batchWorkflowChanged = QtCore.Signal()
+    schedulerChanged = QtCore.Signal()
+    completionActionChanged = QtCore.Signal()
+    notificationChannelsChanged = QtCore.Signal()
+    licenseChanged = QtCore.Signal()
+    paidUpdateChanged = QtCore.Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -72,9 +78,35 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
             ffprobe_path=self.ffmpeg_service.ffprobe_path or "",
         )
         self.folder_scanner = FolderScanner()
+        self.batch_workflow = BatchWorkflowService()
+        self.notification_service = NotificationService()
+        self.license_service = LicenseService()
+        self.paid_update_service = PaidUpdateService()
         self.system_tray = SystemTrayService(parent=self, app_title=APP_TITLE)
+        self._license_payload = self.settings_manager.license_payload()
+        self._trial_started_at = self.settings_manager.trial_started_at()
+        self._license_info = self.license_service.info_from_state(self.settings_manager.state)
+        self._paid_auto_update_enabled = self.settings_manager.paid_auto_update_enabled()
+        self._paid_update_manifest_url = self.settings_manager.paid_update_manifest_url()
+        self._paid_update_status = "Paid update check has not run."
+        self._paid_update_download_url = ""
+        self._paid_update_available = False
         self._tray_enabled = self.settings_manager.tray_enabled()
         self._push_notifications_enabled = self.settings_manager.push_notifications_enabled()
+        self._watch_auto_convert_enabled = self.settings_manager.watch_auto_convert_enabled()
+        self._watch_rules_text = self.settings_manager.watch_rules_text() or DEFAULT_FOLDER_RULES
+        self._scheduler_enabled = self.settings_manager.scheduler_enabled()
+        self._scheduler_mode = self.settings_manager.scheduler_mode()
+        self._scheduler_time = self.settings_manager.scheduler_time()
+        self._scheduler_cpu_limit = self.settings_manager.scheduler_cpu_limit()
+        self._scheduler_gpu_limit = self.settings_manager.scheduler_gpu_limit()
+        self._scheduler_last_start_key = ""
+        self._completion_action = self.settings_manager.completion_action()
+        self._webhook_enabled = self.settings_manager.webhook_enabled()
+        self._webhook_url = self.settings_manager.webhook_url()
+        self._discord_webhook_url = self.settings_manager.discord_webhook_url()
+        self._telegram_bot_token = self.settings_manager.telegram_bot_token()
+        self._telegram_chat_id = self.settings_manager.telegram_chat_id()
         self._system_tray_signals_connected = False
         self._folder_type_filter = ""
         self._folder_exclude_patterns = ""

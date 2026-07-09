@@ -50,8 +50,14 @@ BODY = r'''            self.event_queue.put(("youtube_download_progress", downlo
             return
         self.event_queue.put(("add_paths", items, str(folder)))
 
-    def _add_paths(self, paths: List[Path]) -> None:
+    def _add_paths(self, paths: List[Path], *, apply_watch_rules: bool = False) -> List[TaskItem]:
         added, duplicates, unsupported = self.queue_manager.build_items(paths, self.queue_model.paths_set())
+        rules_applied = 0
+        if added and apply_watch_rules:
+            rules = self.batch_workflow.parse_rules(self._watch_rules_text)
+            for item in added:
+                if self.batch_workflow.apply_rules(item, rules):
+                    rules_applied += 1
         if added:
             self.queue_model.add_items(added)
             for item in added:
@@ -61,6 +67,8 @@ BODY = r'''            self.event_queue.put(("youtube_download_progress", downlo
             self._notify_queue_stats()
             self._refresh_codec_distribution()
             self._append_log("OK", self._tr("backend.added_files", count=len(added)))
+            if rules_applied:
+                self._append_log("INFO", f"Watch rules applied: {rules_applied}")
             self._refresh_output_preview(dict(self._last_settings_map))
             self._save_state()
         if duplicates:
@@ -69,4 +77,5 @@ BODY = r'''            self.event_queue.put(("youtube_download_progress", downlo
             self._append_log("WARN", self._tr("backend.unsupported_skipped", count=unsupported))
         if not added and not duplicates and not unsupported:
             self._append_log("WARN", self._tr("backend.no_tasks"))
+        return added
 '''

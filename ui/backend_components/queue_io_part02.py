@@ -41,6 +41,23 @@ BODY = r'''            self._save_state()
             youtube_cookies_path=self._youtube_cookies_path,
             tray_enabled=self._tray_enabled,
             push_notifications_enabled=self._push_notifications_enabled,
+            watch_auto_convert_enabled=self._watch_auto_convert_enabled,
+            watch_rules_text=self._watch_rules_text,
+            scheduler_enabled=self._scheduler_enabled,
+            scheduler_mode=self._scheduler_mode,
+            scheduler_time=self._scheduler_time,
+            scheduler_cpu_limit=self._scheduler_cpu_limit,
+            scheduler_gpu_limit=self._scheduler_gpu_limit,
+            completion_action=self._completion_action,
+            webhook_enabled=self._webhook_enabled,
+            webhook_url=self._webhook_url,
+            discord_webhook_url=self._discord_webhook_url,
+            telegram_bot_token=self._telegram_bot_token,
+            telegram_chat_id=self._telegram_chat_id,
+            license_payload=self._license_payload,
+            trial_started_at=self._trial_started_at,
+            paid_auto_update_enabled=self._paid_auto_update_enabled,
+            paid_update_manifest_url=self._paid_update_manifest_url,
         )
 
     def _append_log(self, level: str, msg: str) -> None:

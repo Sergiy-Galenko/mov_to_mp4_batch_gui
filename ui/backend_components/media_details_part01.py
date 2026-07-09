@@ -117,7 +117,7 @@ BODY = r'''    def _probe_media_async(self, path: Path) -> None:
 
     @QtCore.Slot("QVariantMap", result="QVariantMap")
     def validateSettings(self, settings_map: Dict[str, Any]) -> Dict[str, Any]:
-        return self.validation.validate(
+        result = self.validation.validate(
             dict(settings_map),
             tasks=self.queue_model.items(),
             output_dir=self.outputDir,
@@ -125,6 +125,7 @@ BODY = r'''    def _probe_media_async(self, path: Path) -> None:
             include_queue=False,
             require_output_dir=False,
         )
+        return self._apply_license_preflight(dict(result), dict(settings_map))
 
     def _refresh_output_preview(self, settings_map: Dict[str, Any]) -> None:
         summary = self.preview_builder.build(

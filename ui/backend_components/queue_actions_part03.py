@@ -9,9 +9,34 @@ BODY = r'''    def _run_preflight(self, settings_map: Dict[str, Any], *, only_pa
             include_queue=True,
             only_paths=only_paths,
         )
-        self._preflight_result = dict(result)
+        self._preflight_result = self._apply_license_preflight(dict(result), dict(settings_map))
         self.preflightChanged.emit()
         return self._preflight_result
+
+    def _apply_license_preflight(self, result: Dict[str, Any], settings_map: Dict[str, Any]) -> Dict[str, Any]:
+        errors = dict(result.get("errors") or {})
+        warnings = list(result.get("warnings") or [])
+        settings = settings_map_to_model(settings_map, defaults=ConversionSettings())
+        if settings.commercial_export and not self._commercial_export_allowed():
+            errors["commercial_license"] = "Watermark-free commercial export requires an active Commercial license."
+        active_features = set(self._license_info.features) if self._pro_features_enabled() else set()
+        if settings.cloud_upload_enabled and "cloud_upload" not in active_features:
+            errors["cloud_upload"] = "Cloud upload is a Pro feature. Start trial or activate a Commercial license."
+        if settings.ai_blur_enabled:
+            if "ai_blur" not in active_features:
+                errors["ai_blur"] = "AI blur is a Pro feature. Start trial or activate a Commercial license."
+            elif "AI blur engine requires" not in " ".join(warnings):
+                warnings.append("AI blur is license-enabled; automatic detection still requires an external ML/API integration.")
+        bits = []
+        if errors:
+            bits.append(f"Критичних помилок: {len(errors)}")
+        if warnings:
+            bits.append(f"Попереджень: {len(warnings)}")
+        result["errors"] = errors
+        result["warnings"] = warnings
+        result["ok"] = not errors
+        result["summary"] = " | ".join(bits) if bits else str(result.get("summary") or "Перевірка пройдена.")
+        return result
 
     @QtCore.Slot("QVariantMap", result="QVariantMap")
     def refreshPreflight(self, settings_map: Dict[str, Any]) -> Dict[str, Any]:

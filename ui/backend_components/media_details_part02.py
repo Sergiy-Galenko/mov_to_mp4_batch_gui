@@ -28,6 +28,55 @@ BODY = r'''        self._refresh_size_predictions(settings_map)
         self._refresh_output_preview(dict(settings_map))
         self._save_state()
 
+    def _rename_preview_rows(self, settings_map: Dict[str, Any]) -> List[Dict[str, str]]:
+        summary = self.preview_builder.build(
+            dict(settings_map),
+            tasks=self.queue_model.items(),
+            output_dir=self.outputDir,
+            selected_path=self._selected_path,
+            media_info=self.media_info_cache,
+            max_lines=100000,
+        )
+        return [
+            {
+                "source": str(item.source_path),
+                "output": str(item.output_path),
+                "operation": str(item.operation),
+                "warnings": "; ".join(item.warnings),
+            }
+            for item in summary.items
+        ]
+
+    @QtCore.Slot("QVariantMap", result="QVariantList")
+    def renamePreviewRows(self, settings_map: Dict[str, Any]) -> List[Dict[str, str]]:
+        return self._rename_preview_rows(dict(settings_map))
+
+    @QtCore.Slot("QVariantMap")
+    def copyRenamePreview(self, settings_map: Dict[str, Any]) -> None:
+        rows = self._rename_preview_rows(dict(settings_map))
+        if not rows:
+            return
+        lines = ["source\toutput\toperation\twarnings"]
+        lines.extend(f"{row['source']}\t{row['output']}\t{row['operation']}\t{row['warnings']}" for row in rows)
+        QtWidgets.QApplication.clipboard().setText("\n".join(lines))
+        self._append_log("OK", f"Rename preview copied: {len(rows)} row(s)")
+
+    @QtCore.Slot("QVariantMap")
+    def exportRenamePreviewCsv(self, settings_map: Dict[str, Any]) -> None:
+        rows = self._rename_preview_rows(dict(settings_map))
+        if not rows:
+            QtWidgets.QMessageBox.information(None, "Rename preview", "Queue is empty.")
+            return
+        default_path = Path(self.outputDir or str(Path.home())).expanduser() / "rename-preview.csv"
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(None, "Export rename preview", str(default_path), "CSV (*.csv)")
+        if not path:
+            return
+        with Path(path).open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=["source", "output", "operation", "warnings"])
+            writer.writeheader()
+            writer.writerows(rows)
+        self._append_log("OK", f"Rename preview exported: {path}")
+
     @QtCore.Slot()
     def restoreSession(self) -> None:
         if self.queue_model.rowCount() > 0:
@@ -113,6 +162,8 @@ BODY = r'''        self._refresh_size_predictions(settings_map)
         clean_fmt = str(fmt or "csv").strip().lower()
         if clean_fmt not in {"csv", "json", "html"}:
             clean_fmt = "csv"
+        if clean_fmt in {"json", "html"} and not self._require_pro_feature("advanced_reports", "Advanced reports"):
+            return
         if not self.history_store.entries:
             QtWidgets.QMessageBox.information(None, "Report", "Історія запусків порожня.")
             return

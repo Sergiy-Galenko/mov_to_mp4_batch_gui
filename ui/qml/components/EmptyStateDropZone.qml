@@ -64,7 +64,7 @@ Rectangle {
             Label {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillWidth: true
-                text: "Перетягни файли або папку сюди"
+                text: I18n.t("empty_drop_title")
                 color: Theme.textPrimary
                 font.pixelSize: root.compact ? Theme.fontSizeLg : Theme.fontDisplay
                 font.family: Theme.displayFont
@@ -76,7 +76,7 @@ Rectangle {
             Label {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillWidth: true
-                text: "Підтримуються відео, аудіо, зображення та субтитри"
+                text: I18n.t("empty_drop_hint")
                 color: Theme.textSecondary
                 font.pixelSize: root.compact ? Theme.fontSizeSm : Theme.fontSizeMd
                 horizontalAlignment: Text.AlignHCenter
@@ -91,7 +91,7 @@ Rectangle {
             PrimaryButton {
                 Layout.preferredWidth: 200
                 Layout.preferredHeight: 44
-                text: "Обрати файли..."
+                text: I18n.t("choose_files")
                 font.pixelSize: Theme.fontSizeMd
                 font.bold: true
                 onClicked: root.clicked()
@@ -100,7 +100,7 @@ Rectangle {
             SecondaryButton {
                 Layout.preferredWidth: 200
                 Layout.preferredHeight: 44
-                text: "📖 Як користуватися"
+                text: "📖 " + I18n.t("how_to_use")
                 font.pixelSize: Theme.fontSizeMd
                 onClicked: tutorialPopup.open()
             }

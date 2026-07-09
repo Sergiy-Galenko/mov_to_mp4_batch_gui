@@ -37,6 +37,7 @@ SETTINGS_SCHEMA = {
     "fast_copy": (bool, False),
     "skip_existing": (bool, False),
     "output_template": (str, "{stem}"),
+    "commercial_export": (bool, False),
     "performance_profile": (str, "Balanced"),
     "target_size_mb": (float, 0.0),
     "cpu_load_limit": (int, 95),
@@ -66,6 +67,7 @@ SETTINGS_SCHEMA = {
     "copy_metadata": (bool, False),
     "sanitize_metadata": (bool, False),
     "secure_delete_original": (bool, False),
+    "ai_blur_enabled": (bool, False),
     "editor_deinterlace": (bool, False),
     "editor_stabilize": (bool, False),
     "subtitle_style_enabled": (bool, False),
@@ -189,6 +191,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
     settings.fast_copy = _coerce_bool(settings_map.get("fast_copy"), settings.fast_copy)
     settings.skip_existing = _coerce_bool(settings_map.get("skip_existing"), settings.skip_existing)
     settings.output_template = str(settings_map.get("output_template") or settings.output_template).strip() or "{stem}"
+    settings.commercial_export = _coerce_bool(settings_map.get("commercial_export"), settings.commercial_export)
     settings.platform_profile = str(settings_map.get("platform_profile") or settings.platform_profile).strip()
     settings.performance_profile = normalize_profile(str(settings_map.get("performance_profile") or settings.performance_profile))
     target_size = parse_float(str(settings_map.get("target_size_mb", "")))
@@ -313,6 +316,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Optional
         settings.device_profile = "" if device_profile == "None" else device_profile
 
     settings.privacy_blur_regions = str(settings_map.get("privacy_blur_regions") or settings.privacy_blur_regions).strip()
+    settings.ai_blur_enabled = _coerce_bool(settings_map.get("ai_blur_enabled"), settings.ai_blur_enabled)
     checksum_algorithm = str(settings_map.get("checksum_algorithm") or settings.checksum_algorithm).strip().lower()
     settings.checksum_algorithm = checksum_algorithm if checksum_algorithm in {"none", "md5", "sha256"} else "none"
     settings.secure_delete_original = _coerce_bool(settings_map.get("secure_delete_original"), settings.secure_delete_original)

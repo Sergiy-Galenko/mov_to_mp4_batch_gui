@@ -30,7 +30,7 @@ Popup {
 
         Label {
             Layout.fillWidth: true
-            text: "📖 Як почати користуватися"
+            text: "📖 " + I18n.t("tutorial_title")
             color: Theme.textPrimary
             font.family: Theme.displayFont
             font.pixelSize: root.compact ? Theme.fontSizeLg : Theme.fontSizeXl
@@ -61,7 +61,7 @@ Popup {
 
                     Label {
                         Layout.fillWidth: true
-                        text: "1️⃣ Додайте файли"
+                        text: "1️⃣ " + I18n.t("tutorial_add_files_title")
                         color: Theme.accentPrimary
                         font.pixelSize: root.compact ? Theme.fontSizeMd : Theme.fontSizeLg
                         font.bold: true
@@ -71,7 +71,7 @@ Popup {
                     Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "Просто перетягніть ваші відео, аудіо, зображення або субтитри у велику область 📥 на головному екрані. Або скористайтеся кнопкою «Обрати файли...»."
+                        text: I18n.t("tutorial_add_files_body")
                         color: Theme.textSecondary
                         font.pixelSize: Theme.fontSizeMd
                         lineHeight: 1.4
@@ -85,7 +85,7 @@ Popup {
 
                     Label {
                         Layout.fillWidth: true
-                        text: "2️⃣ Оберіть папку збереження"
+                        text: "2️⃣ " + I18n.t("tutorial_output_title")
                         color: Theme.statusWarning
                         font.pixelSize: root.compact ? Theme.fontSizeMd : Theme.fontSizeLg
                         font.bold: true
@@ -95,7 +95,7 @@ Popup {
                     Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "Внизу екрана натисніть на іконку папки (📁), щоб вказати, куди будуть зберігатися готові файли. Без цього кнопка старту не активується."
+                        text: I18n.t("tutorial_output_body")
                         color: Theme.textSecondary
                         font.pixelSize: Theme.fontSizeMd
                         lineHeight: 1.4
@@ -109,7 +109,7 @@ Popup {
 
                     Label {
                         Layout.fillWidth: true
-                        text: "3️⃣ Налаштуйте формат (Опціонально)"
+                        text: "3️⃣ " + I18n.t("tutorial_format_title")
                         color: Theme.accent
                         font.pixelSize: root.compact ? Theme.fontSizeMd : Theme.fontSizeLg
                         font.bold: true
@@ -119,7 +119,7 @@ Popup {
                     Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "Програма автоматично підбирає найкращий формат (Smart Convert). Але якщо ви хочете обрати інший пресет (наприклад, для iPhone), натисніть ⚙️ у верхньому правому куті, щоб відкрити розширені налаштування."
+                        text: I18n.t("tutorial_format_body")
                         color: Theme.textSecondary
                         font.pixelSize: Theme.fontSizeMd
                         lineHeight: 1.4
@@ -133,7 +133,7 @@ Popup {
 
                     Label {
                         Layout.fillWidth: true
-                        text: "4️⃣ Запустіть конвертацію"
+                        text: "4️⃣ " + I18n.t("tutorial_start_title")
                         color: Theme.statusSuccess
                         font.pixelSize: root.compact ? Theme.fontSizeMd : Theme.fontSizeLg
                         font.bold: true
@@ -143,7 +143,7 @@ Popup {
                     Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "Натисніть велику кнопку 🚀 Старт. Програма все зробить автоматично: задіє GPU для швидкості, оптимізує якість та збереже файли у вказану папку."
+                        text: I18n.t("tutorial_start_body")
                         color: Theme.textSecondary
                         font.pixelSize: Theme.fontSizeMd
                         lineHeight: 1.4
@@ -156,7 +156,7 @@ Popup {
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredWidth: Math.min(200, parent.width)
             Layout.preferredHeight: 44
-            text: "Зрозуміло!"
+            text: I18n.t("got_it")
             font.pixelSize: Theme.fontSizeMd
             font.bold: true
             onClicked: root.close()

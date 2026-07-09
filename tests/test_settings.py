@@ -60,9 +60,11 @@ class SettingsTest(unittest.TestCase):
         settings = settings_map_to_model(
             {
                 "sanitize_metadata": True,
+                "commercial_export": True,
                 "checksum_algorithm": "SHA256",
                 "secure_delete_original": "true",
                 "privacy_blur_regions": "10:20:30:40",
+                "ai_blur_enabled": "1",
                 "subtitle_sync_ms": "-250",
                 "subtitle_style_enabled": "1",
                 "subtitle_font_size": "500",
@@ -92,9 +94,11 @@ class SettingsTest(unittest.TestCase):
         )
 
         self.assertTrue(settings.strip_metadata)
+        self.assertTrue(settings.commercial_export)
         self.assertEqual(settings.checksum_algorithm, "sha256")
         self.assertTrue(settings.secure_delete_original)
         self.assertEqual(settings.privacy_blur_regions, "10:20:30:40")
+        self.assertTrue(settings.ai_blur_enabled)
         self.assertEqual(settings.subtitle_sync_ms, -250)
         self.assertTrue(settings.subtitle_style_enabled)
         self.assertEqual(settings.subtitle_font_size, 200)

@@ -261,7 +261,7 @@ Rectangle {
                 Label {
                     Layout.fillWidth: true
                     visible: root.showOutput && root.outputPath.length > 0
-                    text: "Output: " + root.outputPath
+                    text: I18n.t("output") + ": " + root.outputPath
                     color: Theme.textSecondary
                     font.family: Theme.monoFont
                     font.pixelSize: Theme.fontMeta
@@ -347,7 +347,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
 
             GhostButton {
-                text: root.pinned ? "📌" : "Pin"
+                text: root.pinned ? "📌" : I18n.t("pin")
                 visible: root.showActions
                 Layout.fillWidth: false
                 flat: true

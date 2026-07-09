@@ -74,7 +74,7 @@ Popup {
 
                 Label {
                     Layout.fillWidth: true
-                    text: "Версія " + root.currentVersion
+                    text: I18n.t("version") + " " + root.currentVersion
                     color: Theme.accentPrimary
                     font.family: Theme.monoFont
                     font.pixelSize: Theme.fontSizeMd
@@ -105,27 +105,27 @@ Popup {
                 spacing: root.compact ? Theme.space3 : Theme.space4
 
                 ReleaseSection {
-                    title: "Новий робочий екран"
+                    title: I18n.t("whats_new_workspace_title")
                     accent: Theme.accentPrimary
-                    body: "<b>Фото, Відео, Текст</b> тепер винесені у верхній перемикач. Режим фільтрує чергу, відкриття файлів, імпорт папки і показує потрібні налаштування без зайвого шуму."
+                    body: I18n.t("whats_new_workspace_body")
                 }
 
                 ReleaseSection {
-                    title: "Великий preview по центру"
+                    title: I18n.t("whats_new_preview_title")
                     accent: Theme.statusSuccess
-                    body: "Коли вибрано фото, відео або текст, файл відкривається більшим у центральній зоні. Звідти можна швидко зберегти формат, конвертувати один файл або перейти до редагування."
+                    body: I18n.t("whats_new_preview_body")
                 }
 
                 ReleaseSection {
-                    title: "Конвертація текстових файлів"
+                    title: I18n.t("whats_new_text_title")
                     accent: Theme.statusWarning
-                    body: "Додано підтримку <b>txt, md, html, json, csv, tsv, rtf, pdf, docx, doc, odt, xlsx, xls, ods, pptx, ppt, odp</b>. Текстові задачі можуть працювати навіть без FFmpeg, якщо в черзі немає медіафайлів."
+                    body: I18n.t("whats_new_text_body")
                 }
 
                 ReleaseSection {
-                    title: "Логотип і поля вводу"
+                    title: I18n.t("whats_new_ui_title")
                     accent: Theme.statusRunning
-                    body: "Оновлено логотип застосунку, іконку вікна та верхню шапку. Поля вводу, списки вибору, числові поля і мовний перемикач тепер краще вирівняні та коректно обрізають довгі значення."
+                    body: I18n.t("whats_new_ui_body")
                 }
             }
         }
@@ -134,7 +134,7 @@ Popup {
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredWidth: Math.min(220, parent.width)
             Layout.preferredHeight: 44
-            text: "Почати роботу"
+            text: I18n.t("get_started")
             font.pixelSize: Theme.fontSizeMd
             font.bold: true
             onClicked: root.close()

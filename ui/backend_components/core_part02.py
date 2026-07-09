@@ -57,6 +57,12 @@ BODY = r'''        self._youtube_history = self.settings_manager.youtube_history
         self._watch_timer.setInterval(WATCH_SCAN_INTERVAL_MS)
         self._watch_timer.timeout.connect(self._scan_watch_folder)
 
+        self._scheduler_timer = QtCore.QTimer(self)
+        self._scheduler_timer.setInterval(30000)
+        self._scheduler_timer.timeout.connect(self._check_scheduler)
+        self._scheduler_timer.start()
+        QtCore.QTimer.singleShot(2000, self._maybe_check_paid_update_on_startup)
+
     @property
     def converter(self):
         if self._converter_service is None:

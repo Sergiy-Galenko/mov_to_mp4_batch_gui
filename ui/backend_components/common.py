@@ -31,9 +31,13 @@ from app.performance_profiles import prediction_factor
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
 from services.ffmpeg_auto_installer import FfmpegAutoInstaller, FfmpegAutoInstallResult
+from services.batch_workflow_service import BatchWorkflowService, DEFAULT_FOLDER_RULES
 from services.folder_scanner import FolderScanner
 from services.history_store import HistoryStore
 from services.media_preview_service import MediaPreviewService
+from services.notification_service import NotificationService
+from services.license_service import LicenseInfo, LicenseService
+from services.paid_update_service import PaidUpdateInfo, PaidUpdateService
 from services.preset_manager import PresetManager
 from services.report_service import ReportService
 from services.queue_manager import QueueManager

@@ -129,6 +129,7 @@ class ConversionSettings:
     fast_copy: bool = False
     skip_existing: bool = False
     output_template: str = "{stem}"
+    commercial_export: bool = False
     platform_profile: str = ""
     performance_profile: str = "Balanced"
     target_size_mb: Optional[float] = None
@@ -224,6 +225,7 @@ class ConversionSettings:
     device_profile: str = ""
 
     privacy_blur_regions: str = ""
+    ai_blur_enabled: bool = False
     checksum_algorithm: str = "none"
     secure_delete_original: bool = False
 
