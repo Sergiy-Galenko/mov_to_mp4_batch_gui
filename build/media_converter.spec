@@ -5,6 +5,8 @@ from pathlib import Path
 
 project_root = Path(SPEC).resolve().parent.parent
 bundle_dir = os.environ.get("MEDIA_CONVERTER_BUNDLE_FFMPEG_DIR", "").strip()
+icon_path = project_root / "assets" / "app-logo.ico"
+icon_arg = str(icon_path) if icon_path.exists() else None
 
 datas = [
     (str(project_root / "ui" / "qml"), "ui/qml"),
@@ -57,6 +59,7 @@ exe = EXE(
     strip=False,
     upx=True,
     upx_exclude=[],
+    icon=icon_arg,
     console=False,
 )
 

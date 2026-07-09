@@ -34,7 +34,7 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 
 ## Requirements
 
-- Python `3.13+`
+- Python `3.12+`
 - FFmpeg, required for video, photo, audio, subtitle, URL audio extraction, and media merge workflows
 - FFprobe, recommended for metadata, ETA, thumbnails, and analytics
 - PySide6
@@ -46,6 +46,9 @@ Install dependencies:
 ```bash
 python -m pip install -r requirements.txt
 ```
+
+On Windows, `run_windows.cmd` checks Python automatically. If Python is missing or older than 3.12, it installs the
+Python 3.13 channel through `winget`, installs dependencies, and starts the app.
 
 The app also runs this dependency check automatically at startup. To disable automatic Python package installation in managed environments, set:
 
@@ -74,6 +77,20 @@ Text-only conversion does not require FFmpeg or FFprobe.
 
 ```bash
 python main.py
+```
+
+Or on Windows with automatic Python bootstrap:
+
+```bat
+run_windows.cmd
+```
+
+On Windows, `run_windows.cmd` also creates or updates `MediaConverter.exe` on the Desktop automatically. The Desktop
+copy is rebuilt only when it is missing or older than the current project files. To skip this behavior:
+
+```bat
+set MEDIA_CONVERTER_SKIP_DESKTOP_EXE=1
+run_windows.cmd
 ```
 
 Basic workflow:
@@ -344,8 +361,16 @@ python scripts/find_ffmpeg.py
 python scripts/build_pyinstaller.py
 ```
 
-The build output is created in:
+Or on Windows with automatic Python bootstrap:
+
+```bat
+build_exe_windows.cmd
+```
+
+The PyInstaller build output is created in:
 
 ```text
-dist/MediaConverter/
+dist/MediaConverter.exe
 ```
+
+The built `.exe` includes the Python runtime, so end users do not need Python installed to run it.

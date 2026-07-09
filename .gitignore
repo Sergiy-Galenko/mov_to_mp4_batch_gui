@@ -18,7 +18,9 @@ ENV/
 # PyInstaller output
 build/dist/
 build/build/
+build/media_converter/
 *.spec.bak
+assets/app-logo.ico
 
 # Testing
 .pytest_cache/
