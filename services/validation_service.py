@@ -10,7 +10,7 @@ from app.models import ConversionSettings, TaskItem
 from app.paths import find_ffprobe
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
-from utils.files import build_merge_output_path, build_output_path, is_subtitle
+from utils.files import build_merge_output_path, build_output_path, is_subtitle, sanitize_file_stem
 from utils.formatting import parse_float, parse_time_to_seconds
 
 OPERATION_LABELS = {
@@ -101,7 +101,7 @@ class ValidationService:
         self._validate_format_compat(raw, add_warning)
 
         if include_queue and output_path.exists():
-            self._validate_disk_space(queue_items, output_path, add_warning)
+            self._validate_disk_space(queue_items, settings, output_path, add_error, add_warning)
 
         summary_bits = []
         if errors:
@@ -254,21 +254,26 @@ class ValidationService:
                     overwrite=True,
                     skip_existing=True,
                 )
+                if resolved.output_collision_policy == "parent":
+                    desired = desired.with_name(f"{sanitize_file_stem(item.path.parent.name)}_{desired.name}")
             except Exception as exc:
                 add_error("output_template", f"Не вдалося розрахувати вихідний шлях: {exc}")
                 return
             previous = seen_outputs.get(desired)
             if previous is not None:
-                add_error("output_template", f"Конфлікт імен: {previous} і {item.path.name} -> {desired.name}")
-                break
+                if resolved.output_collision_policy in {"stop", "overwrite"}:
+                    add_error("output_template", f"Конфлікт імен: {previous} і {item.path.name} -> {desired.name}")
+                    break
+                add_warning(f"Конфлікт імен {desired.name}: буде застосовано політику '{resolved.output_collision_policy}'.")
             seen_outputs[desired] = item.path.name
             if desired.exists():
-                if resolved.overwrite:
+                if resolved.output_collision_policy == "overwrite":
                     add_warning(f"{desired.name}: буде перезаписано.")
-                elif resolved.skip_existing:
-                    add_warning(f"{desired.name}: буде пропущено.")
+                elif resolved.output_collision_policy == "stop":
+                    add_error("output_template", f"{desired.name}: файл уже існує, batch зупинено політикою колізій.")
+                    break
                 else:
-                    add_warning(f"{desired.name}: є конфлікт імені, буде створено безпечну копію.")
+                    add_warning(f"{desired.name}: є конфлікт імені, буде створено безпечну назву.")
 
     def _validate_format_compat(self, raw: dict[str, Any], add_warning) -> None:
         out_video = str(raw.get("out_video_fmt", "")).strip().lower()
@@ -293,11 +298,39 @@ class ValidationService:
         if out_video in {"mp4", "mov", "avi"} and codec == "VP9 (WebM)":
             add_warning("VP9 краще виводити у WebM; для MP4/MOV буде заміна на H.264.")
 
-    def _validate_disk_space(self, queue_items: list[TaskItem], output_dir: Path, add_warning) -> None:
+    def _validate_disk_space(
+        self,
+        queue_items: list[TaskItem],
+        settings: ConversionSettings,
+        output_dir: Path,
+        add_error,
+        add_warning,
+    ) -> None:
         try:
             source_size = sum(item.path.stat().st_size for item in queue_items if item.path.exists())
             free = shutil.disk_usage(output_dir).free
-            if source_size and free < max(source_size * 0.15, 256 * 1024 * 1024):
-                add_warning("Мало вільного місця у папці виводу для безпечного batch-запуску.")
+            if not source_size:
+                return
+            target_bytes = int(settings.target_size_mb * 1024 * 1024) if settings.target_size_mb else 0
+            estimated_outputs = target_bytes * len(queue_items) if target_bytes else source_size
+            largest_output = target_bytes or max(item.path.stat().st_size for item in queue_items if item.path.exists())
+            temporary_bytes = largest_output
+            if settings.smart_ab_test:
+                temporary_bytes += largest_output * 3
+            if settings.smart_two_pass:
+                temporary_bytes += max(64 * 1024 * 1024, largest_output // 20)
+            margin = settings.disk_safety_margin_mb * 1024 * 1024
+            required = estimated_outputs + temporary_bytes + margin
+            if free < required:
+                add_error(
+                    "disk_space",
+                    "Недостатньо місця: потрібно приблизно "
+                    f"{required / 1024 / 1024:.0f} MiB (включно з тимчасовими файлами), доступно {free / 1024 / 1024:.0f} MiB.",
+                )
+            elif free < required + 256 * 1024 * 1024:
+                add_warning(
+                    "Малий запас місця: потрібно приблизно "
+                    f"{required / 1024 / 1024:.0f} MiB, доступно {free / 1024 / 1024:.0f} MiB."
+                )
         except Exception:
             return

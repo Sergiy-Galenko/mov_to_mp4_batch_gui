@@ -5,6 +5,7 @@ from pathlib import Path
 
 project_root = Path(SPEC).resolve().parent.parent
 bundle_dir = os.environ.get("MEDIA_CONVERTER_BUNDLE_FFMPEG_DIR", "").strip()
+portable_build = os.environ.get("MEDIA_CONVERTER_PORTABLE_BUILD", "").strip().lower() in {"1", "true", "yes"}
 icon_path = project_root / "assets" / "app-logo.ico"
 icon_arg = str(icon_path) if icon_path.exists() else None
 
@@ -19,7 +20,9 @@ if bundle_dir:
     for binary_name in ("ffmpeg", "ffprobe", "ffmpeg.exe", "ffprobe.exe"):
         candidate = Path(bundle_dir) / binary_name
         if candidate.exists():
-            binaries.append((str(candidate), "."))
+            binaries.append((str(candidate), "ffmpeg"))
+if portable_build:
+    datas.append((str(project_root / "assets" / "portable.ini"), "."))
 
 
 a = Analysis(
@@ -61,5 +64,16 @@ exe = EXE(
     upx_exclude=[],
     icon=icon_arg,
     console=False,
+    exclude_binaries=True,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    name="MediaConverter",
 )
 

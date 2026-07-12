@@ -5,9 +5,22 @@ from collections.abc import Iterable
 from pathlib import Path
 
 
+def _portable_root() -> Path | None:
+    configured = os.environ.get("MEDIA_CONVERTER_PORTABLE_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    if not getattr(sys, "frozen", False):
+        return None
+    exe_dir = Path(sys.executable).resolve().parent
+    return exe_dir if (exe_dir / "portable.ini").is_file() else None
+
+
 def get_app_data_dir() -> Path:
     """Return the OS-appropriate writable app data directory."""
-    if sys.platform == "win32":
+    portable_root = _portable_root()
+    if portable_root is not None:
+        base = portable_root / "data"
+    elif sys.platform == "win32":
         base = Path.home() / "AppData" / "Local" / "MediaConverter"
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support" / "MediaConverter"
@@ -18,6 +31,7 @@ def get_app_data_dir() -> Path:
 
 
 APP_DATA_DIR = get_app_data_dir()
+PORTABLE_MODE = _portable_root() is not None
 STATE_PATH = APP_DATA_DIR / "state.json"
 SETTINGS_PATH = APP_DATA_DIR / "settings.json"
 LOG_PATH = APP_DATA_DIR / "history.log"

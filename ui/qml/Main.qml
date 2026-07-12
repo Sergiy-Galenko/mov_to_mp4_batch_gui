@@ -2700,6 +2700,8 @@ ApplicationWindow {
             overwriteCheck.checked = !!preset.overwrite
             fastCopyCheck.checked = !!preset.fast_copy
             skipExistingCheck.checked = !!preset.skip_existing
+            root.setComboText(collisionPolicyCombo, preset.output_collision_policy || (preset.overwrite ? "overwrite" : preset.skip_existing ? "stop" : "index"))
+            if (preset.disk_safety_margin_mb !== undefined) diskSafetyMarginSpin.value = Number(preset.disk_safety_margin_mb)
             outputTemplateField.text = preset.output_template || "{stem}"
             commercialExportCheck.checked = !!preset.commercial_export
             platformProfileField.text = preset.platform_profile || ""
@@ -2821,6 +2823,7 @@ ApplicationWindow {
                 target_size_mb: targetSizeField.text,
                 cpu_load_limit: cpuLimitSpin.value,
                 gpu_load_limit: gpuLimitSpin.value,
+                disk_safety_margin_mb: diskSafetyMarginSpin.value,
                 smart_convert_enabled: smartConvertCheck.checked,
                 smart_content_type: smartContentTypeCombo.currentText,
                 smart_quality_target: smartQualityTargetCombo.currentText,
@@ -2836,6 +2839,7 @@ ApplicationWindow {
                 overwrite: overwriteCheck.checked,
                 fast_copy: fastCopyCheck.checked,
                 skip_existing: skipExistingCheck.checked,
+                output_collision_policy: collisionPolicyCombo.currentText,
                 output_template: outputTemplateField.text,
                 commercial_export: commercialExportCheck.checked,
                 platform_profile: platformProfileField.text,
@@ -3094,6 +3098,8 @@ ApplicationWindow {
                 AppSpinBox { id: cpuLimitSpin; from: 1; to: 100; value: 95; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("gpu_load_limit") }
                 AppSpinBox { id: gpuLimitSpin; from: 1; to: 100; value: 98; onValueChanged: scheduleSettingsSync() }
+                FieldLabel { text: "Disk reserve (MiB)" }
+                AppSpinBox { id: diskSafetyMarginSpin; from: 0; to: 10240; value: 512; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: "CRF" }
                 AppSpinBox { id: crfSpin; from: 0; to: 51; value: 23; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("preset") }
@@ -3121,6 +3127,17 @@ ApplicationWindow {
             }
             FieldLabel { text: I18n.t("template") }
             AppTextField { id: outputTemplateField; text: "{stem}"; onEditingFinished: scheduleSettingsSync() }
+            FieldLabel { text: "Політика колізій" }
+            AppComboBox {
+                id: collisionPolicyCombo
+                model: ["index", "parent", "stop", "overwrite"]
+                currentIndex: 0
+                onActivated: {
+                    overwriteCheck.checked = currentText === "overwrite"
+                    skipExistingCheck.checked = false
+                    scheduleSettingsSync()
+                }
+            }
             AppCheckBox {
                 id: commercialExportCheck
                 text: I18n.t("watermark_free_commercial_export")

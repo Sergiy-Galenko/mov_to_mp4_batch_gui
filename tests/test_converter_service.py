@@ -321,6 +321,31 @@ class ConverterServiceTest(unittest.TestCase):
             self.assertTrue(inp.exists())
             self.assertTrue((out_dir / "input.mp4").exists())
 
+    def test_cloud_upload_failure_keeps_original_when_secure_delete_is_enabled(self) -> None:
+        class FailingUploader:
+            def upload(self, *_args, **_kwargs):
+                raise RuntimeError("cloud is unavailable")
+
+        fake = FakeFfmpegService()
+        events: queue.Queue[tuple] = queue.Queue()
+        service = MockConverterService(fake, events)
+        service.cloud_uploader = FailingUploader()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            inp = tmp / "input.mp4"
+            out_dir = tmp / "out"
+            out_dir.mkdir()
+            inp.write_text("original", encoding="utf-8")
+
+            service._run(
+                [TaskItem(path=inp, media_type="video")],
+                ConversionSettings(secure_delete_original=True, cloud_upload_enabled=True, cloud_remote_path="remote:bucket"),
+                out_dir,
+            )
+
+            self.assertTrue(inp.exists())
+
     def test_missing_ffmpeg_is_recorded_in_run_summary(self) -> None:
         class MissingFfmpegConverter(MockConverterService):
             def _run_ffmpeg(self, *_args, **_kwargs):

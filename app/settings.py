@@ -36,12 +36,14 @@ SETTINGS_SCHEMA = {
     "overwrite": (bool, False),
     "fast_copy": (bool, False),
     "skip_existing": (bool, False),
+    "output_collision_policy": (str, "index"),
     "output_template": (str, "{stem}"),
     "commercial_export": (bool, False),
     "performance_profile": (str, "Balanced"),
     "target_size_mb": (float, 0.0),
     "cpu_load_limit": (int, 95),
     "gpu_load_limit": (int, 98),
+    "disk_safety_margin_mb": (int, 512),
     "smart_convert_enabled": (bool, False),
     "smart_reencode_detection": (bool, True),
     "smart_two_pass": (bool, False),
@@ -190,6 +192,20 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.overwrite = _coerce_bool(settings_map.get("overwrite"), settings.overwrite)
     settings.fast_copy = _coerce_bool(settings_map.get("fast_copy"), settings.fast_copy)
     settings.skip_existing = _coerce_bool(settings_map.get("skip_existing"), settings.skip_existing)
+    explicit_collision_policy = str(settings_map.get("output_collision_policy") or "").strip().lower()
+    collision_policy = explicit_collision_policy
+    if collision_policy not in {"stop", "index", "parent", "overwrite"}:
+        collision_policy = "overwrite" if settings.overwrite else "skip" if settings.skip_existing else "index"
+    settings.output_collision_policy = collision_policy
+    if collision_policy == "overwrite":
+        settings.overwrite = True
+        settings.skip_existing = False
+    elif collision_policy in {"index", "parent", "stop"}:
+        settings.overwrite = False
+        settings.skip_existing = False
+    elif collision_policy == "skip":
+        settings.overwrite = False
+        settings.skip_existing = True
     settings.output_template = str(settings_map.get("output_template") or settings.output_template).strip() or "{stem}"
     settings.commercial_export = _coerce_bool(settings_map.get("commercial_export"), settings.commercial_export)
     settings.platform_profile = str(settings_map.get("platform_profile") or settings.platform_profile).strip()
@@ -200,6 +216,8 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     gpu_limit = parse_int(str(settings_map.get("gpu_load_limit", settings.gpu_load_limit)))
     settings.cpu_load_limit = max(1, min(100, cpu_limit if cpu_limit is not None else settings.cpu_load_limit))
     settings.gpu_load_limit = max(1, min(100, gpu_limit if gpu_limit is not None else settings.gpu_load_limit))
+    disk_margin = parse_int(str(settings_map.get("disk_safety_margin_mb", settings.disk_safety_margin_mb)))
+    settings.disk_safety_margin_mb = max(0, min(10240, disk_margin if disk_margin is not None else settings.disk_safety_margin_mb))
 
     settings.smart_convert_enabled = _coerce_bool(settings_map.get("smart_convert_enabled"), settings.smart_convert_enabled)
     content_type = str(settings_map.get("smart_content_type") or settings.smart_content_type).strip().lower()

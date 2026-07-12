@@ -128,6 +128,7 @@ class ConversionSettings:
     overwrite: bool = False
     fast_copy: bool = False
     skip_existing: bool = False
+    output_collision_policy: str = ""
     output_template: str = "{stem}"
     commercial_export: bool = False
     platform_profile: str = ""
@@ -135,6 +136,7 @@ class ConversionSettings:
     target_size_mb: float | None = None
     cpu_load_limit: int = 95
     gpu_load_limit: int = 98
+    disk_safety_margin_mb: int = 512
 
     smart_convert_enabled: bool = False
     smart_content_type: str = "auto"

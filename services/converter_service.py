@@ -341,6 +341,23 @@ class ConverterService:
         info = self.media_info.get(task.path)
         return info.duration or 0.0 if info else 0.0
 
+    def _report_fields_for(self, task: TaskItem, result_output: str) -> dict[str, object]:
+        info = self.media_info.get(task.path)
+        output_paths = self._result_output_paths(result_output)
+        try:
+            source_bytes = task.path.stat().st_size
+        except OSError:
+            source_bytes = 0
+        output_bytes = sum(path.stat().st_size for path in output_paths if path.exists())
+        return {
+            "duration_seconds": info.duration if info else None,
+            "source_video_codec": info.vcodec if info else None,
+            "source_audio_codec": info.acodec if info else None,
+            "source_bytes": source_bytes,
+            "output_bytes": output_bytes,
+            "compression_ratio": round(output_bytes / source_bytes, 4) if source_bytes and output_bytes else None,
+        }
+
     def _log_media_info(self, task: TaskItem, info: MediaInfo) -> None:
         self._log(
             "INFO",
@@ -370,6 +387,9 @@ class ConverterService:
 
     def _resolve_output_path(self, task: TaskItem, settings: ConversionSettings, out_dir: Path, index: int) -> Path:
         out_ext = self.ffmpeg.output_extension_for(task.media_type, settings)
+        collision_policy = settings.output_collision_policy or (
+            "overwrite" if settings.overwrite else "skip" if settings.skip_existing else "index"
+        )
         output_path = build_output_path(
             out_dir,
             task.path,
@@ -378,12 +398,15 @@ class ConverterService:
             index=index,
             operation=settings.operation,
             media_type_name=task.media_type,
-            overwrite=settings.overwrite,
-            skip_existing=settings.skip_existing,
+            overwrite=collision_policy in {"stop", "overwrite", "skip"},
+            skip_existing=collision_policy == "skip",
         )
-        return self._reserve_output_path(output_path)
+        if collision_policy == "parent":
+            parent = sanitize_file_stem(task.path.parent.name)
+            output_path = output_path.with_name(f"{parent}_{output_path.name}")
+        return self._reserve_output_path(output_path, collision_policy)
 
-    def _reserve_output_path(self, output_path: Path) -> Path:
+    def _reserve_output_path(self, output_path: Path, collision_policy: str = "index") -> Path:
         """Reserve an output name across sequential and parallel workers.
 
         ``build_output_path`` can only see files already present on disk.  Two
@@ -391,9 +414,14 @@ class ConverterService:
         use the same destination.
         """
         with self._output_path_lock:
+            if collision_policy == "stop" and output_path.exists():
+                raise FileExistsError(f"Вихідний файл уже існує: {output_path.name}")
             if output_path not in self._reserved_output_paths:
                 self._reserved_output_paths.add(output_path)
                 return output_path
+
+            if collision_policy in {"stop", "overwrite"}:
+                raise FileExistsError(f"Конфлікт вихідних імен: {output_path.name}")
 
             index = 1
             while True:
@@ -1153,6 +1181,7 @@ class ConverterService:
                         "status": status,
                         "message": result_message,
                         "output_path": result_output,
+                        **self._report_fields_for(task, result_output),
                     }
                 )
         failed_count = sum(1 for item in run_results if item["status"] == "failed")

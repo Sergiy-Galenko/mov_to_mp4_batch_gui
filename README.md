@@ -75,6 +75,22 @@ On Windows x64 the GUI can install FFmpeg automatically into the app data folder
 
 The app does not modify the system `PATH`. If you manually choose an external FFmpeg binary, that path is respected and the app does not overwrite it.
 
+### Portable Windows package
+
+Build a portable `dist/MediaConverter/` folder with verified `ffmpeg.exe` and `ffprobe.exe` bundled beside the executable:
+
+```powershell
+python scripts\build_pyinstaller.py --portable --ffmpeg-dir C:\tools\ffmpeg\bin
+```
+
+The portable build writes its settings, history, and managed data to `dist\MediaConverter\data\`; it does not require Python, PIP, or changes to the system `PATH`. Keep `portable.ini`, the executable, and the `ffmpeg` folder together.
+
+### Batch safety
+
+- **Collision policy**: choose `index`, `parent`, `stop`, or `overwrite`. CLI users can pass `--collision-policy` with the same values.
+- **Disk preflight**: conversion is blocked when the estimated outputs, temporary files, A/B samples, two-pass passlogs, and configured disk reserve do not fit in the output volume.
+- **Reports**: the History panel exports the most recent batch as CSV, JSON, or HTML. JSON records include source/output byte counts, source codecs, duration, and compression ratio when available.
+
 Text-only conversion does not require FFmpeg or FFprobe.
 
 ## Run The GUI

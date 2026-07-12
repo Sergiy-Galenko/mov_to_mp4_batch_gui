@@ -95,6 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--preset", help="Preset name from the preset store")
     parser.add_argument("--settings-json", help="JSON file with GUI-compatible settings")
     parser.add_argument("--profile", choices=PROFILE_NAMES, help="Performance profile")
+    parser.add_argument("--collision-policy", choices=["stop", "index", "parent", "overwrite"], help="Output name collision policy")
     parser.add_argument("--target-size-mb", type=float, help="Target output size per file in MB")
     parser.add_argument("--cpu-load-limit", type=int, help="Delay starting a task while CPU load is above this percent")
     parser.add_argument("--gpu-load-limit", type=int, help="Delay starting a task while GPU load is above this percent")
@@ -125,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.profile:
         settings_map["performance_profile"] = args.profile
+    if args.collision_policy:
+        settings_map["output_collision_policy"] = args.collision_policy
     if args.target_size_mb:
         settings_map["target_size_mb"] = args.target_size_mb
     if args.cpu_load_limit:

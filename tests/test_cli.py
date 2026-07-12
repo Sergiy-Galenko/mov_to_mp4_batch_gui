@@ -23,6 +23,8 @@ def test_cli_blocks_duplicate_output_names_before_starting_conversion(tmp_path):
                 str(output_dir),
                 "--ffmpeg",
                 sys.executable,
+                "--collision-policy",
+                "stop",
             ]
         )
 
