@@ -1,5 +1,8 @@
 ﻿import queue
+import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -66,6 +69,9 @@ class FakeFfmpegService:
     def build_contact_sheet_command(self, inp, outp, settings):
         return ["ffmpeg", "-i", str(inp), str(outp)]
 
+    def check_media_integrity(self, _output_path):
+        return True, ""
+
 
 class FakeTranscriber:
     def __init__(self) -> None:
@@ -79,7 +85,10 @@ class FakeTranscriber:
 
 class MockConverterService(ConverterService):
     def _create_child_service(self, result_queue):
-        return MockConverterService(self.ffmpeg, result_queue, self.transcriber)
+        child = MockConverterService(self.ffmpeg, result_queue, self.transcriber)
+        child._output_path_lock = self._output_path_lock
+        child._reserved_output_paths = self._reserved_output_paths
+        return child
 
     def _run_ffmpeg(self, cmd, duration, total_done, total_duration, done_files, total_files, total_start):
         Path(cmd[-1]).write_text("ok", encoding="utf-8")
@@ -244,6 +253,32 @@ class ConverterServiceTest(unittest.TestCase):
             self.assertTrue((out_dir / "001_first.mp4").exists())
             self.assertTrue((out_dir / "002_second.mp4").exists())
 
+    def test_parallel_conversion_reserves_duplicate_output_names(self) -> None:
+        fake = FakeFfmpegService()
+        fake.encoder_caps = {"h264_nvenc"}
+        events: queue.Queue[tuple] = queue.Queue()
+        service = MockConverterService(fake, events)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            out_dir = tmp / "out"
+            out_dir.mkdir()
+            first = tmp / "camera_a" / "clip.mp4"
+            second = tmp / "camera_b" / "clip.mp4"
+            first.parent.mkdir()
+            second.parent.mkdir()
+            first.write_text("first", encoding="utf-8")
+            second.write_text("second", encoding="utf-8")
+
+            service._run(
+                [TaskItem(path=first, media_type="video"), TaskItem(path=second, media_type="video")],
+                ConversionSettings(out_video_format="mp4", output_template="{stem}"),
+                out_dir,
+            )
+
+            self.assertTrue((out_dir / "clip.mp4").exists())
+            self.assertTrue((out_dir / "clip (1).mp4").exists())
+
     def test_successful_conversion_writes_checksum_sidecar(self) -> None:
         fake = FakeFfmpegService()
         events: queue.Queue[tuple] = queue.Queue()
@@ -263,6 +298,84 @@ class ConverterServiceTest(unittest.TestCase):
             sidecar = out_dir / "input.mp4.sha256"
             self.assertTrue(sidecar.exists())
             self.assertIn("input.mp4", sidecar.read_text(encoding="utf-8"))
+
+    def test_integrity_failure_keeps_original_when_secure_delete_is_enabled(self) -> None:
+        fake = FakeFfmpegService()
+        fake.check_media_integrity = lambda _output_path: (False, "decode error")
+        events: queue.Queue[tuple] = queue.Queue()
+        service = MockConverterService(fake, events)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            inp = tmp / "input.mp4"
+            out_dir = tmp / "out"
+            out_dir.mkdir()
+            inp.write_text("original", encoding="utf-8")
+
+            service._run(
+                [TaskItem(path=inp, media_type="video")],
+                ConversionSettings(secure_delete_original=True, smart_integrity_check=True),
+                out_dir,
+            )
+
+            self.assertTrue(inp.exists())
+            self.assertTrue((out_dir / "input.mp4").exists())
+
+    def test_missing_ffmpeg_is_recorded_in_run_summary(self) -> None:
+        class MissingFfmpegConverter(MockConverterService):
+            def _run_ffmpeg(self, *_args, **_kwargs):
+                raise FileNotFoundError
+
+        fake = FakeFfmpegService()
+        events: queue.Queue[tuple] = queue.Queue()
+        service = MissingFfmpegConverter(fake, events)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            inp = tmp / "input.mp4"
+            inp.write_text("video", encoding="utf-8")
+            service._run([TaskItem(path=inp, media_type="video")], ConversionSettings(), tmp)
+
+        summaries = [event[1] for event in drain_events(events) if event[0] == "run_summary"]
+        self.assertEqual(summaries[0]["results"][0]["status"], "failed")
+
+    def test_cancelling_overwrite_keeps_previous_output(self) -> None:
+        fake = FakeFfmpegService()
+        events: queue.Queue[tuple] = queue.Queue()
+        service = ConverterService(fake, events)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            output = tmp / "output.mp4"
+            output.write_text("previous result", encoding="utf-8")
+            worker = tmp / "writer.py"
+            worker.write_text(
+                "from pathlib import Path\n"
+                "import sys\n"
+                "import time\n"
+                "Path(sys.argv[-1]).write_text('partial result', encoding='utf-8')\n"
+                "print('progress=continue', flush=True)\n"
+                "time.sleep(30)\n",
+                encoding="utf-8",
+            )
+            result: list[int] = []
+            thread = threading.Thread(
+                target=lambda: result.append(
+                    service._run_ffmpeg([sys.executable, str(worker), str(output)], None, 0, 0, 0, 1, time.time())
+                )
+            )
+            thread.start()
+            for _ in range(100):
+                if service.current_proc is not None:
+                    break
+                time.sleep(0.01)
+            service.stop()
+            thread.join(timeout=5)
+
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(output.read_text(encoding="utf-8"), "previous result")
+            self.assertFalse(list(tmp.glob("*.partial.mp4")))
+            self.assertNotEqual(result, [0])
 
 
 if __name__ == "__main__":

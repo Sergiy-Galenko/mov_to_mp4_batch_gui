@@ -12,6 +12,7 @@ from services.youtube_download_service import (
     YouTubeDownloadCancelled,
     YouTubeDownloadError,
     YouTubeDownloadService,
+    _SafeHTTPSRedirectHandler,
 )
 
 
@@ -253,6 +254,45 @@ def test_direct_media_fallback_downloads_plain_http_video(tmp_path):
     assert outputs == [tmp_path / "source.mp4"]
     assert outputs[0].read_bytes() == b"direct-video"
     assert progress_events[-1].percent == 1.0
+
+
+def test_direct_media_fallback_does_not_accept_http_urls(tmp_path):
+    with patch.dict(sys.modules, {"yt_dlp": fake_module(FakeFailingYoutubeDL)}):
+        service = YouTubeDownloadService()
+        with pytest.raises(YouTubeDownloadError, match="unsupported URL"):
+            service.download_many("http://cdn.example.com/media/source.mp4", tmp_path, mode="video")
+
+
+def test_direct_media_rejects_private_resolved_addresses():
+    service = YouTubeDownloadService()
+    with (
+        patch("services.youtube_download_service.socket.getaddrinfo", return_value=[(None, None, None, None, ("127.0.0.1", 0))]),
+        pytest.raises(YouTubeDownloadError, match="local/private"),
+    ):
+        service._validate_direct_url("https://cdn.example.com/media/source.mp4")
+
+
+def test_direct_media_redirects_are_revalidated():
+    handler = _SafeHTTPSRedirectHandler(lambda _url: (_ for _ in ()).throw(YouTubeDownloadError("redirect blocked")))
+    request = types.SimpleNamespace(full_url="https://cdn.example.com/start")
+    with pytest.raises(YouTubeDownloadError, match="redirect blocked"):
+        handler.redirect_request(request, None, 302, "Found", {}, "http://127.0.0.1/private.mp4")
+
+
+def test_direct_media_enforces_download_size_limit_and_removes_partial_file(tmp_path):
+    response = FakeDirectResponse(
+        b"direct-video",
+        {"Content-Type": "video/mp4", "Content-Length": str(len(b"direct-video"))},
+    )
+    with patch.dict(sys.modules, {"yt_dlp": fake_module(FakeFailingYoutubeDL)}):
+        service = YouTubeDownloadService(max_direct_download_bytes=4)
+        with (
+            patch.object(service, "_open_direct_url", return_value=response),
+            pytest.raises(YouTubeDownloadError, match="exceeds the allowed"),
+        ):
+            service.download_many("https://cdn.example.com/media/source.mp4", tmp_path, mode="video")
+
+    assert not list(tmp_path.glob("*.part"))
 
 
 def test_direct_media_fallback_uses_content_disposition_filename(tmp_path):

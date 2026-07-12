@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import http.cookiejar
 import mimetypes
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -14,6 +15,7 @@ from threading import Event
 from typing import Any
 
 from app.constants import AUDIO_EXTS, VIDEO_EXTS
+from services.url_security import URLSecurityError, env_flag, env_hosts, is_local_or_private_host, validate_https_url
 from utils.formatting import format_bytes, format_time
 
 ProgressCallback = Callable[["DownloadProgress"], None]
@@ -25,6 +27,17 @@ class YouTubeDownloadError(RuntimeError):
 
 class YouTubeDownloadCancelled(YouTubeDownloadError):
     pass
+
+
+class _SafeHTTPSRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def __init__(self, validate_url: Callable[[str], str]) -> None:
+        super().__init__()
+        self._validate_url = validate_url
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urljoin(req.full_url, newurl)
+        self._validate_url(target)
+        return super().redirect_request(req, fp, code, msg, headers, target)
 
 
 @dataclass(frozen=True)
@@ -71,9 +84,18 @@ class YouTubeDownloadService:
         "application/mp4": ".mp4",
         "application/ogg": ".ogg",
     }
+    MAX_DIRECT_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
-    def __init__(self, ffmpeg_path: str | None = None) -> None:
+    def __init__(
+        self,
+        ffmpeg_path: str | None = None,
+        *,
+        allowed_direct_hosts: Iterable[str] | None = None,
+        max_direct_download_bytes: int = MAX_DIRECT_DOWNLOAD_BYTES,
+    ) -> None:
         self.ffmpeg_path = str(ffmpeg_path or "").strip()
+        self.allowed_direct_hosts = set(allowed_direct_hosts or env_hosts("MEDIA_CONVERTER_DOWNLOAD_HOSTS"))
+        self.max_direct_download_bytes = max(1, int(max_direct_download_bytes))
 
     @staticmethod
     def is_available() -> bool:
@@ -306,6 +328,8 @@ class YouTubeDownloadService:
                     tmp_path.unlink(missing_ok=True)
 
                 total = self._optional_int(self._header_value(headers, "Content-Length"))
+                if total is not None and total > self.max_direct_download_bytes:
+                    raise YouTubeDownloadError("Direct media file exceeds the allowed download size.")
                 downloaded = 0
                 started = time.monotonic()
                 self._emit_direct_progress(
@@ -325,6 +349,8 @@ class YouTubeDownloadService:
                         chunk = response.read(256 * 1024)
                         if not chunk:
                             break
+                        if downloaded + len(chunk) > self.max_direct_download_bytes:
+                            raise YouTubeDownloadError("Direct media file exceeded the allowed download size.")
                         file.write(chunk)
                         downloaded += len(chunk)
                         self._throttle_direct_download(downloaded, started, rate_limit)
@@ -357,19 +383,34 @@ class YouTubeDownloadService:
                 with contextlib.suppress(OSError):
                     tmp_path.unlink()
             raise
+        except YouTubeDownloadError:
+            if tmp_path and tmp_path.exists():
+                with contextlib.suppress(OSError):
+                    tmp_path.unlink()
+            raise
         except urllib.error.HTTPError as exc:
+            if tmp_path and tmp_path.exists():
+                with contextlib.suppress(OSError):
+                    tmp_path.unlink()
             raise YouTubeDownloadError(f"HTTP {exc.code}: {exc.reason}") from exc
         except urllib.error.URLError as exc:
+            if tmp_path and tmp_path.exists():
+                with contextlib.suppress(OSError):
+                    tmp_path.unlink()
             reason = getattr(exc, "reason", exc)
             raise YouTubeDownloadError(str(reason) or exc.__class__.__name__) from exc
         except OSError as exc:
+            if tmp_path and tmp_path.exists():
+                with contextlib.suppress(OSError):
+                    tmp_path.unlink()
             raise YouTubeDownloadError(str(exc) or exc.__class__.__name__) from exc
 
     def _open_direct_url(self, url: str, cookies_file: str) -> Any:
-        parsed = urllib.parse.urlparse(url)
+        validated_url = self._validate_direct_url(url)
+        parsed = urllib.parse.urlparse(validated_url)
         origin = f"{parsed.scheme}://{parsed.netloc}/" if parsed.scheme and parsed.netloc else url
         request = urllib.request.Request(
-            url,
+            validated_url,
             headers={
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -384,9 +425,10 @@ class YouTubeDownloadService:
         return opener.open(request, timeout=60)
 
     def _direct_opener(self, cookies_file: str) -> Any:
+        handlers: list[Any] = [_SafeHTTPSRedirectHandler(self._validate_direct_url)]
         clean_cookies_file = str(cookies_file or "").strip()
         if not clean_cookies_file:
-            return urllib.request.build_opener()
+            return urllib.request.build_opener(*handlers)
 
         cookie_path = Path(clean_cookies_file).expanduser()
         if not cookie_path.is_file():
@@ -397,7 +439,31 @@ class YouTubeDownloadService:
             jar.load(ignore_discard=True, ignore_expires=True)
         except Exception as exc:
             raise YouTubeDownloadError(f"Could not load cookies file: {exc}") from exc
-        return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        handlers.append(urllib.request.HTTPCookieProcessor(jar))
+        return urllib.request.build_opener(*handlers)
+
+    def _validate_direct_url(self, url: str) -> str:
+        try:
+            validated_url = validate_https_url(
+                url,
+                allowed_hosts=self.allowed_direct_hosts or None,
+                allow_local=env_flag("MEDIA_CONVERTER_ALLOW_LOCAL_DOWNLOADS"),
+            )
+        except URLSecurityError as exc:
+            raise YouTubeDownloadError(f"Direct media URL is blocked: {exc}") from exc
+
+        if env_flag("MEDIA_CONVERTER_ALLOW_LOCAL_DOWNLOADS"):
+            return validated_url
+        hostname = urllib.parse.urlparse(validated_url).hostname
+        if not hostname:
+            raise YouTubeDownloadError("Direct media URL host is missing.")
+        try:
+            addresses = {item[4][0] for item in socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)}
+        except OSError as exc:
+            raise YouTubeDownloadError(f"Could not resolve direct media host: {hostname}") from exc
+        if not addresses or any(is_local_or_private_host(address) for address in addresses):
+            raise YouTubeDownloadError("Direct media URL resolves to a local/private network address.")
+        return validated_url
 
     def _direct_preview(self, url: str) -> dict[str, Any] | None:
         if not self._is_http_url(url):
@@ -624,7 +690,7 @@ class YouTubeDownloadService:
 
     def _is_http_url(self, url: str) -> bool:
         parsed = urllib.parse.urlparse(str(url or "").strip())
-        return parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc)
+        return parsed.scheme.lower() == "https" and bool(parsed.netloc)
 
     def _emit_direct_progress(
         self,

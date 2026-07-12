@@ -4,6 +4,7 @@ import signal
 import subprocess
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
@@ -11,7 +12,7 @@ from queue import Queue
 
 from app.constants import PROGRESS_THROTTLE_SEC
 from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
-from services.cloud_upload_service import CloudUploadError, CloudUploadService
+from services.cloud_upload_service import CloudUploadService
 from services.ffmpeg_service import FfmpegService, parse_progress_line
 from services.security_service import secure_delete, write_checksum_sidecar
 from services.smart_convert_service import apply_smart_settings, parse_ab_crfs, recommend_settings
@@ -48,6 +49,8 @@ class ConverterService:
         self.media_info: dict[Path, MediaInfo] = {}
         self.prefetched_media_info: dict[Path, MediaInfo] = {}
         self.prefetch_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="converter-ffprobe")
+        self._output_path_lock = threading.Lock()
+        self._reserved_output_paths: set[Path] = set()
 
     def _result_output_paths(self, result_output: str) -> list[Path]:
         paths: list[Path] = []
@@ -64,6 +67,7 @@ class ConverterService:
         output_paths = self._result_output_paths(result_output)
         if not output_paths:
             return
+        safe_to_delete_original = True
         checksum_algorithm = str(settings.checksum_algorithm or "none").lower()
         for output_path in output_paths:
             if checksum_algorithm in {"md5", "sha256"}:
@@ -71,12 +75,14 @@ class ConverterService:
                     sidecar = write_checksum_sidecar(output_path, checksum_algorithm)
                     self._log("OK", f"{checksum_algorithm.upper()} записано: {sidecar.name}")
                 except Exception as exc:
+                    safe_to_delete_original = False
                     self._log("WARN", f"Не вдалося записати checksum для {output_path.name}: {exc}")
             if settings.cloud_upload_enabled:
                 try:
                     self.cloud_uploader.upload(output_path, settings, log_cb=self._log)
                     self._log("OK", f"Cloud upload готовий: {output_path.name}")
-                except CloudUploadError as exc:
+                except Exception as exc:
+                    safe_to_delete_original = False
                     self._log("WARN", f"Cloud upload помилка для {output_path.name}: {exc}")
             if settings.smart_integrity_check:
                 if task.media_type == "text":
@@ -86,6 +92,7 @@ class ConverterService:
                     if ok:
                         self._log("OK", f"Integrity check OK: {output_path.name}")
                     else:
+                        safe_to_delete_original = False
                         self._log("WARN", f"Integrity check failed for {output_path.name}: {details or 'decode error'}")
             if task.media_type == "video" and settings.smart_quality_metric in {"ssim", "vmaf"}:
                 ok, score, details = self.ffmpeg.measure_quality(task.path, output_path, settings.smart_quality_metric)
@@ -96,6 +103,9 @@ class ConverterService:
                     self._log("OK", f"{label} check завершено для {output_path.name}")
                 else:
                     self._log("WARN", f"{label} check failed for {output_path.name}: {details or 'metric unavailable'}")
+        if settings.secure_delete_original and not safe_to_delete_original:
+            self._log("WARN", "Secure delete пропущено: післяобробка результату завершилася з помилкою.")
+            return
         if settings.secure_delete_original:
             try:
                 source = task.path.expanduser()
@@ -111,6 +121,8 @@ class ConverterService:
         self.stop_event.clear()
         self.pause_event.clear()
         self.skip_event.clear()
+        with self._output_path_lock:
+            self._reserved_output_paths.clear()
         self.thread = threading.Thread(target=self._run, args=(tasks, settings, out_dir), daemon=True)
         self.thread.start()
 
@@ -122,7 +134,10 @@ class ConverterService:
         return 2 if self._has_gpu_encoder() else 1
 
     def _create_child_service(self, result_queue: Queue) -> "ConverterService":
-        return ConverterService(self.ffmpeg, result_queue, self.transcriber)
+        child = ConverterService(self.ffmpeg, result_queue, self.transcriber)
+        child._output_path_lock = self._output_path_lock
+        child._reserved_output_paths = self._reserved_output_paths
+        return child
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -270,7 +285,16 @@ class ConverterService:
         passlog = outp.with_suffix(outp.suffix + ".ffmpeg2pass")
         pass1, pass2 = self.ffmpeg.build_two_pass_commands(cmd, passlog)
         self._log("INFO", f"Two-pass encoding: pass 1/2 для {outp.name}")
-        rc = self._run_ffmpeg(pass1, duration, done_duration, total_duration, done_files, total_files, total_start)
+        rc = self._run_ffmpeg(
+            pass1,
+            duration,
+            done_duration,
+            total_duration,
+            done_files,
+            total_files,
+            total_start,
+            publish_output=False,
+        )
         if rc == 0 and not self.stop_event.is_set():
             self._log("INFO", f"Two-pass encoding: pass 2/2 для {outp.name}")
             rc = self._run_ffmpeg(pass2, duration, done_duration, total_duration, done_files, total_files, total_start)
@@ -346,7 +370,7 @@ class ConverterService:
 
     def _resolve_output_path(self, task: TaskItem, settings: ConversionSettings, out_dir: Path, index: int) -> Path:
         out_ext = self.ffmpeg.output_extension_for(task.media_type, settings)
-        return build_output_path(
+        output_path = build_output_path(
             out_dir,
             task.path,
             out_ext,
@@ -357,6 +381,27 @@ class ConverterService:
             overwrite=settings.overwrite,
             skip_existing=settings.skip_existing,
         )
+        return self._reserve_output_path(output_path)
+
+    def _reserve_output_path(self, output_path: Path) -> Path:
+        """Reserve an output name across sequential and parallel workers.
+
+        ``build_output_path`` can only see files already present on disk.  Two
+        workers selecting a name before either starts writing would otherwise
+        use the same destination.
+        """
+        with self._output_path_lock:
+            if output_path not in self._reserved_output_paths:
+                self._reserved_output_paths.add(output_path)
+                return output_path
+
+            index = 1
+            while True:
+                candidate = output_path.with_name(f"{output_path.stem} ({index}){output_path.suffix}")
+                if candidate not in self._reserved_output_paths and not candidate.exists():
+                    self._reserved_output_paths.add(candidate)
+                    return candidate
+                index += 1
 
     def _chapter_output_path(self, base_output: Path, chapter_index: int, chapter_title: str) -> Path:
         suffix = base_output.suffix
@@ -1080,8 +1125,9 @@ class ConverterService:
                 except FileNotFoundError:
                     self._log("ERROR", "FFmpeg не знайдено під час запуску. Перевір шлях до ffmpeg.")
                     self._task_state(task.path, "failed", "FFmpeg не знайдено")
+                    status = TaskStatus.FAILED
                     result_message = "FFmpeg не знайдено"
-                    break
+                    self.stop_event.set()
                 except Exception as exc:
                     self._log("ERROR", f"Несподівана помилка: {exc}")
                     self._task_state(task.path, "failed", str(exc))
@@ -1145,11 +1191,18 @@ class ConverterService:
         done_files: int,
         total_files: int,
         total_start: float,
+        *,
+        publish_output: bool = True,
     ) -> int:
         if len(cmd) < 2:
             return -1
         output_path = Path(cmd[-1])
-        output_existed_before = output_path.exists()
+        work_output_path = output_path
+        if publish_output:
+            work_output_path = output_path.with_name(
+                f".{output_path.stem}.{uuid.uuid4().hex}.partial{output_path.suffix}"
+            )
+            cmd = [*cmd[:-1], str(work_output_path)]
         cmd_with_progress = [*cmd[:2], "-progress", "pipe:1", "-nostats", "-hide_banner", *cmd[2:]]
         proc = subprocess.Popen(
             cmd_with_progress,
@@ -1232,9 +1285,23 @@ class ConverterService:
             err_thread.join(timeout=0.2)
             self.current_proc = None
             self.current_output_path = None
-        if (self.skip_event.is_set() or self.stop_event.is_set()) and not output_existed_before:
+        cancelled = self.skip_event.is_set() or self.stop_event.is_set()
+        if publish_output and rc == 0 and not cancelled:
+            if output_path.exists() and "-y" not in cmd:
+                self._log("ERROR", f"Вихідний файл з'явився під час конвертації: {output_path.name}")
+                with contextlib.suppress(Exception):
+                    work_output_path.unlink(missing_ok=True)
+                return 1
+            try:
+                os.replace(work_output_path, output_path)
+            except OSError as exc:
+                self._log("ERROR", f"Не вдалося опублікувати результат {output_path.name}: {exc}")
+                with contextlib.suppress(Exception):
+                    work_output_path.unlink(missing_ok=True)
+                return 1
+        elif publish_output:
             with contextlib.suppress(Exception):
-                output_path.unlink(missing_ok=True)
+                work_output_path.unlink(missing_ok=True)
         if self.skip_event.is_set():
             return self.SKIP_RC
         return rc

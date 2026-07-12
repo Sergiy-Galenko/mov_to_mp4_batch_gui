@@ -17,6 +17,7 @@ from services.converter_service import ConverterService
 from services.ffmpeg_service import FfmpegService
 from services.preset_manager import PresetManager
 from services.queue_manager import QueueManager
+from services.validation_service import ValidationService
 from services.youtube_download_service import DownloadProgress, YouTubeDownloadError, YouTubeDownloadService
 from utils.state import load_json_file
 
@@ -191,6 +192,19 @@ def main(argv: list[str] | None = None) -> int:
 
     ffmpeg = FfmpegService(ffmpeg_path, ffprobe_path)
     ffmpeg.encoder_caps = ffmpeg.detect_encoders()
+    preflight = ValidationService(ffmpeg).validate(
+        settings_map,
+        tasks=tasks,
+        output_dir=str(out_dir),
+        ffmpeg_path=ffmpeg_path,
+    )
+    if not preflight.get("ok"):
+        for message in dict(preflight.get("errors") or {}).values():
+            print(f"Preflight: {message}", file=sys.stderr)
+        return 2
+    for warning in preflight.get("warnings") or []:
+        print(f"Preflight warning: {warning}", file=sys.stderr)
+
     events: queue.Queue[tuple] = queue.Queue()
     converter = ConverterService(ffmpeg, events)
     settings = settings_map_to_model(settings_map, defaults=ConversionSettings())
