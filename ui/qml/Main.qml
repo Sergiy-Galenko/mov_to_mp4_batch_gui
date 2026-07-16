@@ -3,6 +3,8 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import App 1.0
 import "components"
+import "layout" as AppLayout
+import "screens" as AppScreens
 
 ApplicationWindow {
     id: root
@@ -65,28 +67,26 @@ ApplicationWindow {
     property string pendingSettingsTarget: ""
     property bool advancedSettingsExpanded: false
     property var navigationItems: [
-        { title: "queue", icon: "📁", page: 0, target: "" },
-        { title: "analytics", icon: "📊", page: 1, target: "" },
-        { title: "presets", icon: "🎛️", page: 2, target: "" },
-        { title: "ffmpeg", icon: "🧰", page: 3, target: "" },
-        { title: "downloads", icon: "⬇️", page: 4, target: "" },
-        { title: "smart_convert", icon: "🧠", page: 5, target: "smart_convert" },
-        { title: "device_profiles", icon: "📱", page: 5, target: "device_profiles" },
-        { title: "video_editor", icon: "✂️", page: 5, target: "video_editor" },
-        { title: "subtitle_tools", icon: "📝", page: 5, target: "subtitle_tools" },
-        { title: "privacy_security", icon: "🔐", page: 5, target: "privacy_security" },
-        { title: "cloud_integration", icon: "☁️", page: 5, target: "cloud_integration" },
-        { title: "commercial_license", icon: "🔑", page: 5, target: "commercial_license" },
-        { title: "run", icon: "🚀", page: 5, target: "run" },
-        { title: "core", icon: "⚙️", page: 5, target: "core" },
-        { title: "output", icon: "📤", page: 5, target: "output" },
-        { title: "video", icon: "🎬", page: 5, target: "video" },
-        { title: "audio_subtitles", icon: "🔊", page: 5, target: "audio_subtitles" },
-        { title: "images_sheets", icon: "🖼️", page: 5, target: "images_sheets" },
-        { title: "watermark_text", icon: "✍️", page: 5, target: "watermark_text" },
-        { title: "metadata_hooks", icon: "🏷️", page: 5, target: "metadata_hooks" },
-        { title: "selected_override", icon: "🧩", page: 5, target: "selected_override" },
-        { title: "ffmpeg_watch", icon: "🛠️", page: 5, target: "ffmpeg_watch" }
+        { title: "nav_queue", icon: "queue", page: 0, target: "", group: "nav_workspace" },
+        { title: "nav_downloads", icon: "download", page: 4, target: "", group: "nav_workspace" },
+        { title: "nav_presets", icon: "sliders", page: 2, target: "", group: "nav_workspace" },
+        { title: "nav_analytics", icon: "chart", page: 1, target: "", group: "nav_workspace" },
+        { title: "nav_core", icon: "settings", page: 5, target: "core", group: "nav_conversion" },
+        { title: "nav_output", icon: "folder", page: 5, target: "output", group: "nav_conversion" },
+        { title: "nav_video", icon: "file", page: 5, target: "video", group: "nav_conversion" },
+        { title: "nav_audio_subtitles", icon: "file", page: 5, target: "audio_subtitles", group: "nav_conversion" },
+        { title: "nav_images_sheets", icon: "file", page: 5, target: "images_sheets", group: "nav_conversion" },
+        { title: "nav_watermark_text", icon: "file", page: 5, target: "watermark_text", group: "nav_conversion" },
+        { title: "nav_smart_convert", icon: "sliders", page: 5, target: "smart_convert", group: "nav_advanced" },
+        { title: "nav_device_profiles", icon: "file", page: 5, target: "device_profiles", group: "nav_advanced" },
+        { title: "nav_video_editor", icon: "file", page: 5, target: "video_editor", group: "nav_advanced" },
+        { title: "nav_subtitle_tools", icon: "file", page: 5, target: "subtitle_tools", group: "nav_advanced" },
+        { title: "nav_privacy_security", icon: "settings", page: 5, target: "privacy_security", group: "nav_advanced" },
+        { title: "nav_ffmpeg", icon: "settings", page: 3, target: "", group: "nav_automation" },
+        { title: "nav_ffmpeg_watch", icon: "settings", page: 5, target: "ffmpeg_watch", group: "nav_automation" },
+        { title: "nav_cloud_integration", icon: "download", page: 5, target: "cloud_integration", group: "nav_automation" },
+        { title: "nav_metadata_hooks", icon: "file", page: 5, target: "metadata_hooks", group: "nav_automation" },
+        { title: "nav_commercial_license", icon: "settings", page: 5, target: "commercial_license", group: "nav_application" }
     ]
 
     property var operationOptions: ["convert", "audio_only", "auto_subtitle", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet"]
@@ -196,7 +196,7 @@ ApplicationWindow {
         if (root.activeWorkspaceMode === "photo") return I18n.t("workspace_photo")
         if (root.activeWorkspaceMode === "video") return I18n.t("workspace_video")
         if (root.activeWorkspaceMode === "text") return I18n.t("workspace_text")
-        return I18n.t("queue")
+        return I18n.t("nav_queue")
     }
 
     function clearSelectionIfOutsideWorkspace() {
@@ -389,6 +389,47 @@ ApplicationWindow {
             backend.selectQueuePath(path)
     }
 
+    function clearQueueSelection() {
+        root.selectedPaths = []
+        root.selectedPath = ""
+        root.selectedName = ""
+        root.selectedMediaType = ""
+        root.selectedThumbnailSource = ""
+        root.selectedPreviewFormat = ""
+        root.selectedIndex = -1
+        root.lastSelectedIndex = -1
+        if (backend)
+            backend.selectQueueIndex(-1)
+    }
+
+    function removeQueuePath(path) {
+        if (!path || !backend)
+            return
+        backend.removeTaskPath(path)
+        if (root.selectedPaths.indexOf(path) >= 0) {
+            var next = root.selectedPaths.slice()
+            next.splice(next.indexOf(path), 1)
+            root.selectedPaths = next
+        }
+        if (root.selectedPath === path)
+            root.clearQueueSelection()
+    }
+
+    function removeSelectedPaths() {
+        if (!backend || root.selectedPaths.length === 0)
+            return
+        backend.removeSelectedPaths(root.selectedPaths)
+        root.clearQueueSelection()
+    }
+
+    function convertSelectedPaths() {
+        if (!backend || root.selectedPaths.length === 0 || backend.isRunning)
+            return
+        if (!backend.ensureOutputDirSelected() || !validateForm())
+            return
+        backend.startConversionForPaths(root.selectedPaths, collectSettings())
+    }
+
     function navIndexFor(pageIndex, target) {
         for (var i = 0; i < navigationItems.length; ++i) {
             var item = navigationItems[i]
@@ -538,6 +579,10 @@ ApplicationWindow {
         }
     }
 
+    function openNotifications() {
+        notificationCenterPopup.open()
+    }
+
     Timer {
         id: settingsSyncTimer
         interval: 260
@@ -588,10 +633,7 @@ ApplicationWindow {
         function onToastRequested(message) {
             root.showToast(message)
         }
-        function onThemeChanged() {
-            if (topThemeCombo)
-                topThemeCombo.currentIndex = root.themeModeIndex(backend.themeMode)
-        }
+        function onThemeChanged() { root._langVersion += 1 }
     }
 
     Component.onCompleted: {
@@ -608,172 +650,14 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
-        Rectangle {
-            id: topHeader
+        AppLayout.AppTitleBar {
+            id: appHeader
             Layout.fillWidth: true
-            Layout.preferredHeight: 64
-            color: Theme.bgPrimary
-            border.width: 0
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: Theme.space5
-                anchors.rightMargin: Theme.space5
-                spacing: Theme.space4
-
-                Image {
-                    Layout.preferredWidth: 38
-                    Layout.preferredHeight: 38
-                    source: root.appLogoSource
-                    fillMode: Image.PreserveAspectFit
-                    asynchronous: true
-                    smooth: true
-                }
-
-                Label {
-                    text: I18n.t("app.title")
-                    color: Theme.textPrimary
-                    font.family: Theme.displayFont
-                    font.pixelSize: Theme.fontSizeLg
-                    font.bold: true
-                }
-
-                Rectangle {
-                    Layout.preferredWidth: 1
-                    Layout.preferredHeight: 24
-                    color: Theme.borderSubtle
-                }
-
-                RowLayout {
-                    spacing: 4
-                    TopModeButton { mode: "convert"; text: I18n.t("convert") }
-                    TopModeButton { mode: "photo"; text: I18n.t("workspace_photo") }
-                    TopModeButton { mode: "video"; text: I18n.t("workspace_video") }
-                    TopModeButton { mode: "text"; text: I18n.t("workspace_text") }
-                    TopModeButton { mode: "montage"; text: I18n.t("workspace_montage") }
-                    TopModeButton { mode: "downloads"; text: I18n.t("downloads") }
-                    TopModeButton { mode: "analytics"; text: I18n.t("analytics") }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                RowLayout {
-                    spacing: Theme.space3
-
-                    StatusPill { 
-                        visible: root.width > 900
-                        text: backend && backend.isRunning ? "⏳ " + I18n.t("live") : "✅ " + I18n.t("idle")
-                        accent: backend && backend.isRunning ? Theme.statusRunning : Theme.statusSuccess 
-                    }
-
-                    AppTextField {
-                        id: globalSearchField
-                        Layout.preferredWidth: 200
-                        placeholderText: I18n.t("global_search")
-                        text: root.globalSearchText
-                        onTextChanged: root.runGlobalSearch(text)
-                        Keys.onReturnPressed: {
-                            if (root.globalSearchResults.length > 0)
-                                root.activateSearchResult(root.globalSearchResults[0])
-                        }
-                    }
-                    
-                    SecondaryButton {
-                        Layout.preferredWidth: 50
-                        text: "🔔 " + root.toastHistory.length
-                        onClicked: notificationCenterPopup.open()
-                    }
-
-                    GhostButton {
-                        id: languageButton
-                        Layout.preferredWidth: 68
-                        text: "🌐 " + root.languageButtonLabel(root._langVersion)
-                        onClicked: languagePopup.open()
-
-                        Popup {
-                            id: languagePopup
-                            y: languageButton.height + 6
-                            width: 196
-                            padding: 8
-                            focus: true
-                            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-                            background: Rectangle {
-                                radius: Theme.radiusInput + 2
-                                color: Theme.panelAlt
-                                border.width: 1
-                                border.color: Theme.borderStrong
-                            }
-
-                            contentItem: ColumnLayout {
-                                spacing: 4
-
-                                Repeater {
-                                    model: backend ? backend.availableLanguages : []
-
-                                    delegate: Button {
-                                        id: languageOptionButton
-                                        Layout.fillWidth: true
-                                        implicitHeight: 38
-                                        text: modelData.label || ""
-                                        hoverEnabled: true
-                                        onClicked: {
-                                            root.setAppLanguage(modelData.code)
-                                            languagePopup.close()
-                                        }
-
-                                        background: Rectangle {
-                                            radius: Theme.radiusSm
-                                            color: root.languageActive(modelData.code)
-                                                   ? Theme.accentSoft
-                                                   : languageOptionButton.hovered ? Theme.overlayHover : Theme.transparent
-                                            border.width: root.languageActive(modelData.code) ? 1 : 0
-                                            border.color: Theme.accentPrimary
-                                        }
-
-                                        contentItem: RowLayout {
-                                            spacing: 8
-
-                                            Label {
-                                                Layout.fillWidth: true
-                                                text: modelData.label || ""
-                                                color: Theme.textPrimary
-                                                font.pixelSize: Theme.fontSizeSm
-                                                elide: Text.ElideRight
-                                            }
-
-                                            Label {
-                                                visible: root.languageActive(modelData.code)
-                                                text: "✓"
-                                                color: Theme.accentPrimary
-                                                font.pixelSize: Theme.fontSizeSm
-                                                font.bold: true
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    GhostButton {
-                        Layout.preferredWidth: 44
-                        text: "📖"
-                        onClicked: tutorialPopup.open()
-                    }
-
-                    GhostButton {
-                        Layout.preferredWidth: 44
-                        text: "🌓"
-                        onClicked: {
-                            if (backend) backend.themeMode = backend.themeMode === "light" ? "dark" : "light"
-                        }
-                    }
-                }
-            }
+            appRoot: root
+            logoSource: root.appLogoSource
         }
 
-        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.borderSubtle }
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.borderMuted }
 
         RowLayout {
             Layout.fillWidth: true
@@ -782,29 +666,23 @@ ApplicationWindow {
 
             SidebarPanel {
                 Layout.fillHeight: true
-                visible: root.activeSection !== 0 // Only visible in advanced sections
                 collapsed: root.sidebarCollapsed
                 activeIndex: root.activeNavIndex
                 navigationItems: root.navigationItems
                 onSectionRequested: function(pageIndex, target, navIndex) { root.openSidebarSection(pageIndex, target, navIndex) }
-                onAddFilesRequested: backend && backend.addFiles()
-                onAddFolderRequested: backend && backend.addFolder()
+                onAddFilesRequested: root.addFilesForWorkspace()
+                onAddFolderRequested: root.addFolderForWorkspace()
                 onDedupeRequested: backend && backend.deduplicateQueueByHash()
             }
 
-            Rectangle { 
-                visible: root.activeSection !== 0
-                Layout.preferredWidth: 1; 
-                Layout.fillHeight: true; 
-                color: Theme.borderSubtle 
-            }
+            Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.borderMuted }
 
             StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 currentIndex: root.activeSection
 
-                QueueScreen {}
+                AppScreens.QueueScreen { appRoot: root }
                 AnalyticsScreen {}
                 PresetsScreen {}
                 FfmpegScreen {}
@@ -816,8 +694,14 @@ ApplicationWindow {
 
                     ColumnLayout {
                         width: settingsScroll.availableWidth
+                        anchors.margins: Theme.space4
                         spacing: Theme.space3
-                        anchors.margins: Theme.space3
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label { Layout.fillWidth: true; text: I18n.t("settings"); color: Theme.textPrimary; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
+                            Label { text: I18n.t("settings_panel_hint"); color: Theme.textMuted; font.pixelSize: Theme.fontMeta; elide: Text.ElideRight }
+                        }
 
                         SettingsPanel {
                             id: settingsPanel
@@ -828,111 +712,9 @@ ApplicationWindow {
             }
         }
 
-        Rectangle {
+        AppLayout.BottomActionBar {
             Layout.fillWidth: true
-            Layout.preferredHeight: 88
-            color: Theme.bgElevated
-            border.width: 1
-            border.color: Theme.borderSubtle
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: Theme.space5
-                anchors.rightMargin: Theme.space5
-                spacing: Theme.space5
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-                        
-                        Label {
-                            text: backend ? backend.totalProgressText : "--"
-                            color: Theme.textPrimary
-                            font.pixelSize: Theme.fontSizeMd
-                            font.bold: true
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                        }
-                        
-                        Label {
-                            text: "ETA: " + (backend ? backend.sessionEtaText : "--:--")
-                            color: Theme.textSecondary
-                            font.family: Theme.monoFont
-                            font.pixelSize: Theme.fontSizeSm
-                        }
-                    }
-
-                    ShimmerBar {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 8
-                        value: backend ? backend.totalProgress : 0
-                        active: backend ? backend.isRunning : false
-                        highLoadMode: root.highLoadMode
-                        shimmerPhase: root.sharedShimmerPhase
-                        fillColor: Theme.accentPrimary
-                    }
-                }
-
-                RowLayout {
-                    Layout.preferredWidth: 280
-                    spacing: 12
-                    
-                    SecondaryButton {
-                        Layout.preferredWidth: 44
-                            text: "📁"
-                        onClicked: backend && backend.pickOutputDir()
-                    }
-                    
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
-                        Label {
-                            text: I18n.t("output_folder")
-                            color: Theme.textDisabled
-                            font.pixelSize: 11
-                        }
-                        Label {
-                            Layout.fillWidth: true
-                            text: backend && backend.outputDirConfigured ? backend.outputDir : I18n.t("output_folder_required")
-                            color: backend && backend.outputDirConfigured ? Theme.textSecondary : Theme.statusWarning
-                            font.pixelSize: Theme.fontSizeSm
-                            elide: Text.ElideMiddle
-                        }
-                    }
-                }
-
-                RowLayout {
-                    spacing: 8
-                    
-                    SecondaryButton {
-                        Layout.preferredWidth: 48
-                        text: backend && backend.isPaused ? "▶️" : "⏸️"
-                        enabled: backend && backend.isRunning
-                        onClicked: backend && (backend.isPaused ? backend.resumeConversion() : backend.pauseConversion())
-                    }
-                    
-                    SecondaryButton {
-                        Layout.preferredWidth: 48
-                        text: "⏹️"
-                        enabled: backend && backend.isRunning
-                        onClicked: backend && backend.stopConversion()
-                    }
-                    
-                    PrimaryButton {
-                        Layout.preferredWidth: 160
-                        Layout.preferredHeight: 48
-                        text: "🚀 " + (backend && backend.isRunning ? I18n.t("running") : I18n.t("start"))
-                        font.pixelSize: Theme.fontSizeLg
-                        font.bold: true
-                        enabled: backend ? (backend.queueCount > 0 && !backend.isRunning && formValid) : false
-                        onClicked: root.startIfValid()
-                    }
-                }
-            }
+            appRoot: root
         }
     }
 
@@ -970,8 +752,8 @@ ApplicationWindow {
         focus: true
         width: 520
         height: Math.min(420, searchResultsList.contentHeight + 24)
-        x: Math.max(12, Math.min(root.width - width - 12, globalSearchField.mapToItem(root, 0, 0).x))
-        y: globalSearchField.mapToItem(root, 0, globalSearchField.height + 8).y
+        x: Math.max(12, Math.min(root.width - width - 12, appHeader.searchField.mapToItem(appHeader.parent, 0, 0).x))
+        y: appHeader.searchField.mapToItem(appHeader.parent, 0, appHeader.searchField.height + 8).y
         padding: 8
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
@@ -1025,7 +807,7 @@ ApplicationWindow {
         width: 420
         height: 420
         x: root.width - width - 18
-        y: topHeader.height + 10
+        y: appHeader.height + 10
         padding: 12
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
@@ -1200,812 +982,6 @@ ApplicationWindow {
                         root.convertQuickFile()
                     }
                 }
-            }
-        }
-    }
-
-    component QueueScreen: ScrollView {
-        id: queueScreen
-        clip: true
-
-        ColumnLayout {
-            width: queueScreen.availableWidth
-            spacing: 12
-            anchors.margins: 12
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-                Label {
-                    Layout.fillWidth: true
-                    text: root.workspaceTitle()
-                    color: Theme.textPrimary
-                    font.family: Theme.displayFont
-                    font.pixelSize: Theme.fontHeading
-                    font.bold: true
-                }
-                Label {
-                    text: backend ? backend.queueCount + " " + I18n.t("files") : "0 " + I18n.t("files")
-                    color: Theme.textSecondary
-                    font.family: Theme.monoFont
-                    font.pixelSize: Theme.fontMeta
-                }
-                Label {
-                    visible: root.selectedPaths.length > 1
-                    text: I18n.t("selected") + ": " + root.selectedPaths.length
-                    color: Theme.accentPrimary
-                    font.family: Theme.monoFont
-                    font.pixelSize: Theme.fontMeta
-                }
-                SecondaryButton {
-                    Layout.fillWidth: false
-                    text: I18n.t("move_top")
-                    visible: root.selectedPaths.length > 1
-                    onClicked: backend && backend.moveSelectedPathsTop(root.selectedPaths)
-                }
-                SecondaryButton {
-                    Layout.fillWidth: false
-                    text: I18n.t("move_up")
-                    visible: root.selectedPaths.length > 1
-                    onClicked: backend && backend.moveSelectedPathsUp(root.selectedPaths)
-                }
-                SecondaryButton {
-                    Layout.fillWidth: false
-                    text: I18n.t("move_down")
-                    visible: root.selectedPaths.length > 1
-                    onClicked: backend && backend.moveSelectedPathsDown(root.selectedPaths)
-                }
-                SecondaryButton {
-                    Layout.fillWidth: false
-                    text: I18n.t("move_bottom")
-                    visible: root.selectedPaths.length > 1
-                    onClicked: backend && backend.moveSelectedPathsBottom(root.selectedPaths)
-                }
-                SecondaryButton {
-                    Layout.fillWidth: false
-                    text: I18n.t("batch_remove")
-                    visible: root.selectedPaths.length > 1
-                    onClicked: {
-                        if (backend)
-                            backend.removeSelectedPaths(root.selectedPaths)
-                        root.selectedPaths = []
-                        root.selectedPath = ""
-                        root.selectedName = ""
-                        root.selectedMediaType = ""
-                        root.selectedThumbnailSource = ""
-                        root.selectedPreviewFormat = ""
-                        root.selectedIndex = -1
-                    }
-                }
-                SecondaryButton {
-                    Layout.fillWidth: false
-                    text: I18n.t("batch_override")
-                    visible: root.selectedPaths.length > 1
-                    onClicked: root.openSidebarSection(5, "selected_override", -1)
-                }
-                SecondaryButton { Layout.fillWidth: false; text: I18n.t("add"); onClicked: root.addFilesForWorkspace() }
-                SecondaryButton { Layout.fillWidth: false; text: I18n.t("folder"); onClicked: root.addFolderForWorkspace() }
-                SecondaryButton {
-                    Layout.fillWidth: false
-                    Layout.preferredWidth: 132
-                    text: I18n.t("convert_all")
-                    enabled: backend ? (backend.queueCount > 0 && !backend.isRunning) : false
-                    onClicked: root.startIfValid()
-                }
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: backend && !backend.outputDirConfigured ? 56 : 0
-                visible: backend ? !backend.outputDirConfigured : false
-                radius: Theme.radiusPanel
-                color: Theme.warningSoft
-                border.width: 1
-                border.color: Theme.accentWarn
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 10
-                    Label {
-                        Layout.fillWidth: true
-                        text: I18n.t("output_folder_required_detail")
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontSmall
-                        wrapMode: Text.WordWrap
-                    }
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        text: I18n.t("choose_output_folder")
-                        onClicked: backend && backend.ensureOutputDirSelected()
-                    }
-                }
-            }
-
-            Panel {
-                title: "1-2-3"
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: root.compactMode ? 1 : 3
-                    rowSpacing: 8
-                    columnSpacing: 8
-                    SecondaryButton {
-                        Layout.fillWidth: true
-                        text: "1. " + I18n.t("add_files")
-                        onClicked: root.addFilesForWorkspace()
-                    }
-                    AppComboBox {
-                        id: wizardFormatCombo
-                        Layout.fillWidth: true
-                        model: root.formatOptionsFor(root.workspaceMediaType() === "all" ? "video" : root.workspaceMediaType())
-                        onActivated: {
-                            if (settingsPanel)
-                                settingsPanel.setOutputFormatFor(root.workspaceMediaType() === "all" ? "video" : root.workspaceMediaType(), currentText)
-                        }
-                    }
-                    PrimaryButton {
-                        Layout.fillWidth: true
-                        text: "3. " + I18n.t("start")
-                        enabled: backend ? (backend.queueCount > 0 && !backend.isRunning) : false
-                        onClicked: {
-                            if (settingsPanel)
-                                settingsPanel.setOutputFormatFor(root.workspaceMediaType() === "all" ? "video" : root.workspaceMediaType(), wizardFormatCombo.currentText)
-                            root.startIfValid()
-                        }
-                    }
-                }
-            }
-
-            Panel {
-                title: I18n.t("queue_tools")
-                RowLayout {
-                    Layout.fillWidth: true
-                    AppTextField {
-                        id: queueSearchField
-                        placeholderText: I18n.t("queue_search")
-                        text: root.queueSearchText
-                        onTextChanged: root.queueSearchText = text
-                    }
-                    AppComboBox {
-                        id: queueStatusFilterCombo
-                        Layout.preferredWidth: 150
-                        model: ["all", "pending", "processing", "done", "failed", "skipped", "cancelled"]
-                        onActivated: root.queueStatusFilter = currentText
-                    }
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        text: I18n.t("errors_only")
-                        enabled: backend ? backend.failedCount > 0 : false
-                        onClicked: {
-                            root.queueStatusFilter = "failed"
-                            queueStatusFilterCombo.currentIndex = 4
-                        }
-                    }
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    AppCheckBox { text: I18n.t("show_thumbnail"); checked: root.queueShowThumbnail; onToggled: root.queueShowThumbnail = checked }
-                    AppCheckBox { text: I18n.t("queue_show_size"); checked: root.queueShowSize; onToggled: root.queueShowSize = checked }
-                    AppCheckBox { text: I18n.t("queue_show_duration"); checked: root.queueShowDuration; onToggled: root.queueShowDuration = checked }
-                    AppCheckBox { text: I18n.t("queue_show_codec"); checked: root.queueShowCodec; onToggled: root.queueShowCodec = checked }
-                    AppCheckBox { text: I18n.t("queue_show_output"); checked: root.queueShowOutput; onToggled: root.queueShowOutput = checked }
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    AppCheckBox { text: I18n.t("queue_show_progress"); checked: root.queueShowProgress; onToggled: root.queueShowProgress = checked }
-                    AppCheckBox { text: I18n.t("show_metrics"); checked: root.queueShowMetrics; onToggled: root.queueShowMetrics = checked }
-                    AppCheckBox { text: I18n.t("show_actions"); checked: root.queueShowActions; onToggled: root.queueShowActions = checked }
-                    Item { Layout.fillWidth: true }
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        text: "🛡️ " + I18n.t("preflight")
-                        onClicked: backend && backend.refreshPreflight(collectSettings())
-                    }
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        text: "📌 " + I18n.t("priority")
-                        onClicked: backend && backend.sortQueueByPriority()
-                    }
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        text: I18n.t("retry")
-                        visible: backend ? backend.failedCount > 0 : false
-                        onClicked: backend && backend.retryFailed()
-                    }
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        text: "🧹 " + I18n.t("cleanup_done")
-                        enabled: backend ? backend.queueCount > 0 : false
-                        onClicked: backend && backend.cleanupQueue("done")
-                    }
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        text: "🧹 " + I18n.t("cleanup_failed")
-                        enabled: backend ? backend.queueCount > 0 : false
-                        onClicked: backend && backend.cleanupQueue("failed")
-                    }
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        text: "🧹 " + I18n.t("cleanup_missing")
-                        enabled: backend ? backend.queueCount > 0 : false
-                        onClicked: backend && backend.cleanupQueue("missing")
-                    }
-                    SecondaryButton {
-                        Layout.fillWidth: false
-                        text: "📊 " + I18n.t("refresh_preview")
-                        enabled: backend ? backend.queueCount > 0 : false
-                        onClicked: backend && backend.refreshOutputPreview(collectSettings())
-                    }
-                    Item { Layout.fillWidth: true }
-                }
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: backend && backend.failedCount > 0 ? 34 : 0
-                    visible: backend ? backend.failedCount > 0 : false
-                    radius: Theme.radiusButton
-                    color: Theme.dangerSoft
-                    border.width: 1
-                    border.color: Theme.accentError
-                    Label {
-                        anchors.fill: parent
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 10
-                        verticalAlignment: Text.AlignVCenter
-                        text: I18n.t("failed_items") + ": " + (backend ? backend.failedCount : 0)
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontMeta
-                        elide: Text.ElideRight
-                    }
-                }
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: backend && backend.hasLastError ? 92 : 0
-                    visible: backend ? backend.hasLastError : false
-                    radius: Theme.radiusPanel
-                    color: Theme.dangerSoft
-                    border.width: 1
-                    border.color: Theme.accentError
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 10
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 3
-                            Label {
-                                Layout.fillWidth: true
-                                text: backend ? backend.lastErrorTitle : ""
-                                color: Theme.textPrimary
-                                font.pixelSize: Theme.fontSizeSm
-                                font.bold: true
-                                elide: Text.ElideRight
-                            }
-                            Label {
-                                Layout.fillWidth: true
-                                text: backend ? I18n.t("reason") + ": " + backend.lastErrorDetails : ""
-                                color: Theme.textSecondary
-                                font.pixelSize: Theme.fontSizeSm
-                                maximumLineCount: 2
-                                wrapMode: Text.WordWrap
-                                elide: Text.ElideRight
-                            }
-                        }
-                        SecondaryButton {
-                            Layout.fillWidth: false
-                            Layout.preferredWidth: 142
-                            text: I18n.t("copy_log")
-                            onClicked: backend && backend.copyLastErrorLog()
-                        }
-                        SecondaryButton {
-                            Layout.fillWidth: false
-                            Layout.preferredWidth: 76
-                            text: I18n.t("clear")
-                            onClicked: backend && backend.clearLastError()
-                        }
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 12
-
-                Panel {
-                    title: "🛡️ " + I18n.t("preflight")
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 1
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Label {
-                            Layout.fillWidth: true
-                            text: backend ? backend.preflightSummary : ""
-                            color: backend && backend.preflightOk ? Theme.statusSuccess : Theme.accentError
-                            font.pixelSize: Theme.fontSizeSm
-                            wrapMode: Text.WordWrap
-                        }
-                        SecondaryButton {
-                            Layout.fillWidth: false
-                            Layout.preferredWidth: 110
-                            text: I18n.t("check")
-                            onClicked: backend && backend.refreshPreflight(collectSettings())
-                        }
-                    }
-                    Repeater {
-                        model: backend ? backend.preflightErrors : []
-                        delegate: Label {
-                            Layout.fillWidth: true
-                            text: "❌ " + modelData
-                            color: Theme.accentError
-                            font.pixelSize: Theme.fontMeta
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-                    Repeater {
-                        model: backend ? backend.preflightWarnings : []
-                        delegate: Label {
-                            Layout.fillWidth: true
-                            text: "⚠️ " + modelData
-                            color: Theme.accentWarn
-                            font.pixelSize: Theme.fontMeta
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-                }
-
-                Panel {
-                    title: "📊 " + I18n.t("output_preview")
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 1
-                    Label {
-                        Layout.fillWidth: true
-                        text: backend ? backend.outputPreviewText : ""
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontSizeSm
-                        wrapMode: Text.WordWrap
-                        maximumLineCount: 3
-                        elide: Text.ElideRight
-                    }
-                    Label {
-                        Layout.fillWidth: true
-                        text: backend ? I18n.t("output") + ": " + backend.selectedPreviewOutput : ""
-                        color: Theme.textSecondary
-                        font.family: Theme.monoFont
-                        font.pixelSize: Theme.fontMeta
-                        elide: Text.ElideMiddle
-                    }
-                    Label {
-                        Layout.fillWidth: true
-                        text: backend ? "FFmpeg: " + backend.selectedPreviewCommand : ""
-                        color: Theme.textDisabled
-                        font.family: Theme.monoFont
-                        font.pixelSize: Theme.fontMeta
-                        maximumLineCount: 2
-                        wrapMode: Text.WrapAnywhere
-                        elide: Text.ElideRight
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        SecondaryButton {
-                            Layout.fillWidth: false
-                            text: "📋 " + I18n.t("copy_command")
-                            onClicked: backend && backend.copyDryRunCommand(collectSettings())
-                        }
-                        SecondaryButton {
-                            Layout.fillWidth: false
-                            text: "📄 Script"
-                            onClicked: backend && backend.exportCommandScript(collectSettings())
-                        }
-                        Item { Layout.fillWidth: true }
-                    }
-                }
-            }
-
-            Panel {
-                id: selectedPreviewPanel
-                visible: root.selectedPath.length > 0 && ["image", "video", "text"].indexOf(root.selectedMediaType) >= 0
-                title: root.selectedMediaType === "image" ? I18n.t("photo_preview")
-                     : root.selectedMediaType === "video" ? I18n.t("video_preview")
-                     : I18n.t("text_preview")
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-
-                    Rectangle {
-                        Layout.preferredWidth: Math.min(520, Math.max(320, queueScreen.availableWidth * 0.44))
-                        Layout.preferredHeight: 300
-                        radius: Theme.radiusPanel
-                        color: Theme.input
-                        border.width: 1
-                        border.color: Theme.borderSubtle
-                        clip: true
-
-                        Image {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            source: (root.selectedMediaType === "image" || root.selectedMediaType === "video") ? root.selectedThumbnailSource : ""
-                            fillMode: Image.PreserveAspectFit
-                            asynchronous: true
-                            visible: source.toString().length > 0
-                        }
-
-                        ScrollView {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            visible: root.selectedMediaType === "text"
-                            clip: true
-                            Label {
-                                width: selectedPreviewPanel.width > 0 ? Math.max(280, selectedPreviewPanel.width * 0.38) : 360
-                                text: backend ? backend.readTextPreview(root.selectedPath) : ""
-                                color: Theme.textPrimary
-                                font.family: Theme.monoFont
-                                font.pixelSize: Theme.fontMeta
-                                wrapMode: Text.WrapAnywhere
-                            }
-                        }
-
-                        Label {
-                            anchors.centerIn: parent
-                            width: parent.width - 28
-                            visible: root.selectedMediaType !== "text" && root.selectedThumbnailSource.length === 0
-                            text: root.selectedMediaType === "video" ? I18n.t("preview_frame_pending") : I18n.t("preview_unavailable")
-                            color: Theme.textSecondary
-                            font.pixelSize: Theme.fontSmall
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: root.selectedName || root.selectedPath
-                            color: Theme.textPrimary
-                            font.pixelSize: Theme.fontSizeLg
-                            font.bold: true
-                            elide: Text.ElideMiddle
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: root.selectedPath
-                            color: Theme.textSecondary
-                            font.family: Theme.monoFont
-                            font.pixelSize: Theme.fontMeta
-                            elide: Text.ElideMiddle
-                        }
-
-                        GridLayout {
-                            Layout.fillWidth: true
-                            columns: 2
-                            rowSpacing: 8
-                            columnSpacing: 8
-
-                            FieldLabel { text: I18n.t("media_type") }
-                            Label {
-                                Layout.fillWidth: true
-                                text: root.selectedMediaType.toUpperCase()
-                                color: Theme.textSecondary
-                                font.family: Theme.monoFont
-                                font.pixelSize: Theme.fontMeta
-                            }
-
-                            FieldLabel { text: I18n.t("output_format") }
-                            AppComboBox {
-                                id: selectedPreviewFormatCombo
-                                Layout.fillWidth: true
-                                model: root.formatOptionsFor(root.selectedMediaType)
-                                currentIndex: Math.max(0, find(root.selectedPreviewFormat))
-                                onActivated: root.selectedPreviewFormat = currentText
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            SecondaryButton {
-                                text: I18n.t("save_format")
-                                enabled: root.selectedPath.length > 0 && selectedPreviewFormatCombo.currentText.length > 0
-                                onClicked: root.saveSelectedFormat(selectedPreviewFormatCombo.currentText)
-                            }
-                            PrimaryButton {
-                                text: I18n.t("convert_this_file")
-                                enabled: backend ? (!backend.isRunning && root.selectedPath.length > 0 && selectedPreviewFormatCombo.currentText.length > 0) : false
-                                onClicked: root.convertSelectedFormat(selectedPreviewFormatCombo.currentText)
-                            }
-                            SecondaryButton {
-                                text: I18n.t("change")
-                                onClicked: root.openSelectedSettings()
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: root.selectedMediaType === "image"
-                            spacing: 8
-                            SecondaryButton { text: I18n.t("photo_quality"); onClicked: root.openSidebarSection(5, "images_sheets", root.navIndexFor(5, "images_sheets")) }
-                            SecondaryButton { text: I18n.t("resize_crop"); onClicked: root.openSidebarSection(5, "video", root.navIndexFor(5, "video")) }
-                            SecondaryButton { text: I18n.t("watermark_text"); onClicked: root.openSidebarSection(5, "watermark_text", root.navIndexFor(5, "watermark_text")) }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: root.selectedMediaType === "video"
-                            spacing: 8
-                            SecondaryButton { text: I18n.t("video_editor"); onClicked: root.openSidebarSection(5, "video_editor", root.navIndexFor(5, "video_editor")) }
-                            SecondaryButton { text: I18n.t("trim_size"); onClicked: root.openSidebarSection(5, "video", root.navIndexFor(5, "video")) }
-                            SecondaryButton { text: I18n.t("audio_subtitles"); onClicked: root.openSidebarSection(5, "audio_subtitles", root.navIndexFor(5, "audio_subtitles")) }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: root.selectedMediaType === "text"
-                            spacing: 8
-                            SecondaryButton { text: I18n.t("text_formats"); onClicked: root.openSidebarSection(5, "core", root.navIndexFor(5, "core")) }
-                            SecondaryButton { text: I18n.t("output"); onClicked: root.openSidebarSection(5, "output", root.navIndexFor(5, "output")) }
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.max(360, root.height - 360)
-                radius: Theme.radiusPanel
-                color: Theme.bgSurface
-                border.width: 1
-                border.color: Theme.bgBorder
-                clip: true
-
-                DropArea {
-                    anchors.fill: parent
-                    visible: backend ? backend.queueCount === 0 : true
-                    enabled: visible
-                    z: 10
-                    onDropped: function(drop) {
-                        if (drop.hasUrls) {
-                            backend && backend.addDroppedUrls(drop.urls)
-                            drop.acceptProposedAction()
-                        }
-                    }
-                }
-
-                DropArea {
-                    id: queueAppendDropArea
-                    objectName: "queueAppendDropArea"
-                    anchors.fill: parent
-                    visible: backend ? backend.queueCount > 0 : false
-                    enabled: visible
-                    keys: ["text/uri-list"]
-                    z: 30
-                    onDropped: function(drop) {
-                        if (drop.hasUrls) {
-                            backend && backend.addDroppedUrls(drop.urls)
-                            drop.acceptProposedAction()
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    visible: queueAppendDropArea.containsDrag
-                    z: 29
-                    radius: Theme.radiusMd
-                    color: Theme.accentSoft
-                    border.width: 1
-                    border.color: Theme.accent
-                    opacity: 0.94
-
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        width: Math.min(parent.width - 32, 520)
-                        spacing: Theme.space2
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: I18n.t("drop_append_title")
-                            color: Theme.textPrimary
-                            font.family: Theme.displayFont
-                            font.pixelSize: Theme.fontSizeLg
-                            font.bold: true
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.WordWrap
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: I18n.t("drop_append_hint")
-                            color: Theme.textSecondary
-                            font.pixelSize: Theme.fontSizeSm
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-                }
-
-                ColumnLayout {
-                    id: emptyQueueState
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width - 28, 680)
-                    visible: backend ? backend.queueCount === 0 : true
-                    spacing: Theme.space3
-
-                    DropZone {
-                        objectName: "queueDropZone"
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 260
-                        Component.onCompleted: root.queueDropZoneHeight = height
-                        onHeightChanged: root.queueDropZoneHeight = height
-                        onFilesDropped: function(urls) { backend && backend.addDroppedUrls(urls) }
-                        onClicked: root.addFilesForWorkspace()
-                    }
-
-                    RowLayout {
-                        Layout.alignment: Qt.AlignHCenter
-                        spacing: Theme.space2
-                        PrimaryButton {
-                            Layout.fillWidth: false
-                            Layout.preferredWidth: 150
-                            text: I18n.t("add_files")
-                            onClicked: root.addFilesForWorkspace()
-                        }
-                        SecondaryButton {
-                            Layout.fillWidth: false
-                            Layout.preferredWidth: 150
-                            text: I18n.t("add_folder")
-                            onClicked: root.addFolderForWorkspace()
-                        }
-                        SecondaryButton {
-                            Layout.fillWidth: false
-                            Layout.preferredWidth: 150
-                            text: I18n.t("youtube_url")
-                            onClicked: root.openTopMode("downloads")
-                        }
-                    }
-                }
-
-                ListView {
-                    id: queueList
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    visible: backend ? backend.queueCount > 0 : false
-                    model: backend ? backend.queueModel : null
-                    clip: true
-                    spacing: 8
-                    cacheBuffer: 400
-                    reuseItems: true
-                    boundsBehavior: Flickable.StopAtBounds
-
-                    delegate: QueueItemCard {
-                        property bool matchesQueueFilter: root.queueItemMatches(model.name, model.path, model.mediaType, model.status)
-                        visible: matchesQueueFilter
-                        height: matchesQueueFilter ? implicitHeight : 0
-                        fileName: model.name
-                        filePath: model.path
-                        mediaType: model.mediaType
-                        status: model.status
-                        errorText: model.errorText
-                        outputPath: model.outputPath || model.previewOutput
-                        durationText: model.durationText
-                        sizeText: model.sizeText
-                        thumbnailSource: model.thumbnailSource
-                        progress: model.progress
-                        etaText: model.etaText
-                        speedText: model.speedText
-                        predictedSizeText: model.predictedSizeText
-                        compressionText: model.compressionText
-                        smartRecommendation: model.smartRecommendation
-                        pinned: model.pinned
-                        priority: model.priority
-                        exitCode: model.exitCode
-                        hasOverride: model.hasOverride
-                        selected: root.isPathSelected(model.path)
-                        highLoadMode: root.highLoadMode
-                        showThumbnail: root.queueShowThumbnail
-                        showMetrics: root.queueShowMetrics
-                        showActions: root.queueShowActions
-                        showSize: root.queueShowSize
-                        showDuration: root.queueShowDuration
-                        showCodec: root.queueShowCodec
-                        showOutput: root.queueShowOutput
-                        showProgress: root.queueShowProgress
-                        shimmerPhase: root.sharedShimmerPhase
-                        itemIndex: index
-                        onSelectedRequested: function(path, modifiers) {
-                            root.selectQueuePath(path, index, modifiers, model.name, model.mediaType, model.thumbnailSource)
-                        }
-                        onRetryRequested: function(path) { backend && backend.retryTaskPath(path) }
-                        onSkipRequested: function(path) { backend && backend.skipCurrentFile() }
-                        onRemoveRequested: function(path) {
-                            if (root.selectedPath === path) {
-                                root.selectedPath = ""
-                                root.selectedName = ""
-                                root.selectedMediaType = ""
-                                root.selectedThumbnailSource = ""
-                                root.selectedPreviewFormat = ""
-                            }
-                            backend && backend.removeTaskPath(path)
-                        }
-                        onOverrideRequested: function(path) {
-                            root.selectedPath = path
-                            root.selectedIndex = index
-                            root.openSidebarSection(5, "selected_override", -1)
-                            if (backend)
-                                backend.selectQueuePath(path)
-                        }
-                        onOpenOutputRequested: function(path) {
-                            backend && backend.openOutputForPath(path)
-                        }
-                        onQuickConvertRequested: function(path, name, mediaType) {
-                            root.openQuickConvert(path, name, mediaType, index)
-                        }
-                        onMoveRequested: function(path, targetIndex) {
-                            if (backend)
-                                backend.movePathToIndex(path, targetIndex)
-                        }
-                        onPinnedRequested: function(path) { backend && backend.toggleTaskPinned(path) }
-                        onPriorityRequested: function(path, priority) { backend && backend.setTaskPriority(path, priority) }
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 104
-                spacing: 12
-
-                Rectangle {
-                    Layout.preferredWidth: 230
-                    Layout.fillHeight: true
-                    radius: Theme.radiusPanel
-                    color: Theme.bgSurface
-                    border.width: 1
-                    border.color: Theme.bgBorder
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 12
-                        ArcSpinner {
-                            arcSize: 56
-                            progress: backend ? backend.totalProgress : 0
-                            indeterminate: backend ? (backend.isRunning && backend.totalProgress <= 0.001) : false
-                        }
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 4
-                            Label { text: I18n.t("total"); color: Theme.textMuted; font.family: Theme.monoFont; font.pixelSize: Theme.fontMeta }
-                            Label { text: backend ? Math.round(backend.totalProgress * 100) + "%" : "0%"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: Theme.fontHeading; font.bold: true }
-                            Label { text: backend ? backend.totalProgressText : "--"; color: Theme.textSecondary; font.family: Theme.monoFont; font.pixelSize: Theme.fontMeta; elide: Text.ElideRight; Layout.fillWidth: true }
-                        }
-                    }
-                }
-
-                SessionStats {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    doneCount: backend ? backend.completedCount : 0
-                    failedCount: backend ? backend.failedCount : 0
-                    skippedCount: backend ? backend.skippedCount : 0
-                    totalCount: backend ? backend.queueCount : 0
-                    elapsedText: backend ? backend.sessionElapsedText : "00:00"
-                    etaText: backend ? backend.sessionEtaText : "--:--"
-                    avgSpeedText: backend ? backend.sessionAvgSpeedText : "--"
-                    savedText: backend ? backend.sessionSavedText : "0 B"
-                    inputText: backend ? backend.sessionInputText : "0 B"
-                    outputText: backend ? backend.sessionOutputText : "0 B"
-                }
-            }
-
-            LogPanel {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 160
             }
         }
     }
@@ -2193,7 +1169,7 @@ ApplicationWindow {
                 id: youtubeVideoSegment
                 Layout.fillWidth: true
                 Layout.preferredHeight: 54
-                text: "🎬 " + I18n.t("video")
+                text: I18n.t("video")
                 hoverEnabled: true
                 onClicked: selectedDownloadMode = "video"
                 background: Rectangle {
@@ -2215,7 +1191,7 @@ ApplicationWindow {
                 id: youtubeAudioSegment
                 Layout.fillWidth: true
                 Layout.preferredHeight: 54
-                text: "🎧 " + I18n.t("audio_only")
+                text: I18n.t("audio_only")
                 hoverEnabled: true
                 onClicked: selectedDownloadMode = "audio"
                 background: Rectangle {
@@ -2377,7 +1353,7 @@ ApplicationWindow {
         }
         Label {
             Layout.fillWidth: true
-            text: backend ? "🍪 " + backend.youtubeCookiesStatus : "🍪 Cookies: --"
+                text: backend ? backend.youtubeCookiesStatus : "Cookies: --"
             color: backend && backend.youtubeCookiesStatus.indexOf("Cookies: підключено") >= 0 ? Theme.statusSuccess : Theme.textMuted
             font.pixelSize: Theme.fontMeta
             elide: Text.ElideRight
@@ -2405,7 +1381,7 @@ ApplicationWindow {
         Label {
             Layout.fillWidth: true
             visible: backend ? backend.youtubePlaylistPreview.length > 0 : false
-            text: backend ? "📦 " + backend.youtubePlaylistPreview : ""
+                text: backend ? backend.youtubePlaylistPreview : ""
             color: Theme.textSecondary
             font.pixelSize: Theme.fontMeta
             wrapMode: Text.WordWrap
@@ -2474,7 +1450,7 @@ ApplicationWindow {
                     Label {
                         Layout.fillWidth: true
                         visible: backend ? !!backend.youtubePreviewInfo.hint : false
-                        text: backend ? backend.youtubePreviewInfo.hint : ""
+                        text: backend ? String(backend.youtubePreviewInfo.hint || "") : ""
                         color: Theme.accentWarn
                         font.pixelSize: Theme.fontMeta
                         wrapMode: Text.WordWrap
@@ -2486,7 +1462,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             SecondaryButton {
                 Layout.fillWidth: true
-                text: "⬇️ " + I18n.t("add_to_queue")
+                text: I18n.t("add_to_queue")
                 enabled: backend && String(youtubeUrlField.text).trim().length > 0
                 onClicked: startDownload(selectedDownloadMode)
             }
@@ -2526,7 +1502,7 @@ ApplicationWindow {
                 spacing: 8
                 Label {
                     Layout.fillWidth: true
-                    text: "⬇️ " + I18n.t("download_queue")
+                    text: I18n.t("download_queue")
                     color: Theme.textPrimary
                     font.pixelSize: Theme.fontSizeSm
                     font.bold: true

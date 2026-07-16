@@ -6,25 +6,34 @@ QtObject {
     readonly property bool lightMode: activeMode === "light"
     readonly property bool highContrastMode: activeMode === "high_contrast"
 
-    readonly property color bgPrimary: highContrastMode ? "#000000" : lightMode ? "#F9FAFB" : "#0E0F11"
-    readonly property color bgSecondary: highContrastMode ? "#080808" : lightMode ? "#FFFFFF" : "#141517"
-    readonly property color bgElevated: highContrastMode ? "#111111" : lightMode ? "#FFFFFF" : "#1C1D21"
-    readonly property color borderSubtle: highContrastMode ? "#FFFFFF" : lightMode ? "#E5E7EB" : "#27282D"
-    readonly property color borderStrong: highContrastMode ? "#FFFFFF" : lightMode ? "#D1D5DB" : "#36383D"
+    // Semantic desktop colour tokens. Legacy aliases below keep existing controls compatible.
+    // Dark mode: black and green surfaces. Light mode: white and blue surfaces.
+    readonly property color windowBackground: highContrastMode ? "#000000" : lightMode ? "#F4F8FF" : "#050907"
+    readonly property color sidebarBackground: highContrastMode ? "#000000" : lightMode ? "#FFFFFF" : "#07140F"
+    readonly property color panelBackground: highContrastMode ? "#000000" : lightMode ? "#FFFFFF" : "#0B2018"
+    readonly property color panelSecondary: highContrastMode ? "#0A0A0A" : lightMode ? "#EFF6FF" : "#102D21"
+    readonly property color borderDefault: highContrastMode ? "#FFFFFF" : lightMode ? "#BFDBFE" : "#2E6249"
+    readonly property color borderMuted: highContrastMode ? "#A8A8A8" : lightMode ? "#DBEAFE" : "#1E4936"
 
-    readonly property color textPrimary: highContrastMode ? "#FFFFFF" : lightMode ? "#111827" : "#F3F4F6"
-    readonly property color textSecondary: highContrastMode ? "#F5F5F5" : lightMode ? "#6B7280" : "#9CA3AF"
-    readonly property color textDisabled: highContrastMode ? "#CFCFCF" : lightMode ? "#9CA3AF" : "#4B5563"
+    readonly property color bgPrimary: windowBackground
+    readonly property color bgSecondary: panelBackground
+    readonly property color bgElevated: panelSecondary
+    readonly property color borderSubtle: borderMuted
+    readonly property color borderStrong: borderDefault
+
+    readonly property color textPrimary: highContrastMode ? "#FFFFFF" : lightMode ? "#102A56" : "#F0FFF6"
+    readonly property color textSecondary: highContrastMode ? "#FFFFFF" : lightMode ? "#3D5E8B" : "#B8D9C4"
+    readonly property color textDisabled: highContrastMode ? "#C8C8C8" : lightMode ? "#6B88B3" : "#7EAB90"
     readonly property color textOnAccent: "#FFFFFF"
 
-    readonly property color accent: highContrastMode ? "#FFFF00" : (typeof backend !== "undefined" && backend ? backend.accentColor : "#5E6AD2")
-    readonly property color accentHover: highContrastMode ? "#FFFF66" : lightMode ? "#4F46E5" : "#6E7BF2"
-    readonly property color accentPressed: highContrastMode ? "#D6D600" : lightMode ? "#4338CA" : "#4E58B2"
+    readonly property color accent: highContrastMode ? "#FFFF00" : (typeof backend !== "undefined" && backend ? backend.accentColor : "#2563EB")
+    readonly property color accentHover: highContrastMode ? "#FFFF66" : lightMode ? "#1D4ED8" : "#3B82F6"
+    readonly property color accentPressed: highContrastMode ? "#D6D600" : lightMode ? "#1E40AF" : "#1D4ED8"
 
-    readonly property color statusSuccess: "#10B981"
-    readonly property color statusWarning: "#F59E0B"
-    readonly property color statusError: "#EF4444"
-    readonly property color statusRunning: "#3B82F6"
+    readonly property color statusSuccess: highContrastMode ? "#00FF00" : lightMode ? "#15803D" : "#4ADE80"
+    readonly property color statusWarning: highContrastMode ? "#FFFF00" : lightMode ? "#A16207" : "#FACC15"
+    readonly property color statusError: highContrastMode ? "#FF5555" : lightMode ? "#DC2626" : "#FB7185"
+    readonly property color statusRunning: accent
 
     readonly property int fontSizeXs: 12
     readonly property int fontSizeSm: 13
@@ -39,16 +48,16 @@ QtObject {
     readonly property int space5: 24
     readonly property int space6: 32
 
-    readonly property int radiusSm: 6
-    readonly property int radiusMd: 12
-    readonly property int radiusLg: 16
+    readonly property int radiusSm: 4
+    readonly property int radiusMd: 6
+    readonly property int radiusLg: 8
 
-    readonly property string displayFont: "Inter"
-    readonly property string bodyFont: "Inter"
+    readonly property string displayFont: "Segoe UI"
+    readonly property string bodyFont: "Segoe UI"
     readonly property string monoFont: "JetBrains Mono"
 
-    readonly property int titlebarHeight: 56
-    readonly property int sidebarWidth: 220
+    readonly property int titlebarHeight: 52
+    readonly property int sidebarWidth: 236
     readonly property int compactBreakpoint: 1120
     readonly property int maxWidth: 1480
     readonly property int buttonHeight: 36
@@ -58,20 +67,21 @@ QtObject {
     readonly property int sectionPadding: space4
 
     readonly property color transparent: "transparent"
-    readonly property color input: highContrastMode ? "#000000" : lightMode ? "#FFFFFF" : "#18191B"
-    readonly property color inputHover: highContrastMode ? "#101010" : lightMode ? "#F3F4F6" : "#232427"
-    readonly property color panelHover: highContrastMode ? "#151515" : lightMode ? "#F9FAFB" : "#232427"
-    readonly property color accentSoft: highContrastMode ? "#333300" : lightMode ? "#EEF2FF" : "#1E2238"
-    readonly property color successSoft: highContrastMode ? "#003300" : lightMode ? "#ECFDF5" : "#064E3B"
-    readonly property color warningSoft: highContrastMode ? "#3A3200" : lightMode ? "#FFFBEB" : "#78350F"
-    readonly property color dangerSoft: highContrastMode ? "#3A0000" : lightMode ? "#FEF2F2" : "#7F1D1D"
-    readonly property color disabledBg: highContrastMode ? "#080808" : lightMode ? "#F3F4F6" : "#1F2937"
-    readonly property color selection: highContrastMode ? "#202000" : lightMode ? "#E0E7FF" : "#3730A3"
-    readonly property color progressTrack: highContrastMode ? "#000000" : lightMode ? "#E5E7EB" : "#374151"
+    readonly property color input: highContrastMode ? "#000000" : lightMode ? "#FFFFFF" : "#07140F"
+    readonly property color inputHover: highContrastMode ? "#101010" : lightMode ? "#F8FBFF" : "#0D261B"
+    readonly property color panelHover: highContrastMode ? "#171717" : lightMode ? "#E8F1FF" : "#143A2A"
+    readonly property color accentSoft: highContrastMode ? "#292900" : lightMode ? "#DBEAFE" : "#102B47"
+    readonly property color successSoft: highContrastMode ? "#003300" : lightMode ? "#DCFCE7" : "#123D29"
+    readonly property color warningSoft: highContrastMode ? "#3A3200" : lightMode ? "#FEF3C7" : "#453C0D"
+    readonly property color dangerSoft: highContrastMode ? "#3A0000" : lightMode ? "#FEE2E2" : "#4A1C28"
+    readonly property color disabledBg: highContrastMode ? "#080808" : lightMode ? "#E1ECFC" : "#163626"
+    readonly property color selectionBackground: highContrastMode ? "#292900" : lightMode ? "#DBEAFE" : "#102B47"
+    readonly property color selection: selectionBackground
+    readonly property color progressTrack: highContrastMode ? "#000000" : lightMode ? "#D8E8FF" : "#1E4936"
     readonly property color progressHighlight: accent
-    readonly property color overlayHover: highContrastMode ? "#171717" : lightMode ? "#F3F4F6" : "#27272A"
-    readonly property color overlayPressed: highContrastMode ? "#222222" : lightMode ? "#E5E7EB" : "#3F3F46"
-    readonly property color subtleFill: highContrastMode ? "#050505" : lightMode ? "#F9FAFB" : "#1F2937"
+    readonly property color overlayHover: highContrastMode ? "#171717" : lightMode ? "#E8F1FF" : "#143A2A"
+    readonly property color overlayPressed: highContrastMode ? "#222222" : lightMode ? "#D8E8FF" : "#1E4936"
+    readonly property color subtleFill: highContrastMode ? "#050505" : lightMode ? "#F8FBFF" : "#0D261B"
 
     readonly property int fontMeta: fontSizeXs
     readonly property int fontSmall: fontSizeSm
@@ -108,7 +118,7 @@ QtObject {
     readonly property color sectionAlt: bgElevated
     readonly property color hover: overlayHover
     readonly property color border: borderSubtle
-    readonly property color focusRing: accent
+    readonly property color focusRing: highContrastMode ? "#FFFF00" : lightMode ? "#2563EB" : "#60A5FA"
     readonly property color text: textPrimary
     readonly property color muted: textSecondary
     readonly property color subtleText: textDisabled

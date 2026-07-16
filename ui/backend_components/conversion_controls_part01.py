@@ -111,6 +111,21 @@ BODY = r'''    def _build_run_tasks(
             return
         self._start_conversion(dict(settings_map), only_paths={task_path})
 
+    @QtCore.Slot("QVariantList", "QVariantMap")
+    def startConversionForPaths(self, paths: List[Any], settings_map: Dict[str, Any]) -> None:
+        """Start only the selected queue items without altering queue state."""
+        selected_paths = {
+            Path(str(path or "").strip()).expanduser()
+            for path in paths
+            if str(path or "").strip()
+        }
+        selected_paths = {
+            path for path in selected_paths
+            if self.queue_model.item_by_path(path) is not None
+        }
+        if selected_paths:
+            self._start_conversion(dict(settings_map), only_paths=selected_paths)
+
     @QtCore.Slot()
     def retryFailed(self) -> None:
         if self._is_running:

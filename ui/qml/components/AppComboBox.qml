@@ -5,6 +5,15 @@ import App 1.0
 
 ComboBox {
     id: control
+    // Optional i18n prefix for enum-like models whose stored values must remain stable.
+    property string translationPrefix: ""
+
+    function labelFor(value) {
+        return translationPrefix.length > 0
+            ? I18n.t(translationPrefix + String(value))
+            : String(value)
+    }
+
     font.pixelSize: Theme.fontSizeSm
     implicitHeight: Theme.inputHeight
     leftPadding: 13
@@ -13,7 +22,7 @@ ComboBox {
     hoverEnabled: true
 
     contentItem: Label {
-        text: control.displayText
+        text: control.labelFor(control.displayText)
         color: control.enabled ? Theme.text : Theme.disabledText
         font: control.font
         verticalAlignment: Text.AlignVCenter
@@ -53,7 +62,7 @@ ComboBox {
         height: 38
 
         contentItem: Label {
-            text: String(modelData)
+            text: control.labelFor(modelData)
             color: Theme.text
             font: control.font
             elide: Text.ElideRight
