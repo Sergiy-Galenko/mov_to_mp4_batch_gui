@@ -21,16 +21,16 @@ THEME_STATE_PATH = APP_DATA_DIR / "theme_config.json"
 
 # Pre-defined accent color palettes
 ACCENT_PRESETS: list[dict[str, str]] = [
-    {"name": "Blue", "color": "#3D8EFF"},
-    {"name": "Purple", "color": "#8B5CF6"},
-    {"name": "Teal", "color": "#14B8A6"},
-    {"name": "Rose", "color": "#F43F5E"},
-    {"name": "Amber", "color": "#F59E0B"},
-    {"name": "Emerald", "color": "#10B981"},
-    {"name": "Cyan", "color": "#06B6D4"},
-    {"name": "Indigo", "color": "#6366F1"},
-    {"name": "Pink", "color": "#EC4899"},
-    {"name": "Orange", "color": "#F97316"},
+    {"name": "Blue", "color": "#2563EB"},
+    {"name": "Purple", "color": "#7C3AED"},
+    {"name": "Teal", "color": "#0F766E"},
+    {"name": "Rose", "color": "#E11D48"},
+    {"name": "Amber", "color": "#D97706"},
+    {"name": "Emerald", "color": "#15803D"},
+    {"name": "Cyan", "color": "#0891B2"},
+    {"name": "Indigo", "color": "#4F46E5"},
+    {"name": "Pink", "color": "#DB2777"},
+    {"name": "Orange", "color": "#EA580C"},
 ]
 
 # Layout mode definitions
@@ -64,19 +64,19 @@ class ThemeManager:
         self._state = load_json_state(path)
 
     def accent_color(self) -> str:
-        return str(self._state.get("accent_color") or "#3D8EFF")
+        return str(self._state.get("accent_color") or "#2563EB")
 
     def set_accent_color(self, color: str) -> None:
-        self._state["accent_color"] = str(color or "#3D8EFF")
+        self._state["accent_color"] = str(color or "#2563EB")
         self._save()
 
     def theme_mode(self) -> str:
         """Return 'dark', 'light', 'auto', or 'high_contrast'."""
-        return str(self._state.get("theme_mode") or "dark")
+        return str(self._state.get("theme_mode") or "light")
 
     def set_theme_mode(self, mode: str) -> None:
-        normalized = "auto" if mode == "system" else str(mode or "dark")
-        self._state["theme_mode"] = normalized if normalized in ("dark", "light", "auto", "high_contrast") else "dark"
+        normalized = "auto" if mode == "system" else str(mode or "light")
+        self._state["theme_mode"] = normalized if normalized in ("dark", "light", "auto", "high_contrast") else "light"
         self._save()
 
     def layout_mode(self) -> str:
