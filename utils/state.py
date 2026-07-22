@@ -46,11 +46,3 @@ def save_json_file(path: Path, state: Any) -> None:
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(tmp_path)
         raise
-
-
-def load_state(state_path: Path) -> dict[str, Any]:
-    return load_json_state(state_path)
-
-
-def save_state(state_path: Path, data: dict[str, Any]) -> None:
-    save_json_state(state_path, data)

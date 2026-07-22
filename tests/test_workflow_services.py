@@ -225,6 +225,22 @@ class WorkflowServicesTest(unittest.TestCase):
         self.assertTrue(restored[0].pinned)
         self.assertEqual(restored[0].priority, 3)
 
+    def test_queue_build_items_detects_duplicates_in_a_large_batch(self) -> None:
+        manager = QueueManager()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            paths = []
+            for index in range(20):
+                path = root / f"clip_{index}.mp4"
+                path.write_text("video", encoding="utf-8")
+                paths.extend((path, path))
+
+            items, duplicates, unsupported = manager.build_items(paths, [])
+
+        self.assertEqual(len(items), 20)
+        self.assertEqual(duplicates, 20)
+        self.assertEqual(unsupported, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -98,10 +98,11 @@ class QueueManager:
                 resolved = path.resolve()
             except Exception:
                 resolved = path
-            if resolved in existing_paths or any(item.path == resolved for item in added):
+            if resolved in existing_paths:
                 duplicate_count += 1
                 continue
             added.append(TaskItem(path=resolved, media_type=kind))
+            existing_paths.add(resolved)
         return added, duplicate_count, unsupported_count
 
     def deduplicate_by_path(self, items: Sequence[TaskItem]) -> tuple[list[TaskItem], int]:

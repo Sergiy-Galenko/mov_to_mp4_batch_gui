@@ -48,7 +48,6 @@ class ConverterService:
         self.current_output_path: Path | None = None
         self.media_info: dict[Path, MediaInfo] = {}
         self.prefetched_media_info: dict[Path, MediaInfo] = {}
-        self.prefetch_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="converter-ffprobe")
         self._output_path_lock = threading.Lock()
         self._reserved_output_paths: set[Path] = set()
 

@@ -32,6 +32,7 @@ class MediaPreviewService:
         count: int = 8,
         thumb_width: int = 160,
         thumb_height: int = 90,
+        duration: float | None = None,
     ) -> list[str]:
         """Generate a strip of equally-spaced thumbnails from a video.
 
@@ -49,7 +50,8 @@ class MediaPreviewService:
         if len(existing) >= count:
             return [str(path) for path in existing[:count]]
 
-        duration = self._get_duration(video_path)
+        if duration is None:
+            duration = self._get_duration(video_path)
         if duration <= 0:
             return []
 
@@ -191,7 +193,7 @@ class MediaPreviewService:
 
         if media_kind == "video":
             duration = self._get_duration(file_path)
-            thumbnails = self.thumbnail_strip(file_path)
+            thumbnails = self.thumbnail_strip(file_path, duration=duration)
             result = {
                 "type": "thumbnails",
                 "paths": thumbnails,

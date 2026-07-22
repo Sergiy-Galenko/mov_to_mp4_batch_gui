@@ -368,7 +368,7 @@ python -m pytest -q
 Current expected result:
 
 ```text
-96 passed
+124 passed, 3 subtests passed
 ```
 
 ## Build

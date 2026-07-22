@@ -40,13 +40,6 @@ def media_type(path: Path) -> str | None:
     return None
 
 
-def safe_output_name(out_dir: Path, in_path: Path, out_ext: str) -> Path:
-    out_ext = out_ext.lstrip(".")
-    base = in_path.stem
-    out_path = out_dir / f"{base}.{out_ext}"
-    return safe_output_path(out_path)
-
-
 def safe_output_path(out_path: Path) -> Path:
     if not out_path.exists():
         return out_path
@@ -70,13 +63,6 @@ def file_sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
                 break
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def partial_hash(path: Path, chunk_size: int = 65536) -> str:
-    try:
-        return file_sha256(path, max(chunk_size, 1024 * 1024))
-    except OSError:
-        return ""
 
 
 class _TemplateDict(dict):
