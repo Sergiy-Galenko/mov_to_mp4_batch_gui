@@ -1242,6 +1242,10 @@ class ConverterService:
         )
         self.current_proc = proc
         self.current_output_path = output_path
+        # A pause can be requested during process startup. Suspend the new FFmpeg
+        # process too, otherwise it would run until its first progress line.
+        if self.pause_event.is_set():
+            self._set_process_suspended(True)
         file_start = time.time()
 
         assert proc.stderr is not None

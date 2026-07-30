@@ -1,0 +1,56 @@
+name: Windows CI
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  test-and-portable-build:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      QT_QUICK_CONTROLS_STYLE: Basic
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint with Ruff
+        run: python -m ruff check app services ui utils tests cli.py main.py
+
+      - name: Run tests
+        run: python -m pytest -q --tb=short
+
+      - name: Install FFmpeg
+        run: choco install ffmpeg --no-progress --yes
+
+      - name: Build portable package
+        shell: pwsh
+        run: |
+          $ffmpeg = Get-ChildItem "$env:ChocolateyInstall\lib\ffmpeg" -Filter ffmpeg.exe -Recurse |
+            Where-Object { Test-Path (Join-Path $_.Directory.FullName 'ffprobe.exe') } |
+            Select-Object -First 1
+          if (-not $ffmpeg) { throw 'FFmpeg binaries were not installed.' }
+          $ffmpegDir = $ffmpeg.Directory.FullName
+          python scripts\build_pyinstaller.py --portable --ffmpeg-dir $ffmpegDir
+          $required = @(
+            'dist\MediaConverter\MediaConverter.exe',
+            'dist\MediaConverter\ffmpeg\ffmpeg.exe',
+            'dist\MediaConverter\ffmpeg\ffprobe.exe',
+            'dist\MediaConverter\portable.ini'
+          )
+          $required | ForEach-Object { if (-not (Test-Path $_)) { throw "Missing portable build file: $_" } }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MediaConverter-windows-portable
+          path: dist/MediaConverter
+          if-no-files-found: error

@@ -51,7 +51,8 @@ class QueueManager:
             status = str(raw.get("status") or TaskStatus.QUEUED)
             if status not in TASK_STATUSES:
                 status = TaskStatus.QUEUED
-            if pending_recovery and status in {TaskStatus.ANALYZING, TaskStatus.RUNNING, TaskStatus.PAUSED}:
+            was_interrupted = pending_recovery and status in {TaskStatus.ANALYZING, TaskStatus.RUNNING, TaskStatus.PAUSED}
+            if was_interrupted:
                 status = TaskStatus.QUEUED
             items.append(
                 TaskItem(
@@ -67,10 +68,10 @@ class QueueManager:
                     size_text=str(raw.get("size_text") or "—"),
                     thumbnail_path=str(raw.get("thumbnail_path") or ""),
                     content_hash=str(raw.get("content_hash") or ""),
-                    progress=float(raw.get("progress") or 0.0),
-                    eta_text=str(raw.get("eta_text") or ""),
-                    speed_text=str(raw.get("speed_text") or ""),
-                    elapsed_seconds=float(raw.get("elapsed_seconds") or 0.0),
+                    progress=0.0 if was_interrupted else float(raw.get("progress") or 0.0),
+                    eta_text="" if was_interrupted else str(raw.get("eta_text") or ""),
+                    speed_text="" if was_interrupted else str(raw.get("speed_text") or ""),
+                    elapsed_seconds=0.0 if was_interrupted else float(raw.get("elapsed_seconds") or 0.0),
                     input_bytes=int(raw.get("input_bytes") or 0),
                     output_bytes=int(raw.get("output_bytes") or 0),
                     predicted_output_bytes=int(raw.get("predicted_output_bytes") or 0),

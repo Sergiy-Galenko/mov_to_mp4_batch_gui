@@ -5,6 +5,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.models import ConversionSettings, TaskItem
 from services.converter_service import ConverterService
@@ -105,6 +106,18 @@ def drain_events(event_queue: "queue.Queue[tuple]") -> list[tuple]:
 
 
 class ConverterServiceTest(unittest.TestCase):
+    def test_pause_and_resume_control_the_current_windows_process(self) -> None:
+        fake = FakeFfmpegService()
+        service = ConverterService(fake, queue.Queue())
+        service.current_proc = type("Process", (), {"pid": 123, "poll": lambda self: None})()
+
+        with patch("services.converter_service.os.name", "nt"), patch.object(service, "_set_windows_process_suspended") as suspended:
+            service.pause()
+            service.resume()
+
+        self.assertEqual(suspended.call_args_list[0].args, (123, True))
+        self.assertEqual(suspended.call_args_list[1].args, (123, False))
+        self.assertFalse(service.pause_event.is_set())
     def test_skip_existing_marks_task_as_skipped(self) -> None:
         fake = FakeFfmpegService()
         events: queue.Queue[tuple] = queue.Queue()

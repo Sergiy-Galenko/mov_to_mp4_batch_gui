@@ -8,6 +8,7 @@ BODY = r'''    def _run_preflight(self, settings_map: Dict[str, Any], *, only_pa
             ffmpeg_path=self.ffmpegPath,
             include_queue=True,
             only_paths=only_paths,
+            media_info=self.media_info_cache,
         )
         self._preflight_result = self._apply_license_preflight(dict(result), dict(settings_map))
         self.preflightChanged.emit()

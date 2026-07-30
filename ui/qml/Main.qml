@@ -141,9 +141,6 @@ ApplicationWindow {
         if (!validateForm())
             return
         var settings = collectSettings()
-        var preflight = backend.refreshPreflight(settings)
-        if (!preflight.ok)
-            return
         backend.startConversion(settings)
     }
 

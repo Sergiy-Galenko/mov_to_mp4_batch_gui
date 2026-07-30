@@ -13,8 +13,11 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 - Batch conversion for video, image, audio, subtitle, and text files with automatic media-type aware output formats.
 - Right-click quick conversion: choose only the output format for one queued file and convert it immediately.
 - Queue controls for retry, skip, remove, reorder, multi-select, batch remove, and per-file overrides.
+- Crash-safe queue recovery: interrupted running or paused tasks are returned to the queue on the next launch.
+- Pause and resume active FFmpeg conversions from the bottom action bar.
 - Batch workflow automation with watch-folder auto-convert, folder rules, scheduler, completion actions, and HTTP/Discord/Telegram notifications.
 - Explicit output-folder selection before any conversion or URL download starts.
+- Start-time preflight checks file availability, output collisions and disk space, plus container/codec, audio-track, subtitle-stream, HDR, and fast-copy compatibility when FFprobe is available.
 - Presets for common formats and platform targets (iPhone, PlayStation 5, etc).
 - FFmpeg/FFprobe integration for metadata, thumbnails, progress, ETA, and previews.
 - Built-in document conversion between plain text, PDF, Word, Excel, PowerPoint, and OpenDocument-style formats; text/document-only conversion does not require FFmpeg.

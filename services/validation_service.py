@@ -1,12 +1,12 @@
 ﻿from __future__ import annotations
 
 import shutil
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
 from app.constants import OUT_AUDIO_FORMATS, OUT_IMAGE_FORMATS, OUT_SUBTITLE_FORMATS, OUT_TEXT_FORMATS, OUT_VIDEO_FORMATS
-from app.models import ConversionSettings, TaskItem
+from app.models import ConversionSettings, MediaInfo, TaskItem
 from app.paths import find_ffprobe
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
@@ -50,6 +50,7 @@ class ValidationService:
         include_queue: bool = True,
         require_output_dir: bool = True,
         only_paths: set[Path] | None = None,
+        media_info: Mapping[Path, MediaInfo] | None = None,
     ) -> dict[str, Any]:
         errors: dict[str, str] = {}
         warnings: list[str] = []
@@ -97,6 +98,13 @@ class ValidationService:
             if needs_ffmpeg:
                 self._validate_ffmpeg(ffmpeg_path, add_error, add_warning)
             self._validate_queue(queue_items, raw, settings, output_path, add_error, add_warning)
+            self._validate_media_compatibility(
+                queue_items,
+                raw,
+                dict(media_info or {}),
+                add_error,
+                add_warning,
+            )
 
         self._validate_format_compat(raw, add_warning)
 
@@ -297,6 +305,98 @@ class ValidationService:
             add_warning("WebM не сумісний з H.264/H.265; буде використано VP9 або AV1.")
         if out_video in {"mp4", "mov", "avi"} and codec == "VP9 (WebM)":
             add_warning("VP9 краще виводити у WebM; для MP4/MOV буде заміна на H.264.")
+
+    def _validate_media_compatibility(
+        self,
+        queue_items: list[TaskItem],
+        raw: dict[str, Any],
+        cached_info: dict[Path, MediaInfo],
+        add_error,
+        add_warning,
+    ) -> None:
+        """Check stream-dependent settings before the conversion thread starts."""
+        for item in queue_items:
+            if item.probe_data is not None:
+                cached_info.setdefault(item.path, item.probe_data)
+
+        missing_paths = [
+            item.path
+            for item in queue_items
+            if item.media_type in {"video", "audio"} and item.path not in cached_info
+        ]
+        probe_batch = getattr(self.ffmpeg, "probe_media_batch", None)
+        if missing_paths and getattr(self.ffmpeg, "ffprobe_path", None) and callable(probe_batch):
+            try:
+                cached_info.update({path: info for path, info in probe_batch(missing_paths).items() if info is not None})
+            except Exception:
+                add_warning("Не вдалося прочитати частину метаданих; перевірка потоків буде неповною.")
+
+        for item in queue_items:
+            if item.media_type not in {"video", "audio"}:
+                continue
+            info = cached_info.get(item.path)
+            if info is None:
+                add_warning(f"{item.path.name}: не вдалося перевірити контейнер і потоки через FFprobe.")
+                continue
+
+            settings = settings_map_to_model(merge_settings_maps(raw, item.overrides), defaults=ConversionSettings())
+            operation = settings.operation
+            audio_track = max(0, int(settings.audio_track_index))
+            subtitle_stream = max(0, int(settings.subtitle_stream))
+
+            if operation == "audio_only":
+                if not info.audio_streams:
+                    add_error("audio_stream", f"{item.path.name}: у джерелі немає аудіодоріжки для вилучення.")
+                elif audio_track >= info.audio_streams:
+                    add_error("audio_stream", f"{item.path.name}: аудіодоріжка #{audio_track + 1} відсутня (доступно: {info.audio_streams}).")
+
+            if operation == "subtitle_extract":
+                if not info.subtitle_streams:
+                    add_error("subtitle_stream", f"{item.path.name}: у джерелі немає субтитрів для вилучення.")
+                elif subtitle_stream >= info.subtitle_streams:
+                    add_error(
+                        "subtitle_stream",
+                        f"{item.path.name}: субтитри #{subtitle_stream + 1} відсутні (доступно: {info.subtitle_streams}).",
+                    )
+
+            burns_subtitles = operation == "subtitle_burn" or settings.subtitle_mode in {"burn", "burn_in"}
+            if burns_subtitles and not settings.subtitle_path.strip() and not info.subtitle_streams:
+                add_error("subtitle_stream", f"{item.path.name}: немає вбудованих субтитрів і не вибрано файл субтитрів.")
+
+            if item.media_type != "video" or operation not in {"convert", "subtitle_burn"}:
+                continue
+
+            out_format = settings.out_video_format.lower()
+            if not info.audio_streams:
+                add_warning(f"{item.path.name}: у результаті не буде аудіо — у джерелі немає аудіодоріжок.")
+            elif audio_track >= info.audio_streams:
+                add_warning(f"{item.path.name}: обрана аудіодоріжка #{audio_track + 1} відсутня; FFmpeg виведе відео без аудіо.")
+
+            requested_codec = str(settings.video_codec or "auto")
+            effective_codec = self.ffmpeg.resolve_codec(f".{out_format}", requested_codec)
+            if out_format == "webm" and requested_codec not in {"auto", "AV1", "VP9 (WebM)"}:
+                add_warning(f"{item.path.name}: WebM замінить {requested_codec} на {effective_codec.upper()}.")
+            if out_format in {"mp4", "mov", "avi"} and requested_codec == "VP9 (WebM)":
+                add_warning(f"{item.path.name}: {out_format.upper()} замінить VP9 на {effective_codec.upper()}.")
+            if out_format == "mpg" and requested_codec not in {"auto", "MPEG-2"}:
+                add_warning(f"{item.path.name}: MPG використовує MPEG-2 замість {requested_codec}.")
+            if out_format == "webm" and settings.audio_codec == "copy":
+                add_warning(f"{item.path.name}: WebM перекодує аудіо в Opus; копіювання аудіопотоку не застосовується.")
+            if info.dynamic_range == "HDR":
+                add_warning(
+                    f"{item.path.name}: HDR-джерело. Автоматичний тонмапінг не увімкнено; перевір результат на SDR-пристрої."
+                )
+            if settings.fast_copy and info.vcodec:
+                supports_copy, reason = self.ffmpeg.fast_copy_allowed(
+                    item.path,
+                    f".{out_format}",
+                    info,
+                    filters_used=burns_subtitles,
+                    audio_filter_used=bool(settings.normalize_audio != "none" or settings.replace_audio_path.strip()),
+                    allow_remux=settings.smart_convert_enabled and settings.smart_reencode_detection,
+                )
+                if not supports_copy:
+                    add_warning(f"{item.path.name}: Fast copy буде вимкнено — {reason}.")
 
     def _validate_disk_space(
         self,

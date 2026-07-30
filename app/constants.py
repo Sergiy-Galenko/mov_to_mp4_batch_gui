@@ -1,7 +1,7 @@
 ﻿from app.paths import HISTORY_PATH, PRESET_PATH, STATE_PATH, THEME_PATH
 
 APP_TITLE = "Media Converter - Photo + Video + Text"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 
 # Timing constants used across services
 PROGRESS_THROTTLE_SEC = 0.25

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.models import TaskItem
+from app.models import MediaInfo, TaskItem, TaskStatus
 from services.ffmpeg_service import FfmpegService
 from services.preview_builder import PreviewBuilder
 from services.queue_manager import QueueManager
@@ -224,6 +224,58 @@ class WorkflowServicesTest(unittest.TestCase):
         self.assertEqual(restored[0].smart_recommendation, "краще remux")
         self.assertTrue(restored[0].pinned)
         self.assertEqual(restored[0].priority, 3)
+
+    def test_interrupted_tasks_are_returned_to_the_queue(self) -> None:
+        manager = QueueManager()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "clip.mp4"
+            source.write_text("video", encoding="utf-8")
+            restored = manager.deserialize_tasks(
+                [manager.serialize_task(TaskItem(path=source, media_type="video", status=TaskStatus.PAUSED, progress=0.5))],
+                pending_recovery=True,
+            )
+
+        self.assertEqual(restored[0].status, TaskStatus.QUEUED)
+        self.assertEqual(restored[0].progress, 0.0)
+
+    def test_preflight_blocks_missing_selected_subtitle_stream(self) -> None:
+        service = ValidationService(FfmpegService(sys.executable, None))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "clip.mp4"
+            source.write_text("video", encoding="utf-8")
+            task = TaskItem(path=source, media_type="video", probe_data=MediaInfo(subtitle_streams=1))
+            result = service.validate(
+                {"operation": "subtitle_extract", "subtitle_stream": 1},
+                tasks=[task],
+                output_dir=tmpdir,
+                ffmpeg_path=sys.executable,
+                include_queue=True,
+            )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("subtitle_stream", result["errors"])
+
+    def test_preflight_warns_about_hdr_and_fast_copy_container_mismatch(self) -> None:
+        service = ValidationService(FfmpegService(sys.executable, None))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "clip.mkv"
+            source.write_text("video", encoding="utf-8")
+            task = TaskItem(
+                path=source,
+                media_type="video",
+                probe_data=MediaInfo(vcodec="vp9", acodec="opus", audio_streams=1, dynamic_range="HDR"),
+            )
+            result = service.validate(
+                {"operation": "convert", "out_video_fmt": "mp4", "fast_copy": True},
+                tasks=[task],
+                output_dir=tmpdir,
+                ffmpeg_path=sys.executable,
+                include_queue=True,
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(any("HDR" in warning for warning in result["warnings"]))
+        self.assertTrue(any("Fast copy" in warning for warning in result["warnings"]))
 
     def test_queue_build_items_detects_duplicates_in_a_large_batch(self) -> None:
         manager = QueueManager()

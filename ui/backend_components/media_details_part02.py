@@ -83,6 +83,9 @@ BODY = r'''        self._refresh_size_predictions(settings_map)
             self._append_log("INFO", f"Відновлено чергу: {self.queue_model.rowCount()} елементів.")
         if self.settings_manager.state.get("pending_recovery"):
             self._append_log("WARN", "Попередній запуск завершився аварійно; активні задачі повернено у чергу.")
+            # Interrupted work was converted back to queued tasks in __init__.
+            # Persist that recovery so the next normal launch is not flagged as a crash.
+            self._save_state(pending_recovery=False)
         if self._last_settings_map:
             self.presetLoaded.emit(dict(self._last_settings_map))
             self._refresh_output_preview(dict(self._last_settings_map))

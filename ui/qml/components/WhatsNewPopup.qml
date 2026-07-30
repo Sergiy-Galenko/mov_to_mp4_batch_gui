@@ -14,7 +14,7 @@ Popup {
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-    property string currentVersion: (typeof backend !== "undefined" && backend) ? backend.appVersion : "1.2.1"
+    property string currentVersion: (typeof backend !== "undefined" && backend) ? backend.appVersion : "1.2.2"
     property url logoSource: Qt.resolvedUrl("../../../assets/app-logo.png")
     property bool compact: width < 520
     property int adaptiveMargin: compact ? Theme.space4 : Theme.space5
