@@ -1,4 +1,4 @@
-﻿import contextlib
+import contextlib
 import os
 import signal
 import subprocess
@@ -129,8 +129,13 @@ class ConverterService:
         caps = getattr(self.ffmpeg, "encoder_caps", set()) or set()
         return bool({"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_qsv", "hevc_qsv", "av1_qsv", "h264_amf", "hevc_amf", "av1_amf"} & caps)
 
-    def conversion_worker_limit(self) -> int:
-        return 2 if self._has_gpu_encoder() else 1
+    def conversion_worker_limit(self, settings: ConversionSettings | None = None) -> int:
+        if settings and getattr(settings, "concurrency_limit", 0) > 0:
+            return min(16, max(1, settings.concurrency_limit))
+        cpu_count = os.cpu_count() or 4
+        if self._has_gpu_encoder():
+            return min(8, max(2, cpu_count // 2))
+        return min(8, max(1, cpu_count // 2))
 
     def _create_child_service(self, result_queue: Queue) -> "ConverterService":
         child = ConverterService(self.ffmpeg, result_queue, self.transcriber)
@@ -266,6 +271,30 @@ class ConverterService:
             with contextlib.suppress(Exception):
                 candidate.unlink(missing_ok=True)
 
+    def _create_cpu_fallback_command(self, cmd: list[str]) -> list[str] | None:
+        if "-c:v" not in cmd:
+            return None
+        idx = cmd.index("-c:v")
+        if idx + 1 >= len(cmd):
+            return None
+        current_enc = cmd[idx + 1]
+        if not FfmpegService.is_gpu_encoder(current_enc):
+            return None
+        cpu_enc = FfmpegService.get_cpu_fallback_encoder(current_enc)
+        new_cmd = list(cmd)
+        new_cmd[idx + 1] = cpu_enc
+        cleaned: list[str] = []
+        skip_next = False
+        for arg in new_cmd:
+            if skip_next:
+                skip_next = False
+                continue
+            if arg in {"-gpu", "-hwaccel", "-hwaccel_output_format"}:
+                skip_next = True
+                continue
+            cleaned.append(arg)
+        return cleaned
+
     def _run_video_command(
         self,
         cmd: list[str],
@@ -280,24 +309,33 @@ class ConverterService:
         allow_fast: bool,
     ) -> int:
         if not self._can_use_two_pass(settings, cmd, allow_fast):
-            return self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
-        passlog = outp.with_suffix(outp.suffix + ".ffmpeg2pass")
-        pass1, pass2 = self.ffmpeg.build_two_pass_commands(cmd, passlog)
-        self._log("INFO", f"Two-pass encoding: pass 1/2 для {outp.name}")
-        rc = self._run_ffmpeg(
-            pass1,
-            duration,
-            done_duration,
-            total_duration,
-            done_files,
-            total_files,
-            total_start,
-            publish_output=False,
-        )
-        if rc == 0 and not self.stop_event.is_set():
-            self._log("INFO", f"Two-pass encoding: pass 2/2 для {outp.name}")
-            rc = self._run_ffmpeg(pass2, duration, done_duration, total_duration, done_files, total_files, total_start)
-        self._cleanup_passlog(passlog)
+            rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
+        else:
+            passlog = outp.with_suffix(outp.suffix + ".ffmpeg2pass")
+            pass1, pass2 = self.ffmpeg.build_two_pass_commands(cmd, passlog)
+            self._log("INFO", f"Two-pass encoding: pass 1/2 для {outp.name}")
+            rc = self._run_ffmpeg(
+                pass1,
+                duration,
+                done_duration,
+                total_duration,
+                done_files,
+                total_files,
+                total_start,
+                publish_output=False,
+            )
+            if rc == 0 and not self.stop_event.is_set():
+                self._log("INFO", f"Two-pass encoding: pass 2/2 для {outp.name}")
+                rc = self._run_ffmpeg(pass2, duration, done_duration, total_duration, done_files, total_files, total_start)
+            self._cleanup_passlog(passlog)
+
+        # Automatic GPU to CPU fallback on failure
+        if rc != 0 and not self.stop_event.is_set() and getattr(settings, "auto_gpu_fallback", True):
+            fallback_cmd = self._create_cpu_fallback_command(cmd)
+            if fallback_cmd:
+                self._log("WARN", f"Апаратний енкодер завершився з помилкою (код {rc}). Виконую автоматичний відкат на CPU енкодер...")
+                rc = self._run_ffmpeg(fallback_cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
+
         return rc
 
     def _run_ab_samples(self, task: TaskItem, outp: Path, settings: ConversionSettings, info: MediaInfo | None) -> None:
@@ -399,6 +437,7 @@ class ConverterService:
             media_type_name=task.media_type,
             overwrite=collision_policy in {"stop", "overwrite", "skip"},
             skip_existing=collision_policy == "skip",
+            info=self.media_info.get(task.path),
         )
         if collision_policy == "parent":
             parent = sanitize_file_stem(task.path.parent.name)
@@ -511,7 +550,7 @@ class ConverterService:
         return total_duration
 
     def _can_run_parallel(self, tasks: list[TaskItem], defaults: ConversionSettings) -> bool:
-        if self.conversion_worker_limit() < 2 or len(tasks) < 2:
+        if self.conversion_worker_limit(defaults) < 2 or len(tasks) < 2:
             return False
         for task in tasks:
             settings = self._effective_settings(task, defaults)
@@ -573,7 +612,7 @@ class ConverterService:
         total_files: int,
         total_start: float,
     ) -> list[dict[str, str]]:
-        worker_count = min(self.conversion_worker_limit(), len(tasks))
+        worker_count = min(self.conversion_worker_limit(settings), len(tasks))
         self._log("INFO", f"Parallel conversion enabled: {worker_count} workers")
         result_queue: Queue[tuple] = Queue()
         run_results: list[dict[str, str]] = []

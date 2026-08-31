@@ -2774,4 +2774,18 @@ ApplicationWindow {
     TutorialPopup {
         id: tutorialPopup
     }
+
+    ShortcutCheatSheetModal {
+        id: shortcutCheatSheet
+    }
+
+    Shortcut {
+        sequence: "?"
+        onActivated: shortcutCheatSheet.open()
+    }
+
+    Shortcut {
+        sequence: "F1"
+        onActivated: shortcutCheatSheet.open()
+    }
 }

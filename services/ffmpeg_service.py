@@ -1,4 +1,4 @@
-﻿import contextlib
+import contextlib
 import json
 import os
 import re
@@ -668,14 +668,44 @@ class FfmpegService:
             draw += f":box=1:boxcolor={box_color}@{opacity:.2f}"
         return draw
 
+    @staticmethod
+    def is_gpu_encoder(encoder: str) -> bool:
+        normalized = str(encoder or "").strip().lower()
+        return normalized in {
+            "h264_nvenc", "hevc_nvenc", "av1_nvenc",
+            "h264_qsv", "hevc_qsv", "av1_qsv", "vp9_qsv",
+            "h264_amf", "hevc_amf", "av1_amf",
+        }
+
+    @staticmethod
+    def get_cpu_fallback_encoder(encoder: str) -> str:
+        normalized = str(encoder or "").strip().lower()
+        if "hevc" in normalized or "h265" in normalized:
+            return "libx265"
+        if "av1" in normalized:
+            return "libsvtav1"
+        if "vp9" in normalized:
+            return "libvpx-vp9"
+        return "libx264"
+
     def build_video_filter_spec(
         self,
         inp: Path,
         settings: ConversionSettings,
         out_ext: str,
         log_cb=None,
+        info: MediaInfo | None = None,
     ) -> tuple[str | None, str | None, str | None, list[str], bool]:
         filters: list[str] = []
+
+        # HDR to SDR tone mapping
+        hdr_setting = getattr(settings, "hdr_tone_mapping", "auto")
+        is_hdr = (info and info.dynamic_range == "HDR") or hdr_setting in {"hable", "mobius", "reinhard"}
+        if hdr_setting != "off" and is_hdr:
+            algo = "hable" if hdr_setting == "auto" else hdr_setting
+            filters.append(f"tonemap={algo}:desat=0")
+            if log_cb:
+                log_cb("INFO", f"Застосовано HDR tone-mapping ({algo})")
 
         resize_filter = self._get_resize_filter(settings)
         if resize_filter:
@@ -1021,7 +1051,7 @@ class FfmpegService:
         out_ext = outp.suffix.lower()
         trim_args = self.build_trim_args(settings, log_cb=log_cb)
         filter_arg, filter_val, map_label, extra_inputs, _filters_used = self.build_video_filter_spec(
-            inp, settings, out_ext, log_cb=log_cb
+            inp, settings, out_ext, log_cb=log_cb, info=info
         )
         audio_filter = self.build_audio_filter(settings)
         replace_audio = self._resolve_replace_audio_path(settings, log_cb=log_cb)

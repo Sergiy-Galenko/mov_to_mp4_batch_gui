@@ -1,4 +1,4 @@
-﻿import shutil
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -8,12 +8,15 @@ from app.models import ConversionSettings
 
 def _try_import_whisper() -> bool:
     try:
+        import faster_whisper  # noqa: F401
+        return True
+    except Exception:
+        pass
+    try:
         import whisper  # noqa: F401
-    except ImportError:
-        return False
+        return True
     except Exception:
         return False
-    return True
 
 
 def is_whisper_available() -> bool:
@@ -33,7 +36,46 @@ class TranscriptionService:
             return shutil.which("whisper")
         return shutil.which(engine)
 
+    def _generate_with_faster_whisper(self, inp: Path, outp: Path, settings: ConversionSettings) -> bool:
+        try:
+            from faster_whisper import WhisperModel  # type: ignore
+        except Exception:
+            return False
+
+        model_name = settings.subtitle_model.strip() or "base"
+        language = settings.subtitle_language.strip() or "auto"
+        lang_arg = None if language == "auto" else language
+        try:
+            model = WhisperModel(model_name, device="auto", compute_type="default")
+            segments, _info = model.transcribe(str(inp), language=lang_arg, beam_size=5)
+            out_format = self._resolve_format(settings, outp)
+            outp.parent.mkdir(parents=True, exist_ok=True)
+            with open(outp, "w", encoding="utf-8") as f:
+                if out_format == "vtt":
+                    f.write("WEBVTT\n\n")
+                    for seg in segments:
+                        start_h, start_rem = divmod(seg.start, 3600)
+                        start_m, start_s = divmod(start_rem, 60)
+                        end_h, end_rem = divmod(seg.end, 3600)
+                        end_m, end_s = divmod(end_rem, 60)
+                        f.write(f"{int(start_h):02d}:{int(start_m):02d}:{start_s:06.3f} --> {int(end_h):02d}:{int(end_m):02d}:{end_s:06.3f}\n")
+                        f.write(f"{seg.text.strip()}\n\n")
+                else:
+                    for i, seg in enumerate(segments, start=1):
+                        start_h, start_rem = divmod(seg.start, 3600)
+                        start_m, start_s = divmod(start_rem, 60)
+                        end_h, end_rem = divmod(seg.end, 3600)
+                        end_m, end_s = divmod(end_rem, 60)
+                        f.write(f"{i}\n")
+                        f.write(f"{int(start_h):02d}:{int(start_m):02d}:{int(start_s):02d},{int((start_s % 1) * 1000):03d} --> {int(end_h):02d}:{int(end_m):02d}:{int(end_s):02d},{int((end_s % 1) * 1000):03d}\n")
+                        f.write(f"{seg.text.strip()}\n\n")
+            return outp.exists()
+        except Exception:
+            return False
+
     def _generate_with_python(self, inp: Path, outp: Path, settings: ConversionSettings) -> bool:
+        if self._generate_with_faster_whisper(inp, outp, settings):
+            return True
         try:
             import whisper  # type: ignore
             from whisper.utils import get_writer  # type: ignore
@@ -42,19 +84,22 @@ class TranscriptionService:
 
         model_name = settings.subtitle_model.strip() or "base"
         language = settings.subtitle_language.strip() or "auto"
-        model = whisper.load_model(model_name)
-        result = model.transcribe(str(inp), language=None if language == "auto" else language, verbose=False)
-        out_format = self._resolve_format(settings, outp)
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_dir = Path(tmpdir)
-            writer = get_writer(out_format, str(tmp_dir))
-            writer(result, str(inp))
-            generated = tmp_dir / f"{inp.stem}.{out_format}"
-            if not generated.exists():
-                return False
-            outp.parent.mkdir(parents=True, exist_ok=True)
-            outp.write_text(generated.read_text(encoding="utf-8"), encoding="utf-8")
-        return outp.exists()
+        try:
+            model = whisper.load_model(model_name)
+            result = model.transcribe(str(inp), language=None if language == "auto" else language, verbose=False)
+            out_format = self._resolve_format(settings, outp)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_dir = Path(tmpdir)
+                writer = get_writer(out_format, str(tmp_dir))
+                writer(result, str(inp))
+                generated = tmp_dir / f"{inp.stem}.{out_format}"
+                if not generated.exists():
+                    return False
+                outp.parent.mkdir(parents=True, exist_ok=True)
+                outp.write_text(generated.read_text(encoding="utf-8"), encoding="utf-8")
+            return outp.exists()
+        except Exception:
+            return False
 
     def generate(self, inp: Path, outp: Path, settings: ConversionSettings, log_cb=None) -> int:
         if self._generate_with_python(inp, outp, settings):

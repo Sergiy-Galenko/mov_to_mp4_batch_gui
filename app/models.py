@@ -137,6 +137,9 @@ class ConversionSettings:
     cpu_load_limit: int = 95
     gpu_load_limit: int = 98
     disk_safety_margin_mb: int = 512
+    concurrency_limit: int = 0
+    auto_gpu_fallback: bool = True
+    hdr_tone_mapping: str = "auto"
 
     smart_convert_enabled: bool = False
     smart_content_type: str = "auto"

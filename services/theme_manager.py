@@ -71,12 +71,21 @@ class ThemeManager:
         self._save()
 
     def theme_mode(self) -> str:
-        """Return 'dark', 'light', 'auto', or 'high_contrast'."""
-        return str(self._state.get("theme_mode") or "light")
+        """Return 'dark', 'light', 'obsidian', 'oled', 'midnight', 'auto', or 'high_contrast'."""
+        return str(self._state.get("theme_mode") or "dark")
 
     def set_theme_mode(self, mode: str) -> None:
-        normalized = "auto" if mode == "system" else str(mode or "light")
-        self._state["theme_mode"] = normalized if normalized in ("dark", "light", "auto", "high_contrast") else "light"
+        normalized = "auto" if mode == "system" else str(mode or "dark")
+        valid_modes = {"dark", "light", "obsidian", "oled", "midnight", "auto", "high_contrast"}
+        self._state["theme_mode"] = normalized if normalized in valid_modes else "dark"
+        self._save()
+
+    def queue_view_mode(self) -> str:
+        """Return 'list' or 'grid'."""
+        return str(self._state.get("queue_view_mode") or "list")
+
+    def set_queue_view_mode(self, mode: str) -> None:
+        self._state["queue_view_mode"] = "grid" if mode == "grid" else "list"
         self._save()
 
     def layout_mode(self) -> str:

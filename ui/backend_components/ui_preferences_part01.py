@@ -26,8 +26,49 @@ BODY = r'''    # --- Theme properties ---
         if mode == "high_contrast":
             return "high_contrast"
         if mode == "auto":
-            return "dark" if ThemeManager.detect_os_dark_mode() else "light"
-        return mode if mode in {"dark", "light"} else "dark"
+            return "obsidian" if ThemeManager.detect_os_dark_mode() else "light"
+        valid_modes = {"dark", "light", "obsidian", "oled", "midnight", "high_contrast"}
+        return mode if mode in valid_modes else "dark"
+
+    @QtCore.Property(str, notify=queueViewModeChanged)
+    def queueViewMode(self) -> str:
+        return self.theme_manager.queue_view_mode()
+
+    @queueViewMode.setter
+    def queueViewMode(self, value: str) -> None:
+        self.theme_manager.set_queue_view_mode(value)
+        self.queueViewModeChanged.emit()
+
+    @QtCore.Property(int, notify=concurrencyLimitChanged)
+    def concurrencyLimit(self) -> int:
+        return int(self.settings_manager.state.get("concurrency_limit", 0))
+
+    @concurrencyLimit.setter
+    def concurrencyLimit(self, value: int) -> None:
+        val = max(0, min(16, int(value)))
+        self.settings_manager.state["concurrency_limit"] = val
+        self.settings_manager.save()
+        self.concurrencyLimitChanged.emit()
+
+    @QtCore.Property(str, notify=outputTemplateChanged)
+    def outputTemplate(self) -> str:
+        return str(self.settings_manager.state.get("output_template", "{stem}"))
+
+    @outputTemplate.setter
+    def outputTemplate(self, value: str) -> None:
+        val = str(value or "{stem}").strip()
+        self.settings_manager.state["output_template"] = val
+        self.settings_manager.save()
+        self.outputTemplateChanged.emit()
+
+    @QtCore.Slot(float, result=str)
+    def formatTrimSeconds(self, seconds: float) -> str:
+        if seconds < 0:
+            return "00:00"
+        m = int(seconds) // 60
+        s = int(seconds) % 60
+        ms = int((seconds - int(seconds)) * 10)
+        return f"{m:02d}:{s:02d}.{ms}"
 
     @QtCore.Property(str, notify=themeChanged)
     def layoutMode(self) -> str:

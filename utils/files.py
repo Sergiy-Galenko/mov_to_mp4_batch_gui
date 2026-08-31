@@ -1,7 +1,8 @@
-﻿import hashlib
+import hashlib
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from app.constants import AUDIO_EXTS, IMAGE_EXTS, SUBTITLE_EXTS, TEXT_EXTS, VIDEO_EXTS
 
@@ -69,25 +70,58 @@ class _TemplateDict(dict):
     def __missing__(self, key: str) -> str:
         return "{" + key + "}"
 
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
 
 def sanitize_file_stem(name: str) -> str:
     cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", name).strip().strip(".")
     return cleaned or "output"
 
 
-def render_output_stem(template: str, in_path: Path, *, index: int, operation: str, media_type_name: str) -> str:
+def render_output_stem(
+    template: str,
+    in_path: Path,
+    *,
+    index: int,
+    operation: str,
+    media_type_name: str,
+    info: Any = None,
+) -> str:
     now = datetime.now()
     raw_template = template.strip() or "{stem}"
+    w = getattr(info, "width", None) if info else None
+    h = getattr(info, "height", None) if info else None
+    vcodec = getattr(info, "vcodec", None) if info else None
+    acodec = getattr(info, "acodec", None) if info else None
+    fps = getattr(info, "fps", None) if info else None
+    dur = getattr(info, "duration", None) if info else None
+
+    res_str = ""
+    if w and h:
+        res_str = f"{h}p" if h in {720, 1080, 1440, 2160} else f"{w}x{h}"
+
     values = _TemplateDict(
         stem=in_path.stem,
+        name=in_path.stem,
         ext=in_path.suffix.lstrip("."),
         dir=in_path.parent.name,
         parent=in_path.parent.name,
         index=f"{index:03d}",
+        idx=str(index),
         op=operation,
         media=media_type_name,
         date=now.strftime("%Y-%m-%d"),
+        year=now.strftime("%Y"),
         time=now.strftime("%H-%M-%S"),
+        res=res_str,
+        width=str(w) if w else "",
+        height=str(h) if h else "",
+        codec=str(vcodec or acodec or ""),
+        vcodec=str(vcodec or ""),
+        acodec=str(acodec or ""),
+        fps=f"{round(fps)}fps" if fps else "",
+        dur=f"{int(dur)}s" if dur else "",
     )
     try:
         rendered = raw_template.format_map(values)
@@ -107,8 +141,16 @@ def build_output_path(
     media_type_name: str,
     overwrite: bool,
     skip_existing: bool,
+    info: Any = None,
 ) -> Path:
-    stem = render_output_stem(template, in_path, index=index, operation=operation, media_type_name=media_type_name)
+    stem = render_output_stem(
+        template,
+        in_path,
+        index=index,
+        operation=operation,
+        media_type_name=media_type_name,
+        info=info,
+    )
     desired = out_dir / f"{stem}.{out_ext.lstrip('.')}"
     if overwrite or skip_existing:
         return desired

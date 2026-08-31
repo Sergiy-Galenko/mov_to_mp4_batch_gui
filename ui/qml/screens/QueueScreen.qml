@@ -143,6 +143,12 @@ Item {
                     }
 
                     AppIconButton {
+                        iconName: (backend && backend.queueViewMode === "grid") ? "queue" : "file"
+                        accessibleLabel: (backend && backend.queueViewMode === "grid") ? "List View" : "Grid View"
+                        onClicked: if (backend) backend.queueViewMode = (backend.queueViewMode === "grid" ? "list" : "grid")
+                    }
+
+                    AppIconButton {
                         iconName: "sort"
                         accessibleLabel: I18n.t("priority")
                         onClicked: sortMenu.open()
@@ -206,6 +212,7 @@ Item {
                     spacing: 0
 
                     Rectangle {
+                        visible: !(backend && backend.queueViewMode === "grid")
                         Layout.fillWidth: true
                         Layout.preferredHeight: 31
                         color: Theme.panelSecondary
@@ -227,6 +234,7 @@ Item {
 
                     ListView {
                         id: queueList
+                        visible: !(backend && backend.queueViewMode === "grid")
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         model: backend ? backend.queueModel : null
@@ -263,6 +271,51 @@ Item {
                             onQuickConvertRequested: function(path, name, mediaKind, rowIndex) { appRoot && appRoot.openQuickConvert(path, name, mediaKind, rowIndex) }
                             onMoveRequested: function(path, targetIndex) { backend && backend.movePathToIndex(path, targetIndex) }
                             onOpenOutputRequested: function(path) { backend && backend.openOutputForPath(path) }
+                        }
+                    }
+
+                    GridView {
+                        id: queueGrid
+                        visible: backend && backend.queueViewMode === "grid"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.margins: 10
+                        cellWidth: 224
+                        cellHeight: 244
+                        model: backend ? backend.queueModel : null
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        delegate: Item {
+                            width: 216
+                            height: 236
+                            property bool matchesQueueFilter: appRoot ? appRoot.queueItemMatches(model.name, model.path, model.mediaType, model.status) : true
+                            visible: matchesQueueFilter
+
+                            QueueItemCard {
+                                anchors.fill: parent
+                                fileName: model.name
+                                filePath: model.path
+                                mediaType: model.mediaType
+                                status: model.status
+                                errorText: model.errorText
+                                outputPath: model.outputPath || model.previewOutput
+                                durationText: model.durationText
+                                sizeText: model.sizeText
+                                thumbnailSource: model.thumbnailSource
+                                progress: model.progress
+                                etaText: model.etaText
+                                speedText: model.speedText
+                                selected: appRoot ? appRoot.isPathSelected(model.path) : false
+                                itemIndex: index
+                                onSelectedRequested: function(path, modifiers) { appRoot && appRoot.selectQueuePath(path, index, modifiers, model.name, model.mediaType, model.thumbnailSource) }
+                                onRetryRequested: function(path) { backend && backend.retryTaskPath(path) }
+                                onSkipRequested: function(path) { backend && backend.skipCurrentFile() }
+                                onRemoveRequested: function(path) { appRoot && appRoot.removeQueuePath(path) }
+                                onQuickConvertRequested: function(path, name, mediaKind, rowIndex) { appRoot && appRoot.openQuickConvert(path, name, mediaKind, rowIndex) }
+                                onMoveRequested: function(path, targetIndex) { backend && backend.movePathToIndex(path, targetIndex) }
+                                onOpenOutputRequested: function(path) { backend && backend.openOutputForPath(path) }
+                            }
                         }
                     }
                 }

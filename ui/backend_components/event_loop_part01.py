@@ -70,6 +70,7 @@ BODY = r'''    def _poll_events(self) -> None:
                     self._total_progress_text = f"Всього: {int(total_pct * 100):02d}% • ETA {format_time(total_eta)}"
                     self.totalProgressTextChanged.emit()
                     self._set_progress(file_pct or 0.0, total_pct)
+                    self.taskbar.set_running_progress(total_pct)
                     if self._tray_enabled or self._push_notifications_enabled:
                         self.system_tray.update_progress(total_pct, True)
                     if self._active_task_path and file_pct is not None:
@@ -109,6 +110,7 @@ BODY = r'''    def _poll_events(self) -> None:
                     self._total_progress_text = f"Всього: {int(total_pct * 100):02d}% • ETA {format_time(total_eta)}"
                     self.totalProgressTextChanged.emit()
                     self._set_progress(file_pct or 0.0, total_pct)
+                    self.taskbar.set_running_progress(total_pct)
                     now = time.monotonic()
                     if speed and self._run_started_monotonic and now - self._last_analytics_emit >= ANALYTICS_EMIT_INTERVAL_SEC:
                         self._last_analytics_emit = now

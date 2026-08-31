@@ -1,4 +1,4 @@
-﻿from collections.abc import Mapping
+from collections.abc import Mapping
 from typing import Any
 
 from app.constants import (
@@ -44,6 +44,9 @@ SETTINGS_SCHEMA = {
     "cpu_load_limit": (int, 95),
     "gpu_load_limit": (int, 98),
     "disk_safety_margin_mb": (int, 512),
+    "concurrency_limit": (int, 0),
+    "auto_gpu_fallback": (bool, True),
+    "hdr_tone_mapping": (str, "auto"),
     "smart_convert_enabled": (bool, False),
     "smart_reencode_detection": (bool, True),
     "smart_two_pass": (bool, False),
@@ -218,6 +221,11 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.gpu_load_limit = max(1, min(100, gpu_limit if gpu_limit is not None else settings.gpu_load_limit))
     disk_margin = parse_int(str(settings_map.get("disk_safety_margin_mb", settings.disk_safety_margin_mb)))
     settings.disk_safety_margin_mb = max(0, min(10240, disk_margin if disk_margin is not None else settings.disk_safety_margin_mb))
+    concurrency = parse_int(str(settings_map.get("concurrency_limit", settings.concurrency_limit)))
+    settings.concurrency_limit = max(0, min(16, concurrency if concurrency is not None else settings.concurrency_limit))
+    settings.auto_gpu_fallback = _coerce_bool(settings_map.get("auto_gpu_fallback"), settings.auto_gpu_fallback)
+    hdr_tone = str(settings_map.get("hdr_tone_mapping") or settings.hdr_tone_mapping).strip().lower()
+    settings.hdr_tone_mapping = hdr_tone if hdr_tone in {"auto", "hable", "mobius", "reinhard", "off"} else "auto"
 
     settings.smart_convert_enabled = _coerce_bool(settings_map.get("smart_convert_enabled"), settings.smart_convert_enabled)
     content_type = str(settings_map.get("smart_content_type") or settings.smart_content_type).strip().lower()

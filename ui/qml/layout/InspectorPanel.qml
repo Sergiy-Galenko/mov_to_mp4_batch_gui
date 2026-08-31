@@ -126,6 +126,87 @@ Rectangle {
 
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.borderMuted }
 
+            // Visual Trim In / Out Section for Video and Audio
+            ColumnLayout {
+                visible: !root.batchSelection && (appRoot && (appRoot.selectedMediaType === "video" || appRoot.selectedMediaType === "audio"))
+                Layout.fillWidth: true
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label {
+                        Layout.fillWidth: true
+                        text: "✂ " + I18n.t("trim")
+                        color: Theme.textPrimary
+                        font.pixelSize: Theme.fontSizeSm
+                        font.weight: Font.DemiBold
+                    }
+                    Button {
+                        text: I18n.t("reset")
+                        implicitHeight: 22
+                        onClicked: {
+                            trimStartSpin.value = 0
+                            trimEndSpin.value = 0
+                            if (backend && appRoot.selectedPath.length > 0) {
+                                backend.updateTaskOverrideByPath(appRoot.selectedPath, { trim_start: null, trim_end: null })
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Label { text: "In:"; color: Theme.textMuted; font.pixelSize: Theme.fontMeta }
+                    AppSpinBox {
+                        id: trimStartSpin
+                        Layout.fillWidth: true
+                        from: 0
+                        to: 999999
+                        value: 0
+                        onValueModified: {
+                            if (backend && appRoot.selectedPath.length > 0) {
+                                backend.updateTaskOverrideByPath(appRoot.selectedPath, { trim_start: value > 0 ? value : null })
+                            }
+                        }
+                    }
+                    Label { text: "Out:"; color: Theme.textMuted; font.pixelSize: Theme.fontMeta }
+                    AppSpinBox {
+                        id: trimEndSpin
+                        Layout.fillWidth: true
+                        from: 0
+                        to: 999999
+                        value: 0
+                        onValueModified: {
+                            if (backend && appRoot.selectedPath.length > 0) {
+                                backend.updateTaskOverrideByPath(appRoot.selectedPath, { trim_end: value > 0 ? value : null })
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label {
+                        text: I18n.t("lossless_fast_copy")
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.fontMeta
+                    }
+                    Item { Layout.fillWidth: true }
+                    AppCheckBox {
+                        id: fastCopyCheck
+                        checked: false
+                        onToggled: {
+                            if (backend && appRoot.selectedPath.length > 0) {
+                                backend.updateTaskOverrideByPath(appRoot.selectedPath, { fast_copy: checked })
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.borderMuted }
+
             Label {
                 visible: root.batchSelection
                 Layout.fillWidth: true

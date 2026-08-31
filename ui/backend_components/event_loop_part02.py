@@ -21,6 +21,7 @@ BODY = r'''                        self.speedHistoryChanged.emit(list(self._spee
                     self.toastRequested.emit(self._tr("backend.stopped") if stopped else self._tr("toast.conversion_done"))
                     self._refresh_session_stats(total_eta=0.0)
                     self._save_state(pending_recovery=False)
+                    self.taskbar.clear_progress()
                     if self._tray_enabled or self._push_notifications_enabled:
                         self.system_tray.update_progress(0.0, False)
                     if self._push_notifications_enabled:

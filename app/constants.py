@@ -1,4 +1,4 @@
-﻿from app.paths import HISTORY_PATH, PRESET_PATH, STATE_PATH, THEME_PATH
+from app.paths import HISTORY_PATH, PRESET_PATH, STATE_PATH, THEME_PATH
 
 APP_TITLE = "Media Converter - Photo + Video + Text"
 APP_VERSION = "1.2.2"
@@ -12,7 +12,7 @@ RESOURCE_SAMPLE_INTERVAL_SEC = 2.0
 ANALYTICS_EMIT_INTERVAL_SEC = 2.0
 
 VIDEO_EXTS = {".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv", ".wmv", ".mts", ".m2ts"}
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif", ".jxl"}
 AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".opus", ".ogg", ".wma", ".aiff", ".aif", ".mka"}
 SUBTITLE_EXTS = {".srt", ".ass", ".ssa", ".vtt", ".webvtt"}
 TEXT_EXTS = {
@@ -52,7 +52,7 @@ TEXT_EXTS = {
 }
 
 OUT_VIDEO_FORMATS = ["mp4", "mkv", "webm", "mov", "avi", "gif", "mpg", "m2ts"]
-OUT_IMAGE_FORMATS = ["jpg", "png", "webp", "bmp", "tiff"]
+OUT_IMAGE_FORMATS = ["jpg", "png", "webp", "bmp", "tiff", "avif", "jxl", "heic"]
 OUT_AUDIO_FORMATS = ["mp3", "m4a", "aac", "wav", "flac", "opus"]
 OUT_SUBTITLE_FORMATS = ["srt", "ass", "vtt"]
 OUT_TEXT_FORMATS = [

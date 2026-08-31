@@ -5,15 +5,52 @@ QtObject {
     readonly property string activeMode: (typeof backend !== "undefined" && backend) ? backend.effectiveThemeMode : "dark"
     readonly property bool lightMode: activeMode === "light"
     readonly property bool highContrastMode: activeMode === "high_contrast"
+    readonly property bool oledMode: activeMode === "oled"
+    readonly property bool obsidianMode: activeMode === "obsidian"
+    readonly property bool midnightMode: activeMode === "midnight"
 
     // Semantic desktop colour tokens. Legacy aliases below keep existing controls compatible.
-    // Dark mode: black and green surfaces. Light mode: white and blue surfaces.
-    readonly property color windowBackground: highContrastMode ? "#000000" : lightMode ? "#F4F8FF" : "#050907"
-    readonly property color sidebarBackground: highContrastMode ? "#000000" : lightMode ? "#FFFFFF" : "#07140F"
-    readonly property color panelBackground: highContrastMode ? "#000000" : lightMode ? "#FFFFFF" : "#0B2018"
-    readonly property color panelSecondary: highContrastMode ? "#0A0A0A" : lightMode ? "#EFF6FF" : "#102D21"
-    readonly property color borderDefault: highContrastMode ? "#FFFFFF" : lightMode ? "#BFDBFE" : "#2E6249"
-    readonly property color borderMuted: highContrastMode ? "#A8A8A8" : lightMode ? "#DBEAFE" : "#1E4936"
+    readonly property color windowBackground: highContrastMode ? "#000000"
+        : oledMode ? "#000000"
+        : obsidianMode ? "#0D1117"
+        : midnightMode ? "#0A0E1A"
+        : lightMode ? "#F4F8FF"
+        : "#050907"
+
+    readonly property color sidebarBackground: highContrastMode ? "#000000"
+        : oledMode ? "#050505"
+        : obsidianMode ? "#161B22"
+        : midnightMode ? "#10162A"
+        : lightMode ? "#FFFFFF"
+        : "#07140F"
+
+    readonly property color panelBackground: highContrastMode ? "#000000"
+        : oledMode ? "#0A0A0A"
+        : obsidianMode ? "#161B22"
+        : midnightMode ? "#131B32"
+        : lightMode ? "#FFFFFF"
+        : "#0B2018"
+
+    readonly property color panelSecondary: highContrastMode ? "#0A0A0A"
+        : oledMode ? "#121212"
+        : obsidianMode ? "#21262D"
+        : midnightMode ? "#1C2544"
+        : lightMode ? "#EFF6FF"
+        : "#102D21"
+
+    readonly property color borderDefault: highContrastMode ? "#FFFFFF"
+        : oledMode ? "#2A2A2A"
+        : obsidianMode ? "#30363D"
+        : midnightMode ? "#2A365D"
+        : lightMode ? "#BFDBFE"
+        : "#2E6249"
+
+    readonly property color borderMuted: highContrastMode ? "#A8A8A8"
+        : oledMode ? "#1A1A1A"
+        : obsidianMode ? "#21262D"
+        : midnightMode ? "#1B2440"
+        : lightMode ? "#DBEAFE"
+        : "#1E4936"
 
     readonly property color bgPrimary: windowBackground
     readonly property color bgSecondary: panelBackground
@@ -21,9 +58,23 @@ QtObject {
     readonly property color borderSubtle: borderMuted
     readonly property color borderStrong: borderDefault
 
-    readonly property color textPrimary: highContrastMode ? "#FFFFFF" : lightMode ? "#102A56" : "#F0FFF6"
-    readonly property color textSecondary: highContrastMode ? "#FFFFFF" : lightMode ? "#3D5E8B" : "#B8D9C4"
-    readonly property color textDisabled: highContrastMode ? "#C8C8C8" : lightMode ? "#6B88B3" : "#7EAB90"
+    readonly property color textPrimary: highContrastMode ? "#FFFFFF"
+        : lightMode ? "#102A56"
+        : obsidianMode ? "#F0F6FC"
+        : midnightMode ? "#F1F5F9"
+        : "#F0FFF6"
+
+    readonly property color textSecondary: highContrastMode ? "#FFFFFF"
+        : lightMode ? "#3D5E8B"
+        : obsidianMode ? "#8B949E"
+        : midnightMode ? "#94A3B8"
+        : "#B8D9C4"
+
+    readonly property color textDisabled: highContrastMode ? "#C8C8C8"
+        : lightMode ? "#6B88B3"
+        : obsidianMode ? "#484F58"
+        : midnightMode ? "#475569"
+        : "#7EAB90"
     readonly property color textOnAccent: "#FFFFFF"
 
     readonly property color accent: highContrastMode ? "#FFFF00" : (typeof backend !== "undefined" && backend ? backend.accentColor : "#2563EB")
