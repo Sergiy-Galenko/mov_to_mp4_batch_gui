@@ -65,6 +65,8 @@ exe = EXE(
     icon=icon_arg,
     console=False,
     exclude_binaries=True,
+    # The portable runtime and CI expect bundled tools beside the executable.
+    contents_directory=".",
 )
 
 coll = COLLECT(
@@ -76,4 +78,3 @@ coll = COLLECT(
     upx=True,
     name="MediaConverter",
 )
-
