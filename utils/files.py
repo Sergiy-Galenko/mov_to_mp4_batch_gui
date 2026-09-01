@@ -70,9 +70,6 @@ class _TemplateDict(dict):
     def __missing__(self, key: str) -> str:
         return "{" + key + "}"
 
-    def __missing__(self, key: str) -> str:
-        return "{" + key + "}"
-
 
 def sanitize_file_stem(name: str) -> str:
     cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", name).strip().strip(".")

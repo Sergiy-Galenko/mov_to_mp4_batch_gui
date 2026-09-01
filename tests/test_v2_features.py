@@ -6,12 +6,7 @@ from pathlib import Path
 from app.models import ConversionSettings, MediaInfo
 from services.converter_service import ConverterService
 from services.ffmpeg_service import FfmpegService
-from services.taskbar_service import (
-    TBPF_ERROR,
-    TBPF_NOPROGRESS,
-    TBPF_NORMAL,
-    TaskbarService,
-)
+from services.taskbar_service import TaskbarService
 from services.theme_manager import ThemeManager
 from services.transcription_service import TranscriptionService
 from utils.files import render_output_stem
