@@ -353,7 +353,7 @@ class YouTubeDownloadService:
                             raise YouTubeDownloadError("Direct media file exceeded the allowed download size.")
                         file.write(chunk)
                         downloaded += len(chunk)
-                        self._throttle_direct_download(downloaded, started, rate_limit)
+                        self._throttle_direct_download(downloaded, started, rate_limit, cancel_event)
                         elapsed = max(time.monotonic() - started, 0.001)
                         speed = downloaded / elapsed
                         eta = (total - downloaded) / speed if total and speed else None
@@ -367,6 +367,10 @@ class YouTubeDownloadService:
                             str(output_path),
                         )
 
+                if cancel_event and cancel_event.is_set():
+                    raise YouTubeDownloadCancelled("Download cancelled.")
+                if total is not None and downloaded != total:
+                    raise YouTubeDownloadError(f"Incomplete download: received {downloaded} of {total} bytes.")
                 tmp_path.replace(output_path)
                 self._emit_direct_progress(
                     progress_callback,
@@ -794,14 +798,18 @@ class YouTubeDownloadService:
             )
         return opts
 
-    def _throttle_direct_download(self, downloaded: int, started: float, rate_limit: int | None) -> None:
+    def _throttle_direct_download(self, downloaded: int, started: float, rate_limit: int | None, cancel_event: Event | None = None) -> None:
         if not rate_limit or rate_limit <= 0:
             return
         target_elapsed = downloaded / float(rate_limit)
         actual_elapsed = time.monotonic() - started
         delay = target_elapsed - actual_elapsed
         if delay > 0:
-            time.sleep(min(delay, 1.0))
+            if cancel_event:
+                if cancel_event.wait(delay):
+                    raise YouTubeDownloadCancelled("Download cancelled.")
+            else:
+                time.sleep(delay)
 
     def _normalize_rate_limit(self, value: int | None) -> int | None:
         try:

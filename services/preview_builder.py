@@ -75,6 +75,7 @@ class PreviewBuilder:
             )
             merge_command = self.build_merge_command(merge_candidates, base_settings, merge_preview_path, info_cache)
 
+        reserved_outputs: set[Path] = {merge_preview_path} if merge_preview_path else set()
         for index, task in enumerate(tasks, start=1):
             resolved = resolved_by_path[task.path]
             if merge_enabled and task.path in merge_paths and merge_desired_path and merge_preview_path:
@@ -107,6 +108,10 @@ class PreviewBuilder:
                     media_type_name=task.media_type,
                     overwrite=resolved.overwrite,
                     skip_existing=resolved.skip_existing,
+                    info=info_cache.get(task.path),
+                    collision_policy=resolved.output_collision_policy,
+                    reserved=reserved_outputs,
+                    strict_collisions=False,
                 )
                 warnings = self._warnings_for(task, resolved, desired_path, preview_path)
                 command = self.build_command(task, resolved, preview_path, info_cache)

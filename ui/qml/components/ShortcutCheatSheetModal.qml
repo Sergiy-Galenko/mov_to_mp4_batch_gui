@@ -8,8 +8,8 @@ Dialog {
     title: ""
     modal: true
     dim: true
-    x : (engine && parent ? (parent.width - width) / 2 : 100)
-    y : (engine && parent ? (parent.height - height) / 2 : 100)
+    x: (parent ? (parent.width - width) / 2 : 100)
+    y: (parent ? (parent.height - height) / 2 : 100)
     width: Math.min(680, parent ? parent.width - 32 : 600)
     height: Math.min(520, parent ? parent.height - 32 : 480)
     padding: 0
@@ -43,7 +43,7 @@ Dialog {
 
                 Label {
                     Layout.fillWidth: true
-                    text: "⌨ + Information: Keyboard Shortcuts"
+                    text: I18n.t("keyboard_shortcuts")
                     color: Theme.textPrimary
                     font.pixelSize: Theme.fontSizeMd
                     font.weight: Font.DemiBold
@@ -51,13 +51,13 @@ Dialog {
 
                 AppTextField {
                     Layout.preferredWidth: 200
-                    placeholderText: "Hotkey search..."
+                    placeholderText: I18n.t("shortcut_search")
                     onTextChanged: root.searchText = text.toLowerCase()
                 }
 
                 AppIconButton {
                     iconName: "close"
-                    accessibleLabel: "Close"
+                    accessibleLabel: I18n.t("cancel")
                     onClicked: root.close()
                 }
             }
@@ -71,6 +71,8 @@ Dialog {
 
         // Body List
         ScrollView {
+            id: shortcutsScroll
+            contentWidth: availableWidth
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
@@ -78,7 +80,7 @@ Dialog {
 
 
             ColumnLayout {
-                width: parent.availableWidth
+                width: shortcutsScroll.availableWidth
                 spacing: 12
 
 
@@ -110,7 +112,7 @@ Dialog {
                             Repeater {
                                 model: backend ? backend.allShortcuts.filter(
                                     function(s) {
-                                        return s.target === modelData.category &&
+                                        return s.category === modelData.category &&
                                             (root.searchText === "" ||
                                              s.label.toLowerCase().includes(root.searchText) ||
                                              s.key.toLowerCase().includes(root.searchText))

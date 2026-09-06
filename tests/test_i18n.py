@@ -19,8 +19,7 @@ class I18nTest(unittest.TestCase):
         project_root = Path(__file__).resolve().parents[1]
         i18n_dir = project_root / "ui" / "i18n"
         english = json.loads((i18n_dir / "en.json").read_text(encoding="utf-8"))
-        qml_paths = [project_root / "ui" / "qml" / "Main.qml"]
-        qml_paths.extend((project_root / "ui" / "qml" / "components").glob("*.qml"))
+        qml_paths = list((project_root / "ui" / "qml").rglob("*.qml"))
 
         used_keys = set()
         for path in qml_paths:

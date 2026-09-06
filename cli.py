@@ -143,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     download_only = args.download_only or bool(args.download_url and not input_paths)
     ffmpeg_path = args.ffmpeg or find_ffmpeg()
     ffprobe_path = args.ffprobe or find_ffprobe(ffmpeg_path)
-    if not ffmpeg_path and (not download_only or args.download_mode == "audio" or args.download_quality == "audio_only"):
+    if not ffmpeg_path and args.download_url and (args.download_mode == "audio" or args.download_quality == "audio_only"):
         print(translate("backend.ffmpeg_missing", language), file=sys.stderr)
         return 2
 
@@ -213,27 +213,34 @@ def main(argv: list[str] | None = None) -> int:
     settings = settings_map_to_model(settings_map, defaults=ConversionSettings())
 
     converter.start(tasks, settings, out_dir)
+    failed = 0
+    summary_received = False
+
+    def consume_event(event: tuple) -> None:
+        nonlocal failed, summary_received
+        if event[0] == "run_summary" and isinstance(event[1], dict):
+            summary_received = True
+            failed += sum(1 for item in event[1].get("results", []) if item.get("status") in {"failed", "cancelled"})
+        _print_event(event, language)
+
     while converter.thread and converter.thread.is_alive():
         try:
             while True:
-                _print_event(events.get_nowait(), language)
+                consume_event(events.get_nowait())
         except queue.Empty:
             time.sleep(0.1)
 
     if converter.thread:
         converter.thread.join(timeout=0.1)
 
-    failed = 0
     try:
         while True:
             event = events.get_nowait()
-            if event[0] == "run_summary" and isinstance(event[1], dict):
-                failed = sum(1 for item in event[1].get("results", []) if item.get("status") == "failed")
-            _print_event(event, language)
+            consume_event(event)
     except queue.Empty:
         pass
 
-    return 1 if failed else 0
+    return 1 if failed or not summary_received else 0
 
 
 if __name__ == "__main__":

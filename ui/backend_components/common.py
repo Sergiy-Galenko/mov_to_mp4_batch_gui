@@ -54,7 +54,7 @@ from services.youtube_download_service import (
     YouTubeDownloadError,
     YouTubeDownloadService,
 )
-from ui.models import HistoryModel, LogModel, QueueModel
+from ui.models import HistoryModel, LogModel, QueueFilterModel, QueueModel
 from utils.formatting import format_bytes, format_time
 from utils.state import load_json_file, save_json_file
 
@@ -98,6 +98,7 @@ __all__ = [
     "QtWidgets",
     "QueueManager",
     "QueueModel",
+    "QueueFilterModel",
     "ReportService",
     "SettingsManager",
     "ShortcutManager",

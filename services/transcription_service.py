@@ -1,6 +1,9 @@
 import shutil
+import json
 import subprocess
+import sys
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
 
 from app.models import ConversionSettings
@@ -24,6 +27,18 @@ def is_whisper_available() -> bool:
 
 
 class TranscriptionService:
+    def generate_managed(self, inp: Path, outp: Path, settings: ConversionSettings, run) -> int:
+        """Keep model loading and transcription in a cancellable child process."""
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "settings.json"
+            config.write_text(json.dumps(asdict(settings)), encoding="utf-8")
+            entry = [] if getattr(sys, "frozen", False) else [str(Path(__file__).resolve().parents[1] / "main.py")]
+            cmd = [sys.executable, *entry, "--transcribe-worker", str(inp), str(outp), str(config)]
+            result = run(cmd)
+            if result.returncode:
+                raise RuntimeError((result.stderr or result.stdout or "Transcription failed").strip()[-2000:])
+            return result.returncode
+
     def _resolve_format(self, settings: ConversionSettings, outp: Path) -> str:
         requested = outp.suffix.lower().lstrip(".") or settings.out_subtitle_format or "srt"
         if requested in {"srt", "vtt"}:
@@ -102,6 +117,19 @@ class TranscriptionService:
             return False
 
     def generate(self, inp: Path, outp: Path, settings: ConversionSettings, log_cb=None) -> int:
+        if outp.suffix.lower() == ".ass":
+            from app.paths import find_ffmpeg
+
+            ffmpeg = find_ffmpeg()
+            if not ffmpeg:
+                raise RuntimeError("FFmpeg is required for ASS subtitles.")
+            with tempfile.TemporaryDirectory() as tmp:
+                srt = Path(tmp) / "transcript.srt"
+                self.generate(inp, srt, settings, log_cb=log_cb)
+                result = subprocess.run([ffmpeg, "-y", "-i", str(srt), "-c:s", "ass", str(outp)], capture_output=True, text=True)
+                if result.returncode:
+                    raise RuntimeError(result.stderr.strip())
+            return 0
         if self._generate_with_python(inp, outp, settings):
             return 0
 
@@ -144,3 +172,13 @@ class TranscriptionService:
             outp.parent.mkdir(parents=True, exist_ok=True)
             outp.write_text(generated.read_text(encoding="utf-8"), encoding="utf-8")
         return 0
+
+
+def run_transcription_worker(args: list[str]) -> int:
+    try:
+        source, output, config = args
+        settings = ConversionSettings(**json.loads(Path(config).read_text(encoding="utf-8")))
+        return TranscriptionService().generate(Path(source), Path(output), settings)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 1

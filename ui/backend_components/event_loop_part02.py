@@ -56,6 +56,8 @@ BODY = r'''                        self.speedHistoryChanged.emit(list(self._spee
                 elif etype == "thumbnail":
                     _, path, thumbnail_path = event
                     self.queue_model.set_thumbnail(path, thumbnail_path)
+                    if str(path) == self._selected_path:
+                        self.selectedDetailsChanged.emit()
                 elif etype == "add_paths":
                     _, paths, remember_folder = event
                     if remember_folder:

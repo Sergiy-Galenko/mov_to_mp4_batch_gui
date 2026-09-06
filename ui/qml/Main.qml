@@ -1,4 +1,5 @@
 import QtQuick 2.15
+import QtQml 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import App 1.0
@@ -52,7 +53,44 @@ ApplicationWindow {
     property string selectedMediaType: ""
     property string selectedThumbnailSource: ""
     property string selectedPreviewFormat: ""
+    property var selectedDetails: ({})
+    property string selectedTextPreview: ""
     property int selectedIndex: -1
+
+    onQueueSearchTextChanged: syncQueueFilter()
+    onQueueStatusFilterChanged: syncQueueFilter()
+    onActiveWorkspaceModeChanged: syncQueueFilter()
+
+    function syncQueueFilter() {
+        if (backend)
+            backend.setQueueFilter(root.queueSearchText, root.queueStatusFilter, workspaceMediaType())
+    }
+
+    function refreshSelectedDetails() {
+        if (!backend || !root.selectedPath) {
+            root.selectedDetails = ({})
+            return
+        }
+        var details = backend.queueItemDetails(root.selectedPath)
+        root.selectedDetails = details
+        root.selectedThumbnailSource = details.thumbnail || ""
+        root.selectedPreviewFormat = details.format || currentFormatFor(root.selectedMediaType)
+    }
+
+    function retainVisibleSelection() {
+        if (!backend)
+            return
+        var visible = backend.visibleQueuePaths
+        var next = root.selectedPaths.filter(function(path) { return visible.indexOf(path) >= 0 })
+        if (next.length === 0 && root.selectedPaths.length > 0) {
+            clearQueueSelection()
+        } else {
+            root.selectedPaths = next
+            if (root.selectedPath && visible.indexOf(root.selectedPath) < 0)
+                clearQueueSelection()
+        }
+    }
+
     property var selectedPaths: []
     property int lastSelectedIndex: -1
     property string selectedPreset: ""
@@ -277,7 +315,9 @@ ApplicationWindow {
             backend.selectQueuePath(root.quickConvertPath)
 
         var options = formatOptionsFor(root.quickConvertMediaType)
-        var preferred = currentFormatFor(root.quickConvertMediaType)
+        refreshSelectedDetails()
+        root.selectedTextPreview = backend && root.selectedMediaType === "text" ? backend.readTextPreview(root.selectedPath) : ""
+        var preferred = root.selectedPreviewFormat || currentFormatFor(root.quickConvertMediaType)
         root.quickConvertFormat = options.indexOf(preferred) >= 0 ? preferred : (options.length > 0 ? options[0] : "")
         quickConvertPopup.open()
     }
@@ -354,17 +394,14 @@ ApplicationWindow {
 
     function selectQueuePath(path, index, modifiers, name, mediaType, thumbnailSource) {
         var next = selectedPaths.slice()
-        var ctrl = (modifiers & Qt.ControlModifier) !== 0
+        index = backend ? backend.queueIndexForPath(path) : index
+        var ctrl = (modifiers & (Qt.ControlModifier | Qt.MetaModifier)) !== 0
         var shift = (modifiers & Qt.ShiftModifier) !== 0
         if (shift && backend && lastSelectedIndex >= 0) {
-            next = []
-            var first = Math.min(lastSelectedIndex, index)
-            var last = Math.max(lastSelectedIndex, index)
-            for (var i = first; i <= last; ++i) {
-                var rangePath = backend.queuePathAt(i)
-                if (rangePath.length > 0)
-                    next.push(rangePath)
-            }
+            var visiblePaths = backend.visibleQueuePaths
+            var anchor = visiblePaths.indexOf(backend.queuePathAt(lastSelectedIndex))
+            var clicked = visiblePaths.indexOf(path)
+            next = anchor >= 0 && clicked >= 0 ? visiblePaths.slice(Math.min(anchor, clicked), Math.max(anchor, clicked) + 1) : [path]
         } else if (ctrl) {
             var existing = next.indexOf(path)
             if (existing >= 0)
@@ -374,6 +411,7 @@ ApplicationWindow {
         } else {
             next = [path]
         }
+        if (next.length === 0) { clearQueueSelection(); return }
         selectedPaths = next
         selectedPath = path
         selectedName = name || path
@@ -384,9 +422,13 @@ ApplicationWindow {
         lastSelectedIndex = index
         if (backend)
             backend.selectQueuePath(path)
+        refreshSelectedDetails()
+        root.selectedTextPreview = backend && selectedMediaType === "text" ? backend.readTextPreview(path) : ""
     }
 
     function clearQueueSelection() {
+        root.selectedDetails = ({})
+        root.selectedTextPreview = ""
         root.selectedPaths = []
         root.selectedPath = ""
         root.selectedName = ""
@@ -588,6 +630,7 @@ ApplicationWindow {
             validateForm()
             if (backend)
                 backend.refreshOutputPreview(collectSettings())
+            root.refreshSelectedDetails()
         }
     }
 
@@ -611,6 +654,8 @@ ApplicationWindow {
     Connections {
         target: backend
         function onPresetLoaded(data) { applyPreset(data) }
+        function onQueueFilterChanged() { root.retainVisibleSelection() }
+        function onSelectedDetailsChanged() { root.refreshSelectedDetails() }
         function onLanguageChanged() { root._langVersion += 1 }
         function onUiLanguageChanged() {
             I18n.setLanguage(backend.uiLanguage)
@@ -626,6 +671,7 @@ ApplicationWindow {
         function onWatchFolderChanged() { settingsPanel.syncBackendPaths() }
         function onTaskOverrideLoaded(data) {
             settingsPanel.loadTaskOverride(data)
+            root.refreshSelectedDetails()
         }
         function onToastRequested(message) {
             root.showToast(message)
@@ -640,6 +686,7 @@ ApplicationWindow {
             backend.restoreSession()
             backend.refreshEncoders()
             scheduleSettingsSync()
+            syncQueueFilter()
         }
     }
 
@@ -679,7 +726,7 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 currentIndex: root.activeSection
 
-                AppScreens.QueueScreen { appRoot: root }
+                AppScreens.QueueScreen { id: queueScreen; appRoot: root }
                 AnalyticsScreen {}
                 PresetsScreen {}
                 FfmpegScreen {}
@@ -1673,7 +1720,7 @@ ApplicationWindow {
             overwriteCheck.checked = !!preset.overwrite
             fastCopyCheck.checked = !!preset.fast_copy
             skipExistingCheck.checked = !!preset.skip_existing
-            root.setComboText(collisionPolicyCombo, preset.output_collision_policy || (preset.overwrite ? "overwrite" : preset.skip_existing ? "stop" : "index"))
+            root.setComboText(collisionPolicyCombo, preset.output_collision_policy || (preset.overwrite ? "overwrite" : preset.skip_existing ? "skip" : "index"))
             if (preset.disk_safety_margin_mb !== undefined) diskSafetyMarginSpin.value = Number(preset.disk_safety_margin_mb)
             outputTemplateField.text = preset.output_template || "{stem}"
             commercialExportCheck.checked = !!preset.commercial_export
@@ -2080,9 +2127,17 @@ ApplicationWindow {
             }
             RowLayout {
                 Layout.fillWidth: true
-                AppCheckBox { id: overwriteCheck; text: I18n.t("overwrite"); onToggled: scheduleSettingsSync() }
+                AppCheckBox { id: overwriteCheck; text: I18n.t("overwrite"); onToggled: {
+                    root.setComboText(collisionPolicyCombo, checked ? "overwrite" : "index")
+                    skipExistingCheck.checked = false
+                    scheduleSettingsSync()
+                } }
                 AppCheckBox { id: fastCopyCheck; text: I18n.t("fast_copy"); onToggled: scheduleSettingsSync() }
-                AppCheckBox { id: skipExistingCheck; text: I18n.t("skip_existing"); onToggled: scheduleSettingsSync() }
+                AppCheckBox { id: skipExistingCheck; text: I18n.t("skip_existing"); onToggled: {
+                    root.setComboText(collisionPolicyCombo, checked ? "skip" : "index")
+                    overwriteCheck.checked = false
+                    scheduleSettingsSync()
+                } }
             }
         }
 
@@ -2103,11 +2158,11 @@ ApplicationWindow {
             FieldLabel { text: "Політика колізій" }
             AppComboBox {
                 id: collisionPolicyCombo
-                model: ["index", "parent", "stop", "overwrite"]
+                model: ["index", "parent", "stop", "overwrite", "skip"]
                 currentIndex: 0
                 onActivated: {
                     overwriteCheck.checked = currentText === "overwrite"
-                    skipExistingCheck.checked = false
+                    skipExistingCheck.checked = currentText === "skip"
                     scheduleSettingsSync()
                 }
             }
@@ -2777,6 +2832,54 @@ ApplicationWindow {
 
     ShortcutCheatSheetModal {
         id: shortcutCheatSheet
+    }
+
+    function shortcutAllowed(action) {
+        var editing = root.activeFocusItem && (root.activeFocusItem.selectByMouse !== undefined || root.activeFocusItem.inputMethodHints !== undefined)
+        if (editing && ["select_all", "paste_paths", "remove_selected", "clear_queue", "deduplicate", "move_up", "move_down"].indexOf(action) >= 0)
+            return false
+        return true
+    }
+
+    function runShortcut(action) {
+        if (!backend)
+            return
+        if (action === "start_conversion") startIfValid()
+        else if (action === "stop_conversion") backend.stopConversion()
+        else if (action === "pause_resume") { if (backend.isRunning) backend.isPaused ? backend.resumeConversion() : backend.pauseConversion() }
+        else if (action === "skip_file") backend.skipCurrentFile()
+        else if (action === "retry_failed") backend.retryFailed()
+        else if (action === "add_files") addFilesForWorkspace()
+        else if (action === "add_folder") addFolderForWorkspace()
+        else if (action === "remove_selected") removeSelectedPaths()
+        else if (action === "select_all") root.selectedPaths = backend.visibleQueuePaths.slice()
+        else if (action === "clear_queue") { backend.clearQueue(); clearQueueSelection() }
+        else if (action === "deduplicate") backend.deduplicateQueueByHash()
+        else if (action === "move_up") backend.moveSelectedPathsUp(root.selectedPaths)
+        else if (action === "move_down") backend.moveSelectedPathsDown(root.selectedPaths)
+        else if (action === "queue_search") { root.activeSection = 0; queueScreen.focusSearch() }
+        else if (action === "toggle_sidebar") root.sidebarCollapsed = !root.sidebarCollapsed
+        else if (action === "save_preset") backend.savePreset(root.selectedPreset || "Custom", collectSettings())
+        else if (action === "export_project") backend.exportProject(collectSettings())
+        else if (action === "import_project") backend.importProject()
+        else if (action === "export_log") backend.exportLog()
+        else if (action === "open_output_dir") backend.openOutputDir()
+        else if (action === "toggle_beginner_mode") backend.beginnerMode = !backend.beginnerMode
+        else if (action === "paste_paths") backend.pasteFromClipboard()
+        else {
+            var pages = { nav_queue: 0, nav_analytics: 1, nav_presets: 2, nav_ffmpeg: 3, nav_youtube: 4, nav_settings: 5 }
+            if (pages[action] !== undefined) openSidebarSection(pages[action], "", -1)
+        }
+    }
+
+    Instantiator {
+        model: backend ? backend.allShortcuts : []
+        delegate: Shortcut {
+            required property var modelData
+            sequence: modelData.key
+            enabled: root.shortcutAllowed(modelData.action) && sequence.toString().length > 0
+            onActivated: root.runShortcut(modelData.action)
+        }
     }
 
     Shortcut {

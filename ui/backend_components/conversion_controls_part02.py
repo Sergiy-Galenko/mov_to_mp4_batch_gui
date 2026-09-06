@@ -50,8 +50,13 @@ BODY = r'''            self._append_log("WARN", "Немає попередніх
     @QtCore.Slot()
     def skipCurrentFile(self) -> None:
         if self._is_running:
-            self.runner.skip_current()
+            self.converter.skip_current(Path(self._active_task_path) if self._active_task_path else None)
             self._set_status("Пропускаю поточний файл...")
+
+    @QtCore.Slot(str)
+    def skipTaskPath(self, path_text: str) -> None:
+        if self._is_running and path_text:
+            self.converter.skip_current(Path(path_text).expanduser())
 
     @QtCore.Slot(str)
     def loadPreset(self, name: str) -> None:
@@ -109,7 +114,7 @@ BODY = r'''            self._append_log("WARN", "Немає попередніх
             return
         merged = dict(task.overrides)
         for key, value in dict(override_map or {}).items():
-            if value not in (None, ""):
+            if key in {"trim_start", "trim_end"} or value not in (None, ""):
                 merged[str(key)] = value
         task.overrides = merged
         self.queue_model.update_item(index, task)

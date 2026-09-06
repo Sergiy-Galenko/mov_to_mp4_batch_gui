@@ -32,7 +32,12 @@ SpinBox {
         leftPadding: 0
         rightPadding: 0
 
-        onEditingFinished: control.value = control.valueFromText(text, control.locale)
+        onEditingFinished: {
+            var previous = control.value
+            control.value = control.valueFromText(text, control.locale)
+            if (control.value !== previous)
+                control.valueModified()
+        }
 
         Binding {
             target: input

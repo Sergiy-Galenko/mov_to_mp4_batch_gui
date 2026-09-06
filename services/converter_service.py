@@ -3,6 +3,7 @@ import os
 import signal
 import subprocess
 import threading
+import tempfile
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -19,7 +20,7 @@ from services.smart_convert_service import apply_smart_settings, parse_ab_crfs, 
 from services.text_conversion_service import convert_text_file
 from services.transcription_service import TranscriptionService
 from services.validation_service import operation_supports_media
-from utils.files import build_merge_output_path, build_output_path, sanitize_file_stem
+from utils.files import build_merge_output_path, build_output_path, publish_output as publish_completed_output, resolve_output_collision, sanitize_file_stem
 from utils.formatting import format_bytes, format_time, parse_ffmpeg_time
 
 
@@ -48,6 +49,8 @@ class ConverterService:
         self.current_output_path: Path | None = None
         self.media_info: dict[Path, MediaInfo] = {}
         self.prefetched_media_info: dict[Path, MediaInfo] = {}
+        self.active_task_path: Path | None = None
+        self._children_lock = threading.RLock()
         self._output_path_lock = threading.Lock()
         self._reserved_output_paths: set[Path] = set()
 
@@ -69,16 +72,17 @@ class ConverterService:
         safe_to_delete_original = True
         checksum_algorithm = str(settings.checksum_algorithm or "none").lower()
         for output_path in output_paths:
+            self._checkpoint()
             if checksum_algorithm in {"md5", "sha256"}:
                 try:
-                    sidecar = write_checksum_sidecar(output_path, checksum_algorithm)
+                    sidecar = write_checksum_sidecar(output_path, checksum_algorithm, checkpoint=self._checkpoint)
                     self._log("OK", f"{checksum_algorithm.upper()} записано: {sidecar.name}")
                 except Exception as exc:
                     safe_to_delete_original = False
                     self._log("WARN", f"Не вдалося записати checksum для {output_path.name}: {exc}")
             if settings.cloud_upload_enabled:
                 try:
-                    self.cloud_uploader.upload(output_path, settings, log_cb=self._log)
+                    self.cloud_uploader.upload(output_path, settings, log_cb=self._log, run=self._run_command)
                     self._log("OK", f"Cloud upload готовий: {output_path.name}")
                 except Exception as exc:
                     safe_to_delete_original = False
@@ -87,14 +91,14 @@ class ConverterService:
                 if task.media_type == "text":
                     self._log("WARN", f"Integrity check пропущено для текстового файлу: {output_path.name}")
                 else:
-                    ok, details = self.ffmpeg.check_media_integrity(output_path)
+                    ok, details = self.ffmpeg.check_media_integrity(output_path, run=self._run_command)
                     if ok:
                         self._log("OK", f"Integrity check OK: {output_path.name}")
                     else:
                         safe_to_delete_original = False
                         self._log("WARN", f"Integrity check failed for {output_path.name}: {details or 'decode error'}")
             if task.media_type == "video" and settings.smart_quality_metric in {"ssim", "vmaf"}:
-                ok, score, details = self.ffmpeg.measure_quality(task.path, output_path, settings.smart_quality_metric)
+                ok, score, details = self.ffmpeg.measure_quality(task.path, output_path, settings.smart_quality_metric, run=self._run_command)
                 label = settings.smart_quality_metric.upper()
                 if ok and score is not None:
                     self._log("OK", f"{label}: {score:.4f} для {output_path.name}")
@@ -102,6 +106,7 @@ class ConverterService:
                     self._log("OK", f"{label} check завершено для {output_path.name}")
                 else:
                     self._log("WARN", f"{label} check failed for {output_path.name}: {details or 'metric unavailable'}")
+        self._checkpoint()
         if settings.secure_delete_original and not safe_to_delete_original:
             self._log("WARN", "Secure delete пропущено: післяобробка результату завершилася з помилкою.")
             return
@@ -150,26 +155,44 @@ class ConverterService:
         self._terminate_process(self.current_proc)
 
     def pause(self) -> None:
-        self.pause_event.set()
-        for child in list(self.child_services):
-            child.pause()
-        self._set_process_suspended(True)
+        with self._children_lock:
+            self.pause_event.set()
+            for child in list(self.child_services):
+                child.pause()
+            self._set_process_suspended(True)
 
     def resume(self) -> None:
-        for child in list(self.child_services):
-            child.resume()
-        self._set_process_suspended(False)
-        self.pause_event.clear()
+        with self._children_lock:
+            for child in list(self.child_services):
+                child.resume()
+            self._set_process_suspended(False)
+            self.pause_event.clear()
 
-    def skip_current(self) -> None:
-        self.skip_event.set()
-        for child in list(self.child_services):
-            child.skip_current()
-        self._terminate_process(self.current_proc)
+    def skip_current(self, path: Path | None = None) -> None:
+        with self._children_lock:
+            children = list(self.child_services)
+            if children:
+                target = next((child for child in children if path is None or child.active_task_path == path), None)
+                if target:
+                    target.skip_current()
+                return
+            if path is not None and self.active_task_path != path:
+                return
+            self.skip_event.set()
+            self._terminate_process(self.current_proc)
 
     def _terminate_process(self, proc: subprocess.Popen | None, timeout: float = 3.0) -> None:
         if not proc or proc.poll() is not None:
             return
+        descendants = []
+        with contextlib.suppress(Exception):
+            import psutil
+            descendants = psutil.Process(proc.pid).children(recursive=True)
+            for child in descendants:
+                with contextlib.suppress(Exception):
+                    child.resume()
+                    child.terminate()
+            psutil.Process(proc.pid).resume()
         try:
             proc.terminate()
             proc.wait(timeout=timeout)
@@ -181,6 +204,34 @@ class ConverterService:
                 pass
         except Exception:
             pass
+
+    def _checkpoint(self) -> None:
+        self._wait_if_paused()
+        if self.stop_event.is_set() or self.skip_event.is_set():
+            raise InterruptedError("Скасовано користувачем")
+
+    def _run_command(self, cmd, *, timeout=None, env=None, **_kwargs):
+        """Run auxiliary tools with pause/cancel support and bounded memory usage."""
+        self._checkpoint()
+        with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+            proc = subprocess.Popen(cmd, stdout=stdout, stderr=stderr, env=env)
+            self.current_proc = proc
+            started = time.monotonic()
+            try:
+                if self.pause_event.is_set():
+                    self._set_process_suspended(True)
+                while proc.poll() is None:
+                    self._checkpoint()
+                    if timeout and time.monotonic() - started > timeout:
+                        raise subprocess.TimeoutExpired(cmd, timeout)
+                    time.sleep(0.05)
+                self._checkpoint()
+                stdout.seek(0)
+                stderr.seek(0)
+                return subprocess.CompletedProcess(cmd, proc.returncode, stdout.read().decode("utf-8", "replace"), stderr.read().decode("utf-8", "replace"))
+            finally:
+                self._terminate_process(proc)
+                self.current_proc = None
 
     def _wait_if_paused(self) -> None:
         emitted = False
@@ -194,6 +245,11 @@ class ConverterService:
         proc = self.current_proc
         if not proc or proc.poll() is not None:
             return
+        with contextlib.suppress(Exception):
+            import psutil
+            for child in psutil.Process(proc.pid).children(recursive=True):
+                with contextlib.suppress(Exception):
+                    child.suspend() if suspend else child.resume()
         if os.name == "nt":
             self._set_windows_process_suspended(proc.pid, suspend)
             return
@@ -289,10 +345,16 @@ class ConverterService:
             if skip_next:
                 skip_next = False
                 continue
-            if arg in {"-gpu", "-hwaccel", "-hwaccel_output_format"}:
+            if arg in {"-gpu", "-hwaccel", "-hwaccel_output_format", "-rc", "-rc:v", "-cq", "-qp_i", "-qp_p", "-qp_b", "-global_quality"}:
                 skip_next = True
                 continue
             cleaned.append(arg)
+        quality = next((new_cmd[new_cmd.index(flag) + 1] for flag in ("-cq", "-global_quality", "-qp_i") if flag in new_cmd), "23")
+        if "-b:v" in cleaned and cleaned[cleaned.index("-b:v") + 1] == "0":
+            pos = cleaned.index("-b:v")
+            del cleaned[pos:pos + 2]
+        if "-b:v" not in cleaned:
+            cleaned[-1:-1] = ["-crf", quality]
         return cleaned
 
     def _run_video_command(
@@ -330,7 +392,7 @@ class ConverterService:
             self._cleanup_passlog(passlog)
 
         # Automatic GPU to CPU fallback on failure
-        if rc != 0 and not self.stop_event.is_set() and getattr(settings, "auto_gpu_fallback", True):
+        if rc != 0 and not self.stop_event.is_set() and not self.skip_event.is_set() and getattr(settings, "auto_gpu_fallback", True):
             fallback_cmd = self._create_cpu_fallback_command(cmd)
             if fallback_cmd:
                 self._log("WARN", f"Апаратний енкодер завершився з помилкою (код {rc}). Виконую автоматичний відкат на CPU енкодер...")
@@ -352,19 +414,20 @@ class ConverterService:
             if self.stop_event.is_set() or self.skip_event.is_set():
                 return
             sample_path = outp.with_name(f"{outp.stem}_ab_crf{crf}{outp.suffix}")
+            sample_path = self._reserve_output_path(sample_path, "index")
             sample_settings = replace(
                 settings,
                 crf=crf,
                 target_size_mb=None,
                 smart_ab_test=False,
                 smart_two_pass=False,
-                overwrite=True,
+                overwrite=False,
                 trim_start=start,
                 trim_end=end,
             )
             cmd = self.ffmpeg.build_video_command(task.path, sample_path, sample_settings, info, False, log_cb=self._log)
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=max(60, sample_duration * 30))
+                result = self._run_command(cmd, timeout=max(60, sample_duration * 30))
             except Exception as exc:
                 self._log("WARN", f"A/B sample CRF {crf} failed: {exc}")
                 continue
@@ -427,47 +490,19 @@ class ConverterService:
         collision_policy = settings.output_collision_policy or (
             "overwrite" if settings.overwrite else "skip" if settings.skip_existing else "index"
         )
-        output_path = build_output_path(
-            out_dir,
-            task.path,
-            out_ext,
-            template=settings.output_template,
-            index=index,
-            operation=settings.operation,
-            media_type_name=task.media_type,
-            overwrite=collision_policy in {"stop", "overwrite", "skip"},
-            skip_existing=collision_policy == "skip",
-            info=self.media_info.get(task.path),
-        )
-        if collision_policy == "parent":
-            parent = sanitize_file_stem(task.path.parent.name)
-            output_path = output_path.with_name(f"{parent}_{output_path.name}")
-        return self._reserve_output_path(output_path, collision_policy)
+        with self._output_path_lock:
+            return build_output_path(
+                out_dir, task.path, out_ext,
+                template=settings.output_template, index=index,
+                operation=settings.operation, media_type_name=task.media_type,
+                overwrite=settings.overwrite, skip_existing=settings.skip_existing,
+                info=self.media_info.get(task.path), collision_policy=collision_policy,
+                reserved=self._reserved_output_paths,
+            )
 
     def _reserve_output_path(self, output_path: Path, collision_policy: str = "index") -> Path:
-        """Reserve an output name across sequential and parallel workers.
-
-        ``build_output_path`` can only see files already present on disk.  Two
-        workers selecting a name before either starts writing would otherwise
-        use the same destination.
-        """
         with self._output_path_lock:
-            if collision_policy == "stop" and output_path.exists():
-                raise FileExistsError(f"Вихідний файл уже існує: {output_path.name}")
-            if output_path not in self._reserved_output_paths:
-                self._reserved_output_paths.add(output_path)
-                return output_path
-
-            if collision_policy in {"stop", "overwrite"}:
-                raise FileExistsError(f"Конфлікт вихідних імен: {output_path.name}")
-
-            index = 1
-            while True:
-                candidate = output_path.with_name(f"{output_path.stem} ({index}){output_path.suffix}")
-                if candidate not in self._reserved_output_paths and not candidate.exists():
-                    self._reserved_output_paths.add(candidate)
-                    return candidate
-                index += 1
+            return resolve_output_collision(output_path, collision_policy, self._reserved_output_paths)
 
     def _chapter_output_path(self, base_output: Path, chapter_index: int, chapter_title: str) -> Path:
         suffix = base_output.suffix
@@ -486,7 +521,7 @@ class ConverterService:
         try:
             import shlex
             cmd_list = command if os.name == 'nt' else shlex.split(command)
-            result = subprocess.run(cmd_list, shell=False, env=env, capture_output=True, text=True)
+            result = self._run_command(cmd_list, env=env)
         except Exception as e:
             self._log('WARN', f'Hook {stage} failed: {e}')
             return
@@ -630,12 +665,16 @@ class ConverterService:
                     task,
                     resolved_settings=replace(task.resolved_settings, before_hook="", after_hook="", merge=False),
                 )
-            self.child_services.append(child)
+            child.active_task_path = task.path
+            with self._children_lock:
+                child.pause_event = self.pause_event
+                child.stop_event = self.stop_event
+                self.child_services.append(child)
             try:
                 self._wait_for_resource_budget(child_task.resolved_settings or child_settings)
                 child._run([child_task], child_settings, out_dir, start_index=index)
             finally:
-                with contextlib.suppress(ValueError):
+                with self._children_lock, contextlib.suppress(ValueError):
                     self.child_services.remove(child)
 
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="converter-worker") as executor:
@@ -676,6 +715,9 @@ class ConverterService:
                     else:
                         self._emit(*event)
 
+                for future in futures:
+                    if future.done():
+                        future.result()
                 futures = [future for future in futures if not future.done()]
                 time.sleep(0.05)
 
@@ -738,6 +780,22 @@ class ConverterService:
         return True, "; ".join(chapter_outputs)
 
     def _run(self, tasks: list[TaskItem], settings: ConversionSettings, out_dir: Path, *, start_index: int = 1) -> None:
+        started = time.time()
+        try:
+            self._run_inner(tasks, settings, out_dir, start_index=start_index)
+        except Exception as exc:
+            self._log("ERROR", str(exc))
+            status = TaskStatus.CANCELLED if self.stop_event.is_set() else TaskStatus.FAILED
+            results = []
+            for task in tasks:
+                self._task_state(task.path, status, str(exc))
+                results.append({"path": str(task.path), "status": status, "message": str(exc), "output_path": ""})
+            self._emit_run_summary(settings=settings, out_dir=out_dir, total_files=len(tasks), stopped=self.stop_event.is_set(), results=results, started_at=started)
+            self._emit("done", self.stop_event.is_set())
+        finally:
+            self.active_task_path = None
+
+    def _run_inner(self, tasks: list[TaskItem], settings: ConversionSettings, out_dir: Path, *, start_index: int = 1) -> None:
         if not tasks:
             self._log("WARN", "Черга порожня.")
             self._emit("done", True)
@@ -748,9 +806,7 @@ class ConverterService:
             for task in tasks
         )
         if needs_ffmpeg and not self.ffmpeg.ffmpeg_path:
-            self._log("ERROR", "FFmpeg не знайдено. Вкажи шлях до ffmpeg.")
-            self._emit("done", True)
-            return
+            raise FileNotFoundError("FFmpeg не знайдено. Вкажи шлях до ffmpeg.")
 
         out_dir.mkdir(parents=True, exist_ok=True)
         total_files = len(tasks)
@@ -975,7 +1031,15 @@ class ConverterService:
                     self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
                     continue
 
-                outp = self._resolve_output_path(task, settings_for_task, out_dir, index)
+                self.active_task_path = task.path
+                try:
+                    outp = self._resolve_output_path(task, settings_for_task, out_dir, index)
+                except (OSError, ValueError) as exc:
+                    self._task_state(task.path, TaskStatus.FAILED, str(exc))
+                    self._log("ERROR", str(exc))
+                    run_results.append({"path": str(task.path), "status": "failed", "message": str(exc), "output_path": ""})
+                    done_files += 1
+                    continue
                 duration = self._task_duration(task) if task.media_type in {"video", "audio"} else None
 
                 if settings_for_task.skip_existing and outp.exists() and not settings_for_task.overwrite:
@@ -1055,7 +1119,14 @@ class ConverterService:
                         elif task.media_type == "subtitle":
                             cmd = self.ffmpeg.build_subtitle_file_command(task.path, outp, settings_for_task)
                         elif task.media_type == "text":
-                            convert_text_file(task.path, outp, settings_for_task.out_text_format)
+                            temporary = outp.with_name(f".{outp.stem}.{uuid.uuid4().hex}.partial{outp.suffix}")
+                            try:
+                                self._checkpoint()
+                                convert_text_file(task.path, temporary, settings_for_task.out_text_format)
+                                self._checkpoint()
+                                publish_completed_output(temporary, outp, overwrite=settings_for_task.overwrite)
+                            finally:
+                                temporary.unlink(missing_ok=True)
                             cmd = []
                         else:
                             raise ValueError(f"Невідомий тип файлу: {task.media_type}")
@@ -1136,7 +1207,17 @@ class ConverterService:
                                 self._log("ERROR", result_message)
                                 self._task_state(task.path, "failed", result_message)
                     elif op == "auto_subtitle":
-                        rc = self.transcriber.generate(task.path, outp, settings_for_task, log_cb=self._log)
+                        temporary = outp.with_name(f".{outp.stem}.{uuid.uuid4().hex}.partial{outp.suffix}")
+                        try:
+                            if isinstance(self.transcriber, TranscriptionService):
+                                rc = self.transcriber.generate_managed(task.path, temporary, settings_for_task, self._run_command)
+                            else:
+                                rc = self.transcriber.generate(task.path, temporary, settings_for_task, log_cb=self._log)
+                            self._checkpoint()
+                            if rc == 0:
+                                publish_completed_output(temporary, outp, overwrite=settings_for_task.overwrite)
+                        finally:
+                            temporary.unlink(missing_ok=True)
                         success = rc == 0 and outp.exists()
                         if success:
                             status = "success"
@@ -1199,6 +1280,10 @@ class ConverterService:
                     self._task_state(task.path, "failed", str(exc))
                     result_message = str(exc)
 
+                if self.stop_event.is_set():
+                    status = TaskStatus.CANCELLED
+                    result_message = "Скасовано користувачем"
+                    self._task_state(task.path, status, result_message)
                 if self.skip_event.is_set():
                     self.skip_event.clear()
                     status = "skipped"
@@ -1208,7 +1293,15 @@ class ConverterService:
                     self._task_state(task.path, "skipped", result_message)
 
                 if status == TaskStatus.SUCCESS or status == "success":
-                    self._post_process_success(task, settings_for_task, result_output)
+                    try:
+                        self._post_process_success(task, settings_for_task, result_output)
+                    except InterruptedError:
+                        pass
+                    if self.stop_event.is_set() or self.skip_event.is_set():
+                        status = TaskStatus.CANCELLED if self.stop_event.is_set() else TaskStatus.SKIPPED
+                        result_message = "Післяобробку скасовано; результат збережено"
+                        self._task_state(task.path, status, result_message, result_output)
+                        self.skip_event.clear()
 
                 done_files += 1
                 if duration:
@@ -1364,7 +1457,7 @@ class ConverterService:
                     work_output_path.unlink(missing_ok=True)
                 return 1
             try:
-                os.replace(work_output_path, output_path)
+                publish_completed_output(work_output_path, output_path, overwrite="-y" in cmd)
             except OSError as exc:
                 self._log("ERROR", f"Не вдалося опублікувати результат {output_path.name}: {exc}")
                 with contextlib.suppress(Exception):

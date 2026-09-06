@@ -197,7 +197,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.skip_existing = _coerce_bool(settings_map.get("skip_existing"), settings.skip_existing)
     explicit_collision_policy = str(settings_map.get("output_collision_policy") or "").strip().lower()
     collision_policy = explicit_collision_policy
-    if collision_policy not in {"stop", "index", "parent", "overwrite"}:
+    if collision_policy not in {"stop", "index", "parent", "overwrite", "skip"}:
         collision_policy = "overwrite" if settings.overwrite else "skip" if settings.skip_existing else "index"
     settings.output_collision_policy = collision_policy
     if collision_policy == "overwrite":
@@ -276,7 +276,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.subtitle_outline = _coerce_int(settings_map.get("subtitle_outline"), settings.subtitle_outline, minimum=0, maximum=20)
     settings.subtitle_shadow = _coerce_int(settings_map.get("subtitle_shadow"), settings.subtitle_shadow, minimum=0, maximum=20)
     settings.subtitle_alignment = _coerce_int(settings_map.get("subtitle_alignment"), settings.subtitle_alignment, minimum=1, maximum=9)
-    subtitle_out_format = str(settings_map.get("subtitle_out_fmt") or settings.subtitle_out_format).strip().lower()
+    subtitle_out_format = str(settings_map.get("out_subtitle_fmt") or settings_map.get("subtitle_out_fmt") or settings.subtitle_out_format).strip().lower()
     if subtitle_out_format in OUT_SUBTITLE_FORMATS:
         settings.subtitle_out_format = subtitle_out_format
         settings.out_subtitle_format = subtitle_out_format
@@ -379,6 +379,6 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
 def merge_settings_maps(base_map: Mapping[str, Any], override_map: Mapping[str, Any]) -> dict[str, Any]:
     merged = dict(base_map)
     for key, value in override_map.items():
-        if value not in (None, ""):
+        if key in {"trim_start", "trim_end"} or value not in (None, ""):
             merged[key] = value
     return merged

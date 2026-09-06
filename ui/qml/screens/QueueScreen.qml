@@ -13,6 +13,8 @@ Item {
     readonly property bool hasSelection: appRoot && appRoot.selectedPaths.length > 0
     readonly property bool batchSelection: appRoot && appRoot.selectedPaths.length > 1
 
+    function focusSearch() { queueSearchField.forceActiveFocus() }
+
     function clearSelection() {
         if (appRoot)
             appRoot.clearQueueSelection()
@@ -42,7 +44,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: 1
                         Label { text: appRoot ? appRoot.workspaceTitle() : I18n.t("nav_queue"); color: Theme.textPrimary; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
-                        Label { text: backend ? backend.queueCount + " " + I18n.t("files") : "0 " + I18n.t("files"); color: Theme.textSecondary; font.pixelSize: Theme.fontMeta }
+                        Label { text: backend ? backend.visibleQueuePaths.length + " " + I18n.t("files") : "0 " + I18n.t("files"); color: Theme.textSecondary; font.pixelSize: Theme.fontMeta }
                     }
 
                     Button {
@@ -128,14 +130,17 @@ Item {
                         id: queueSearchField
                         objectName: "queueSearchField"
                         Layout.fillWidth: true
-                        Layout.preferredWidth: 1
+                        Layout.preferredWidth: 320
+                        Layout.minimumWidth: 120
                         placeholderText: I18n.t("queue_search")
                         text: appRoot ? appRoot.queueSearchText : ""
                         onTextChanged: if (appRoot) appRoot.queueSearchText = text
                     }
 
                     AppComboBox {
+                        Layout.fillWidth: false
                         Layout.preferredWidth: root.width > 840 ? 134 : 104
+                        Layout.maximumWidth: root.width > 840 ? 134 : 104
                         model: ["all", "pending", "processing", "done", "failed", "skipped", "cancelled"]
                         translationPrefix: "queue_filter_"
                         currentIndex: appRoot ? Math.max(0, find(appRoot.queueStatusFilter)) : 0
@@ -232,12 +237,21 @@ Item {
                         }
                     }
 
+                    Label {
+                        visible: backend && backend.visibleQueuePaths.length === 0
+                        Layout.fillWidth: true
+                        Layout.margins: Theme.space4
+                        text: I18n.t("no_matching_files")
+                        color: Theme.textSecondary
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
                     ListView {
                         id: queueList
                         visible: !(backend && backend.queueViewMode === "grid")
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        model: backend ? backend.queueModel : null
+                        model: backend ? backend.filteredQueueModel : null
                         clip: true
                         spacing: 1
                         cacheBuffer: 600
@@ -246,9 +260,6 @@ Item {
 
                         delegate: Queue.QueueRow {
                             width: ListView.view.width
-                            property bool matchesQueueFilter: appRoot ? appRoot.queueItemMatches(model.name, model.path, model.mediaType, model.status) : true
-                            visible: matchesQueueFilter
-                            height: matchesQueueFilter ? implicitHeight : 0
                             fileName: model.name
                             filePath: model.path
                             mediaType: model.mediaType
@@ -263,10 +274,10 @@ Item {
                             speedText: model.speedText
                             selected: appRoot ? appRoot.isPathSelected(model.path) : false
                             compact: root.narrow
-                            itemIndex: index
+                            itemIndex: model.sourceIndex
                             onSelectedRequested: function(path, modifiers) { appRoot && appRoot.selectQueuePath(path, index, modifiers, model.name, model.mediaType, model.thumbnailSource) }
                             onRetryRequested: function(path) { backend && backend.retryTaskPath(path) }
-                            onSkipRequested: function(path) { backend && backend.skipCurrentFile() }
+                            onSkipRequested: function(path) { backend && backend.skipTaskPath(path) }
                             onRemoveRequested: function(path) { appRoot && appRoot.removeQueuePath(path) }
                             onQuickConvertRequested: function(path, name, mediaKind, rowIndex) { appRoot && appRoot.openQuickConvert(path, name, mediaKind, rowIndex) }
                             onMoveRequested: function(path, targetIndex) { backend && backend.movePathToIndex(path, targetIndex) }
@@ -282,15 +293,13 @@ Item {
                         Layout.margins: 10
                         cellWidth: 224
                         cellHeight: 244
-                        model: backend ? backend.queueModel : null
+                        model: backend ? backend.filteredQueueModel : null
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
 
                         delegate: Item {
                             width: 216
                             height: 236
-                            property bool matchesQueueFilter: appRoot ? appRoot.queueItemMatches(model.name, model.path, model.mediaType, model.status) : true
-                            visible: matchesQueueFilter
 
                             QueueItemCard {
                                 anchors.fill: parent
@@ -307,10 +316,10 @@ Item {
                                 etaText: model.etaText
                                 speedText: model.speedText
                                 selected: appRoot ? appRoot.isPathSelected(model.path) : false
-                                itemIndex: index
+                                itemIndex: model.sourceIndex
                                 onSelectedRequested: function(path, modifiers) { appRoot && appRoot.selectQueuePath(path, index, modifiers, model.name, model.mediaType, model.thumbnailSource) }
                                 onRetryRequested: function(path) { backend && backend.retryTaskPath(path) }
-                                onSkipRequested: function(path) { backend && backend.skipCurrentFile() }
+                                onSkipRequested: function(path) { backend && backend.skipTaskPath(path) }
                                 onRemoveRequested: function(path) { appRoot && appRoot.removeQueuePath(path) }
                                 onQuickConvertRequested: function(path, name, mediaKind, rowIndex) { appRoot && appRoot.openQuickConvert(path, name, mediaKind, rowIndex) }
                                 onMoveRequested: function(path, targetIndex) { backend && backend.movePathToIndex(path, targetIndex) }

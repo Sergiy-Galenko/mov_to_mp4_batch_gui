@@ -471,3 +471,40 @@ class HistoryModel(QtCore.QAbstractListModel):
         if index < 0 or index >= len(self._entries):
             return None
         return self._entries[index]
+
+
+class QueueFilterModel(QtCore.QSortFilterProxyModel):
+    SourceIndexRole = QtCore.Qt.UserRole + 100
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.search = ""
+        self.status = "all"
+        self.media_kind = "all"
+        self.setDynamicSortFilter(True)
+
+    def roleNames(self):
+        return {**super().roleNames(), self.SourceIndexRole: b"sourceIndex"}
+
+    def data(self, index, role=QtCore.Qt.DisplayRole):
+        if role == self.SourceIndexRole:
+            return self.mapToSource(index).row()
+        return super().data(index, role)
+
+    def set_filters(self, search, status, media_kind):
+        self.search = str(search or "").strip().lower()
+        self.status = str(status or "all")
+        self.media_kind = str(media_kind or "all")
+        self.invalidateFilter()
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        model = self.sourceModel()
+        item = model.item_at(source_row)
+        if item is None:
+            return False
+        if self.media_kind != "all" and item.media_type != self.media_kind:
+            return False
+        if self.search and self.search not in f"{item.path.name} {item.path} {item.media_type} {item.status}".lower():
+            return False
+        groups = {"pending": {"queued", "ready", "analyzing"}, "processing": {"running", "paused"}, "done": {"success"}}
+        return self.status == "all" or item.status in groups.get(self.status, {self.status})

@@ -10,6 +10,7 @@ from .general_properties import BODY as GENERAL_PROPERTIES_BODY
 from .media_details import BODY as MEDIA_DETAILS_BODY
 from .queue_actions import BODY as QUEUE_ACTIONS_BODY
 from .queue_io import BODY as QUEUE_IO_BODY
+from .queue_view import BODY as QUEUE_VIEW_BODY
 from .ui_preferences import BODY as UI_PREFERENCES_BODY
 
 _CLASS_SOURCE = (
@@ -25,6 +26,7 @@ _CLASS_SOURCE = (
     + QUEUE_ACTIONS_BODY
     + MEDIA_DETAILS_BODY
     + CONVERSION_BODY
+    + QUEUE_VIEW_BODY
     + EVENT_LOOP_BODY
 )
 

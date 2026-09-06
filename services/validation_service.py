@@ -202,13 +202,6 @@ class ValidationService:
         add_error,
         add_warning,
     ) -> None:
-        unsupported = [item for item in queue_items if not operation_supports_media(settings.operation, item.media_type)]
-        if unsupported:
-            label = OPERATION_LABELS.get(settings.operation, settings.operation)
-            add_error(
-                "queue",
-                f"Операція '{label}' не підтримує частину файлів у черзі: {len(unsupported)}.",
-            )
         for item in queue_items:
             if not item.path.exists():
                 add_error("queue", f"Файл не знайдено: {item.path}")
@@ -217,7 +210,19 @@ class ValidationService:
         resolved_by_path: dict[Path, ConversionSettings] = {}
         for item in queue_items:
             merged = merge_settings_maps(raw, item.overrides)
-            resolved_by_path[item.path] = settings_map_to_model(merged, defaults=ConversionSettings())
+            resolved = settings_map_to_model(merged, defaults=ConversionSettings())
+            resolved_by_path[item.path] = resolved
+            self._validate_fields(merged, lambda field, message, item=item: add_error(field, f"{item.path.name}: {message}"))
+            if not operation_supports_media(resolved.operation, item.media_type):
+                label = OPERATION_LABELS.get(resolved.operation, resolved.operation)
+                add_error("queue", f"{item.path.name}: операція '{label}' не підтримує цей тип файлу.")
+            if resolved.trim_start is not None and resolved.trim_end is not None and resolved.trim_end <= resolved.trim_start:
+                add_error("trim_end", f"{item.path.name}: кінець обрізання має бути більшим за початок.")
+            if item.media_type == "video" and resolved.operation in {"convert", "subtitle_burn"}:
+                if resolved.video_codec == "ProRes" and resolved.out_video_format not in {"mov", "mkv"}:
+                    add_error("codec", f"{item.path.name}: для ProRes вибери MOV або MKV.")
+                if resolved.audio_codec == "copy" and self.ffmpeg.has_audio_processing(resolved):
+                    add_error("audio_codec", f"{item.path.name}: обробка аудіо потребує перекодування; зміни audio codec з copy на auto.")
 
         merge_candidates = [
             item

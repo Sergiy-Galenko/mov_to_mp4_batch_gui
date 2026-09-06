@@ -16,7 +16,7 @@ class CloudUploadError(RuntimeError):
 
 
 class CloudUploadService:
-    def upload(self, output_path: Path, settings: ConversionSettings, log_cb: LogCallback | None = None) -> None:
+    def upload(self, output_path: Path, settings: ConversionSettings, log_cb: LogCallback | None = None, *, run=None) -> None:
         if not settings.cloud_upload_enabled:
             return
         remote = str(settings.cloud_remote_path or "").strip()
@@ -30,7 +30,7 @@ class CloudUploadService:
         if log_cb:
             log_cb("INFO", f"Cloud upload: {' '.join(cmd)}")
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+            result = (run or subprocess.run)(cmd, capture_output=True, text=True, timeout=3600)
         except FileNotFoundError as exc:
             raise CloudUploadError("rclone not found. Set the rclone path or install rclone.") from exc
         except subprocess.TimeoutExpired as exc:

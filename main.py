@@ -16,6 +16,10 @@ def _bootstrap_dependencies() -> None:
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["--transcribe-worker"]:
+        from services.transcription_service import run_transcription_worker
+
+        sys.exit(run_transcription_worker(sys.argv[2:]))
     _bootstrap_dependencies()
 
     if "--cli" in sys.argv:

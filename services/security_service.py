@@ -7,19 +7,21 @@ from pathlib import Path
 SUPPORTED_CHECKSUMS = {"md5", "sha256"}
 
 
-def checksum_file(path: Path, algorithm: str) -> str:
+def checksum_file(path: Path, algorithm: str, *, checkpoint=None) -> str:
     normalized = str(algorithm or "").strip().lower()
     if normalized not in SUPPORTED_CHECKSUMS:
         raise ValueError(f"Unsupported checksum algorithm: {algorithm}")
     digest = hashlib.new(normalized)
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            if checkpoint:
+                checkpoint()
             digest.update(chunk)
     return digest.hexdigest()
 
 
-def write_checksum_sidecar(path: Path, algorithm: str) -> Path:
-    digest = checksum_file(path, algorithm)
+def write_checksum_sidecar(path: Path, algorithm: str, *, checkpoint=None) -> Path:
+    digest = checksum_file(path, algorithm, checkpoint=checkpoint)
     sidecar = path.with_suffix(path.suffix + f".{algorithm}")
     sidecar.write_text(f"{digest}  {path.name}\n", encoding="utf-8")
     return sidecar

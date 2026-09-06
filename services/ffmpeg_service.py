@@ -14,11 +14,16 @@ from utils.formatting import build_atempo_chain
 
 
 def escape_drawtext(text: str) -> str:
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+    return escape_filter_value(text)
+
+
+def escape_filter_value(value: str) -> str:
+    option = "".join("\\" + char if char in "\\': " else char for char in value)
+    return "".join("\\" + char if char in "\\'[],; " else char for char in option)
 
 
 def escape_filter_path(path: str) -> str:
-    return path.replace("\\", "/").replace(":", "\\:")
+    return escape_filter_value(path.replace("\\", "/"))
 
 
 def _ass_color(value: str) -> str:
@@ -336,10 +341,10 @@ class FfmpegService:
         operation = settings.operation
         if media_type_name == "text":
             return settings.out_text_format
-        if operation == "audio_only" or media_type_name == "audio":
-            return settings.out_audio_format
         if operation in {"subtitle_extract", "auto_subtitle"} or media_type_name == "subtitle":
             return settings.out_subtitle_format
+        if operation == "audio_only" or media_type_name == "audio":
+            return settings.out_audio_format
         if operation in {"thumbnail", "contact_sheet"}:
             return settings.out_image_format
         return settings.out_video_format if media_type_name == "video" else settings.out_image_format
@@ -443,6 +448,8 @@ class FfmpegService:
         if out_ext == ".webm":
             return ["-c:a", "libopus", "-b:a", "128k"]
         requested = str(settings.audio_codec or "auto").strip().lower()
+        if out_ext == ".mpg" and requested in {"auto", "aac", "opus"}:
+            return ["-c:a", "ac3", "-b:a", settings.audio_bitrate or "192k"]
         if requested == "copy":
             return ["-c:a", "copy"]
         codec_map = {
@@ -576,7 +583,7 @@ class FfmpegService:
                 log_cb("WARN", f"Subtitle файл не знайдено: {source}")
             return None
         stream_idx = max(0, int(settings.subtitle_stream))
-        subtitle_filter = f"subtitles='{escape_filter_path(str(subtitle_source.resolve()))}':si={stream_idx}"
+        subtitle_filter = f"subtitles=filename={escape_filter_path(str(subtitle_source.resolve()))}:si={stream_idx}"
         if settings.subtitle_style_enabled:
             style_parts = [
                 f"FontSize={max(6, int(settings.subtitle_font_size))}",
@@ -637,7 +644,7 @@ class FfmpegService:
         if lut_path:
             path = Path(lut_path).expanduser()
             if path.exists():
-                filters.append(f"lut3d=file='{escape_filter_path(str(path.resolve()))}'")
+                filters.append(f"lut3d=file={escape_filter_path(str(path.resolve()))}")
             elif log_cb:
                 log_cb("WARN", f"LUT файл не знайдено: {lut_path}")
         return filters
@@ -659,9 +666,9 @@ class FfmpegService:
         }
         pos_expr = text_pos_map.get(pos, "10:10")
         x, y = pos_expr.split(":", 1)
-        draw = f"drawtext=text='{escape_drawtext(text)}':x={x}:y={y}:fontsize={size}:fontcolor={color}"
+        draw = f"drawtext=text={escape_drawtext(text)}:expansion=none:x={x}:y={y}:fontsize={size}:fontcolor={color}"
         if fontfile:
-            draw += f":fontfile='{escape_filter_path(fontfile)}'"
+            draw += f":fontfile={escape_filter_path(fontfile)}"
         if settings.text_box:
             opacity = max(0, min(100, settings.text_box_opacity)) / 100.0
             box_color = settings.text_box_color.strip() or "black"
@@ -976,11 +983,11 @@ class FfmpegService:
     def build_integrity_check_command(self, output_path: Path) -> list[str]:
         return [self.ffmpeg_path, "-v", "error", "-i", str(output_path), "-map", "0", "-f", "null", _null_output()]
 
-    def check_media_integrity(self, output_path: Path, timeout: int = 300) -> tuple[bool, str]:
+    def check_media_integrity(self, output_path: Path, timeout: int = 300, *, run=None) -> tuple[bool, str]:
         if not self.ffmpeg_path:
             return False, "FFmpeg path is not configured."
         try:
-            result = subprocess.run(
+            result = (run or subprocess.run)(
                 self.build_integrity_check_command(output_path),
                 capture_output=True,
                 text=True,
@@ -1009,14 +1016,14 @@ class FfmpegService:
             )
         return [self.ffmpeg_path, "-v", "info", "-i", str(output_path), "-i", str(source_path), "-lavfi", lavfi, "-f", "null", _null_output()]
 
-    def measure_quality(self, source_path: Path, output_path: Path, metric: str, timeout: int = 300) -> tuple[bool, float | None, str]:
+    def measure_quality(self, source_path: Path, output_path: Path, metric: str, timeout: int = 300, *, run=None) -> tuple[bool, float | None, str]:
         normalized = str(metric or "none").strip().lower()
         if normalized not in {"ssim", "vmaf"}:
             return True, None, ""
         if not self.ffmpeg_path:
             return False, None, "FFmpeg path is not configured."
         try:
-            result = subprocess.run(
+            result = (run or subprocess.run)(
                 self.build_quality_metric_command(source_path, output_path, normalized),
                 capture_output=True,
                 text=True,
@@ -1160,20 +1167,22 @@ class FfmpegService:
         codec = codec_map.get(out_ext, "aac")
         cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
         cover_art = self._resolve_cover_art_path(settings, log_cb=log_cb)
-        if cover_art and out_ext in {".mp3", ".m4a", ".aac"}:
+        if cover_art and out_ext in {".mp3", ".m4a"}:
             cmd += ["-i", str(cover_art)]
         cmd += trim_args
         track_index = max(0, int(settings.audio_track_index))
-        cmd += ["-vn", "-sn", "-map", f"0:a:{track_index}?"]
-        if cover_art and out_ext in {".mp3", ".m4a", ".aac"}:
+        cmd += ["-sn", "-map", f"0:a:{track_index}?"]
+        if cover_art and out_ext in {".mp3", ".m4a"}:
             cmd += ["-map", "1:v:0"]
+        else:
+            cmd += ["-vn"]
         if audio_filter:
             cmd += ["-filter:a", audio_filter]
         cmd += ["-c:a", codec]
         if codec in {"libmp3lame", "aac", "libopus"}:
             target_audio_kbps = self.target_audio_bitrate_kbps(settings, duration)
             cmd += ["-b:a", f"{target_audio_kbps}k" if target_audio_kbps else settings.audio_bitrate or "192k"]
-        if cover_art and out_ext in {".mp3", ".m4a", ".aac"}:
+        if cover_art and out_ext in {".mp3", ".m4a"}:
             cmd += ["-c:v", "mjpeg", "-disposition:v:0", "attached_pic"]
             if out_ext == ".mp3":
                 cmd += ["-id3v2_version", "3"]

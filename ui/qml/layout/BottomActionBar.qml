@@ -17,12 +17,12 @@ Rectangle {
         anchors.fill: parent
         anchors.leftMargin: Theme.space4
         anchors.rightMargin: Theme.space4
-        spacing: Theme.space4
+        spacing: root.width < 900 ? Theme.space2 : Theme.space4
 
         ColumnLayout {
             Layout.fillWidth: true
             Layout.preferredWidth: 1
-            Layout.minimumWidth: 220
+            Layout.minimumWidth: 150
             spacing: 5
             RowLayout {
                 Layout.fillWidth: true
@@ -57,7 +57,7 @@ Rectangle {
         }
 
         AppIconButton {
-            visible: root.width > 760
+            visible: true
             iconName: backend && backend.isPaused ? "play" : "pause"
             accessibleLabel: backend && backend.isPaused ? I18n.t("resume") : I18n.t("pause")
             enabled: backend && backend.isRunning
@@ -65,7 +65,7 @@ Rectangle {
         }
 
         AppIconButton {
-            visible: root.width > 840
+            visible: true
             iconName: "stop"
             accessibleLabel: I18n.t("stop")
             enabled: backend && backend.isRunning

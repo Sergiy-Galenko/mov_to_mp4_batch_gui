@@ -60,6 +60,8 @@ def read_text_file(path: Path) -> tuple[str, str]:
             return _read_odf(path), suffix.lstrip(".")
         if suffix == ".pdf":
             return _read_pdf(path), "pdf"
+        if suffix == ".rtf":
+            return _read_rtf(path), "rtf"
         if suffix in LEGACY_OFFICE_EXTS:
             text = _extract_printable_text(path.read_bytes())
             if text.strip():
@@ -71,6 +73,78 @@ def read_text_file(path: Path) -> tuple[str, str]:
         raise TextConversionError(f"Cannot extract text from document: {path}") from exc
 
     return _read_plain_text_file(path)
+
+
+def _read_rtf(path: Path) -> str:
+    raw = path.read_bytes().decode("latin-1")
+    if not raw.lstrip().startswith("{\\rtf"):
+        raise TextConversionError("Invalid RTF document")
+    output: list[str] = []
+    stack: list[tuple[bool, int, str]] = []
+    ignored, unicode_count, encoding = False, 1, "cp1252"
+    fallback = 0
+    destinations = {"fonttbl", "colortbl", "stylesheet", "info", "pict", "object", "header", "footer", "fldinst", "datastore"}
+    symbols = {"par": "\n", "line": "\n", "tab": "\t", "emdash": "—", "endash": "–", "bullet": "•", "lquote": "‘", "rquote": "’", "ldblquote": "“", "rdblquote": "”"}
+
+    def emit(value: str) -> None:
+        nonlocal fallback
+        if fallback:
+            fallback -= 1
+        elif not ignored:
+            output.append(value)
+
+    i = 0
+    while i < len(raw):
+        char = raw[i]
+        i += 1
+        if char == "{":
+            stack.append((ignored, unicode_count, encoding))
+        elif char == "}":
+            if stack:
+                ignored, unicode_count, encoding = stack.pop()
+            fallback = 0
+        elif char == "\\":
+            if i >= len(raw):
+                break
+            token = raw[i]
+            if token in "\\{}~_-":
+                emit({"~": "\u00a0", "_": "‑", "-": ""}.get(token, token))
+                i += 1
+            elif token == "*":
+                ignored = True
+                i += 1
+            elif token == "'" and re.fullmatch(r"[0-9a-fA-F]{2}", raw[i + 1:i + 3]):
+                emit(bytes([int(raw[i + 1:i + 3], 16)]).decode(encoding, "replace"))
+                i += 3
+            else:
+                match = re.match(r"([a-zA-Z]+)(-?\d+)? ?", raw[i:])
+                if not match:
+                    i += 1
+                    continue
+                word, number = match.groups()
+                i += len(match.group(0))
+                if word in destinations:
+                    ignored = True
+                elif word == "bin" and number:
+                    i += max(0, int(number))
+                elif word == "ansicpg" and number:
+                    candidate = "cp" + number
+                    try:
+                        b"".decode(candidate)
+                        encoding = candidate
+                    except LookupError:
+                        pass
+                elif word == "uc" and number:
+                    unicode_count = max(0, int(number))
+                elif word == "u" and number:
+                    if not ignored:
+                        output.append(chr(int(number) & 0xffff))
+                    fallback = unicode_count
+                elif word in symbols:
+                    emit(symbols[word])
+        elif char not in "\r\n":
+            emit(char.encode("latin-1").decode(encoding, "replace"))
+    return "".join(output).encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace").rstrip("\n")
 
 
 def convert_text_file(source: Path, output: Path, output_format: str) -> None:

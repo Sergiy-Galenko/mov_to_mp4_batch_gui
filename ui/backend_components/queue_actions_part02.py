@@ -64,16 +64,27 @@ BODY = r'''    @QtCore.Slot()
             self._maybe_auto_convert_watch_items(added)
 
     def _maybe_auto_convert_watch_items(self, items: List[TaskItem]) -> None:
-        if not self._watch_auto_convert_enabled or self._is_running or self.runner.is_running:
+        if not self._watch_auto_convert_enabled:
             return
+        self._watch_pending_paths.update(item.path for item in items)
+        self._start_pending_watch_items()
+
+    def _start_pending_watch_items(self) -> bool:
+        if not self._watch_auto_convert_enabled or self._is_running:
+            return False
+        if self.runner.is_running:
+            QtCore.QTimer.singleShot(150, self._start_pending_watch_items)
+            return True
         if not self._output_dir_configured or not self.outputDir:
             self._append_log("WARN", "Watch auto-convert skipped: output folder is not configured.")
-            return
-        paths = {item.path for item in items if item.status in {TaskStatus.QUEUED, TaskStatus.READY}}
+            return False
+        paths = {item.path for item in self.queue_model.items() if item.path in self._watch_pending_paths and item.status in {TaskStatus.QUEUED, TaskStatus.READY}}
         if not paths:
-            return
+            return False
+        self._watch_pending_paths.difference_update(paths)
         self._append_log("INFO", f"Watch auto-convert starting: {len(paths)} file(s)")
         self._start_conversion(dict(self._last_settings_map), only_paths=paths)
+        return self._is_running
 
     def _runnable_queue_paths(self) -> set[Path]:
         runnable = {TaskStatus.QUEUED, TaskStatus.READY, TaskStatus.FAILED, TaskStatus.CANCELLED}
@@ -142,7 +153,9 @@ BODY = r'''    @QtCore.Slot()
     def _handle_batch_completion(self, stopped: bool) -> None:
         summary = self._batch_completion_summary(stopped)
         self._send_http_notifications(summary)
-        if not stopped:
+        if stopped:
+            self._watch_pending_paths.clear()
+        elif not self._start_pending_watch_items():
             self._run_completion_action()
 
     def _send_http_notifications(self, summary: Dict[str, Any]) -> None:

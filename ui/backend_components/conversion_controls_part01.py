@@ -41,6 +41,10 @@ BODY = r'''    def _build_run_tasks(
     ) -> None:
         if self.runner.is_running:
             return
+        if failed_only:
+            only_paths = {item.path for item in self.queue_model.items() if item.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}}
+            if not only_paths:
+                return
         if not self._ensure_output_dir_selected(prompt=True):
             return
         if self.ffmpegPath:

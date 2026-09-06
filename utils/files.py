@@ -1,4 +1,5 @@
 import hashlib
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -53,6 +54,33 @@ def safe_output_path(out_path: Path) -> Path:
         if not candidate.exists():
             return candidate
         i += 1
+
+
+def resolve_output_collision(path: Path, policy: str, reserved: set[Path], *, strict: bool = True) -> Path:
+    """Choose a destination using the same rules in previews and workers."""
+    if policy in {"stop", "overwrite", "skip"}:
+        conflict = path in reserved or (policy == "stop" and path.exists())
+        if conflict and strict and policy != "skip":
+            raise FileExistsError(f"Конфлікт вихідного файлу: {path.name}")
+        if not conflict or policy != "skip":
+            reserved.add(path)
+            return path
+    candidate = path
+    index = 1
+    while candidate.exists() or candidate in reserved:
+        candidate = path.with_name(f"{path.stem} ({index}){path.suffix}")
+        index += 1
+    reserved.add(candidate)
+    return candidate
+
+
+def publish_output(temporary: Path, destination: Path, *, overwrite: bool = False) -> None:
+    """Publish a completed file; never replace a concurrent output without consent."""
+    if overwrite:
+        os.replace(temporary, destination)
+    else:
+        os.link(temporary, destination)
+        temporary.unlink()
 
 
 def file_sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
@@ -139,6 +167,9 @@ def build_output_path(
     overwrite: bool,
     skip_existing: bool,
     info: Any = None,
+    collision_policy: str = "",
+    reserved: set[Path] | None = None,
+    strict_collisions: bool = True,
 ) -> Path:
     stem = render_output_stem(
         template,
@@ -149,6 +180,10 @@ def build_output_path(
         info=info,
     )
     desired = out_dir / f"{stem}.{out_ext.lstrip('.')}"
+    if collision_policy:
+        if collision_policy == "parent":
+            desired = desired.with_name(f"{sanitize_file_stem(in_path.parent.name)}_{desired.name}")
+        return resolve_output_collision(desired, collision_policy, reserved if reserved is not None else set(), strict=strict_collisions)
     if overwrite or skip_existing:
         return desired
     return safe_output_path(desired)

@@ -160,13 +160,19 @@ class QueueManager:
         if not selected:
             return result
         if direction == "up":
+            selected_set = set(selected)
             for idx in selected:
-                if idx > 0 and idx - 1 not in selected:
+                if idx > 0 and idx - 1 not in selected_set:
                     result[idx - 1], result[idx] = result[idx], result[idx - 1]
+                    selected_set.remove(idx)
+                    selected_set.add(idx - 1)
         elif direction == "down":
+            selected_set = set(selected)
             for idx in reversed(selected):
-                if idx < len(result) - 1 and idx + 1 not in selected:
+                if idx < len(result) - 1 and idx + 1 not in selected_set:
                     result[idx + 1], result[idx] = result[idx], result[idx + 1]
+                    selected_set.remove(idx)
+                    selected_set.add(idx + 1)
         elif direction == "top":
             moved = [result[idx] for idx in selected]
             rest = [item for idx, item in enumerate(result) if idx not in selected]
