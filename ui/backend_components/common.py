@@ -30,6 +30,7 @@ from app.paths import find_ffmpeg, find_ffprobe
 from app.performance_profiles import prediction_factor
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.batch_workflow_service import DEFAULT_FOLDER_RULES, BatchWorkflowService
+from services.event_queue import UiEventQueue
 from services.ffmpeg_auto_installer import FfmpegAutoInstaller, FfmpegAutoInstallResult
 from services.ffmpeg_service import FfmpegService
 from services.folder_scanner import FolderScanner
@@ -41,6 +42,7 @@ from services.paid_update_service import PaidUpdateInfo, PaidUpdateService
 from services.preset_manager import PresetManager
 from services.queue_manager import QueueManager
 from services.report_service import ReportService
+from services.resource_monitor import ResourceMonitor
 from services.settings_manager import SettingsManager
 from services.shortcut_manager import ShortcutManager
 from services.smart_convert_service import recommend_settings
@@ -96,10 +98,11 @@ __all__ = [
     "QtCore",
     "QtGui",
     "QtWidgets",
+    "QueueFilterModel",
     "QueueManager",
     "QueueModel",
-    "QueueFilterModel",
     "ReportService",
+    "ResourceMonitor",
     "SettingsManager",
     "ShortcutManager",
     "SystemTrayService",
@@ -108,6 +111,7 @@ __all__ = [
     "TaskbarService",
     "ThemeManager",
     "ThreadPoolExecutor",
+    "UiEventQueue",
     "WatchService",
     "YouTubeDownloadCancelled",
     "YouTubeDownloadError",

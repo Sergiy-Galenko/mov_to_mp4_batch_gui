@@ -4,6 +4,10 @@ BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
     def filteredQueueModel(self) -> QtCore.QObject:
         return self.queue_filter_model
 
+    @QtCore.Property(int, notify=queueFilterChanged)
+    def visibleQueueCount(self) -> int:
+        return self.queue_filter_model.rowCount()
+
     @QtCore.Property("QVariantList", notify=queueFilterChanged)
     def visibleQueuePaths(self) -> List[str]:
         model = self.queue_filter_model

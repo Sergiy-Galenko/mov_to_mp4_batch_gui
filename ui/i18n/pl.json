@@ -485,5 +485,19 @@
   "pos_top_right": "Góra-prawo",
   "pos_bottom_left": "Dół-lewo",
   "pos_bottom_right": "Dół-prawo",
-  "pos_center": "Środek"
+  "pos_center": "Środek",
+  "clear_search": "Wyczyść wyszukiwanie",
+  "list_view": "Widok listy",
+  "grid_view": "Widok siatki",
+  "reset_filters": "Resetuj filtry",
+  "select_file": "Wybierz plik",
+  "shortcut_search": "Szukaj skrótów",
+  "reset": "Resetuj",
+  "trim_out": "Koniec",
+  "trim": "Przytnij",
+  "keyboard_shortcuts": "Skróty klawiaturowe",
+  "lossless_fast_copy": "Szybka kopia bezstratna",
+  "trim_in": "Początek",
+  "no_matching_files": "Brak plików pasujących do filtrów",
+  "format": "Format"
 }

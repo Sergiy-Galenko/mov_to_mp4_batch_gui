@@ -75,7 +75,7 @@ QtObject {
         : obsidianMode ? "#484F58"
         : midnightMode ? "#475569"
         : "#7EAB90"
-    readonly property color textOnAccent: "#FFFFFF"
+    readonly property color textOnAccent: highContrastMode ? "#000000" : "#FFFFFF"
 
     readonly property color accent: highContrastMode ? "#FFFF00" : (typeof backend !== "undefined" && backend ? backend.accentColor : "#2563EB")
     readonly property color accentHover: highContrastMode ? "#FFFF66" : lightMode ? "#1D4ED8" : "#3B82F6"
@@ -103,9 +103,9 @@ QtObject {
     readonly property int radiusMd: 6
     readonly property int radiusLg: 8
 
-    readonly property string displayFont: "Segoe UI"
-    readonly property string bodyFont: "Segoe UI"
-    readonly property string monoFont: "JetBrains Mono"
+    readonly property string displayFont: Qt.application.font.family
+    readonly property string bodyFont: Qt.application.font.family
+    readonly property string monoFont: Qt.platform.os === "osx" ? "Menlo" : Qt.platform.os === "windows" ? "Consolas" : "monospace"
 
     readonly property int titlebarHeight: 52
     readonly property int sidebarWidth: 236

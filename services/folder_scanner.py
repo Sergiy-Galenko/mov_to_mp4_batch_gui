@@ -7,6 +7,8 @@ glob-based exclude patterns, and file size constraints.
 from __future__ import annotations
 
 import fnmatch
+import os
+import re
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -51,6 +53,8 @@ class FolderScanner:
         self.min_size_bytes = max(0, min_size_bytes)
         self.max_size_bytes = max(0, max_size_bytes)
         self.include_hidden = include_hidden
+        self._pattern_key: frozenset[str] = frozenset()
+        self._compiled_patterns: list[re.Pattern] = []
 
     def scan(self, folder: Path) -> list[Path]:
         """Recursively scan folder and return filtered file list."""
@@ -59,15 +63,13 @@ class FolderScanner:
 
         results: list[Path] = []
         try:
-            for item in sorted(folder.rglob("*")):
-                if not item.is_file():
-                    continue
+            for item in self._walk_files(folder, prune_hidden=True):
                 if self._should_skip(item):
                     continue
                 results.append(item)
         except PermissionError:
             pass
-        return results
+        return sorted(results)
 
     def scan_with_stats(self, folder: Path) -> dict[str, object]:
         """Scan folder and return results with statistics."""
@@ -86,10 +88,7 @@ class FolderScanner:
             }
 
         try:
-            for item in sorted(folder.rglob("*")):
-                if not item.is_file():
-                    continue
-
+            for item in self._walk_files(folder):
                 # Hidden check
                 if not self.include_hidden and _is_hidden(item):
                     excluded_count += 1
@@ -126,7 +125,7 @@ class FolderScanner:
             pass
 
         return {
-            "files": all_files,
+            "files": sorted(all_files),
             "total_scanned": len(all_files) + excluded_count + type_filtered_count + size_filtered_count,
             "excluded": excluded_count,
             "type_filtered": type_filtered_count,
@@ -157,8 +156,33 @@ class FolderScanner:
 
     def _matches_exclude(self, filename: str) -> bool:
         """Check if filename matches any exclude pattern."""
+        key = frozenset(self.exclude_patterns)
+        if key != self._pattern_key:
+            self._pattern_key = key
+            self._compiled_patterns = [re.compile(fnmatch.translate(pattern.lower())) for pattern in key]
         lower = filename.lower()
-        return any(fnmatch.fnmatch(lower, pattern.lower()) for pattern in self.exclude_patterns)
+        return any(pattern.match(lower) for pattern in self._compiled_patterns)
+
+    def _walk_files(self, folder: Path, *, prune_hidden: bool = False):
+        # Iterative traversal avoids recursion limits. Close each scandir handle
+        # before descending; one unreadable directory must not hide its siblings.
+        pending = [folder]
+        while pending:
+            directory = pending.pop()
+            if prune_hidden and not self.include_hidden and _is_hidden(directory):
+                continue
+            try:
+                with os.scandir(directory) as entries:
+                    for entry in entries:
+                        try:
+                            if entry.is_dir(follow_symlinks=False):
+                                pending.append(Path(entry.path))
+                            elif entry.is_file():
+                                yield Path(entry.path)
+                        except OSError:
+                            continue
+            except OSError:
+                continue
 
 
 def _is_hidden(path: Path) -> bool:

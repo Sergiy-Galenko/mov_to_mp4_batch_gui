@@ -485,5 +485,19 @@
   "pos_top_right": "Верх-праворуч",
   "pos_bottom_left": "Низ-ліворуч",
   "pos_bottom_right": "Низ-праворуч",
-  "pos_center": "Центр"
+  "pos_center": "Центр",
+  "clear_search": "Очистити пошук",
+  "list_view": "Список",
+  "grid_view": "Плитки",
+  "reset_filters": "Скинути фільтри",
+  "select_file": "Вибрати файл",
+  "shortcut_search": "Пошук комбінацій клавіш",
+  "reset": "Скинути",
+  "trim_out": "Кінець",
+  "trim": "Обрізання",
+  "keyboard_shortcuts": "Комбінації клавіш",
+  "lossless_fast_copy": "Швидке копіювання без втрат",
+  "trim_in": "Початок",
+  "no_matching_files": "Немає файлів за цими фільтрами",
+  "format": "Формат"
 }

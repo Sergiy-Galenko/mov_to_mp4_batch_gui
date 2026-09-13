@@ -1,0 +1,12 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "media-converter-native"
+version = "0.1.0"
+requires-python = ">=3.12"
+description = "Rust text-processing acceleration for Media Converter"
+
+[tool.maturin]
+module-name = "media_converter_native"

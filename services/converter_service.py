@@ -2,8 +2,8 @@ import contextlib
 import os
 import signal
 import subprocess
-import threading
 import tempfile
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +20,8 @@ from services.smart_convert_service import apply_smart_settings, parse_ab_crfs, 
 from services.text_conversion_service import convert_text_file
 from services.transcription_service import TranscriptionService
 from services.validation_service import operation_supports_media
-from utils.files import build_merge_output_path, build_output_path, publish_output as publish_completed_output, resolve_output_collision, sanitize_file_stem
+from utils.files import build_merge_output_path, build_output_path, resolve_output_collision, sanitize_file_stem
+from utils.files import publish_output as publish_completed_output
 from utils.formatting import format_bytes, format_time, parse_ffmpeg_time
 
 
@@ -1067,6 +1068,7 @@ class ConverterService:
                 status = TaskStatus.FAILED
                 result_message = ""
                 result_output = ""
+                fatal_error = False
                 try:
                     op = settings_for_task.operation
                     if op in {"convert", "subtitle_burn"}:
@@ -1274,17 +1276,18 @@ class ConverterService:
                     self._task_state(task.path, "failed", "FFmpeg не знайдено")
                     status = TaskStatus.FAILED
                     result_message = "FFmpeg не знайдено"
+                    fatal_error = True
                     self.stop_event.set()
                 except Exception as exc:
                     self._log("ERROR", f"Несподівана помилка: {exc}")
                     self._task_state(task.path, "failed", str(exc))
                     result_message = str(exc)
 
-                if self.stop_event.is_set():
+                if self.stop_event.is_set() and not fatal_error:
                     status = TaskStatus.CANCELLED
                     result_message = "Скасовано користувачем"
                     self._task_state(task.path, status, result_message)
-                if self.skip_event.is_set():
+                if self.skip_event.is_set() and not fatal_error:
                     self.skip_event.clear()
                     status = "skipped"
                     result_message = "Пропущено користувачем"
@@ -1293,10 +1296,8 @@ class ConverterService:
                     self._task_state(task.path, "skipped", result_message)
 
                 if status == TaskStatus.SUCCESS or status == "success":
-                    try:
+                    with contextlib.suppress(InterruptedError):
                         self._post_process_success(task, settings_for_task, result_output)
-                    except InterruptedError:
-                        pass
                     if self.stop_event.is_set() or self.skip_event.is_set():
                         status = TaskStatus.CANCELLED if self.stop_event.is_set() else TaskStatus.SKIPPED
                         result_message = "Післяобробку скасовано; результат збережено"

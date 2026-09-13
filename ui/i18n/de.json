@@ -485,5 +485,19 @@
   "pos_top_right": "Oben rechts",
   "pos_bottom_left": "Unten links",
   "pos_bottom_right": "Unten rechts",
-  "pos_center": "Mitte"
+  "pos_center": "Mitte",
+  "clear_search": "Suche löschen",
+  "list_view": "Listenansicht",
+  "grid_view": "Rasteransicht",
+  "reset_filters": "Filter zurücksetzen",
+  "select_file": "Datei auswählen",
+  "shortcut_search": "Tastenkürzel suchen",
+  "reset": "Zurücksetzen",
+  "trim_out": "Ende",
+  "trim": "Zuschneiden",
+  "keyboard_shortcuts": "Tastenkürzel",
+  "lossless_fast_copy": "Schnelle verlustfreie Kopie",
+  "trim_in": "Anfang",
+  "no_matching_files": "Keine Dateien entsprechen diesen Filtern",
+  "format": "Format"
 }

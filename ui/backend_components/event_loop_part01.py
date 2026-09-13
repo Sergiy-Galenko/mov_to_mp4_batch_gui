@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 BODY = r'''    def _poll_events(self) -> None:
+        deadline = time.monotonic() + 0.008
         try:
-            while True:
+            for _ in range(128):
+                if time.monotonic() >= deadline:
+                    break
                 event = self.event_queue.get_nowait()
                 etype = event[0]
                 if etype == "log":

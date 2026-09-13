@@ -1,4 +1,4 @@
-﻿import re
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -38,6 +38,7 @@ class QueueModel(QtCore.QAbstractListModel):
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
         self._items: list[TaskItem] = []
+        self._path_rows: dict[Path, int] = {}
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         if parent.isValid():
@@ -76,7 +77,7 @@ class QueueModel(QtCore.QAbstractListModel):
             return item.size_text
         if role == self.ThumbnailRole:
             thumbnail = item.thumbnail_path
-            if not thumbnail and item.media_type == "image" and item.path.exists():
+            if not thumbnail and item.media_type == "image":
                 thumbnail = str(item.path)
             if thumbnail:
                 return QtCore.QUrl.fromLocalFile(thumbnail).toString()
@@ -142,18 +143,20 @@ class QueueModel(QtCore.QAbstractListModel):
         return self._items[index]
 
     def item_by_path(self, task_path: Path) -> TaskItem | None:
-        task_path = task_path.expanduser()
-        for item in self._items:
-            if item.path == task_path:
-                return item
-        return None
+        return self.item_at(self.index_for_path(task_path))
 
     def index_for_path(self, task_path: Path) -> int:
-        task_path = task_path.expanduser()
-        for idx, item in enumerate(self._items):
-            if item.path == task_path:
-                return idx
-        return -1
+        return self._path_rows.get(task_path.expanduser(), -1)
+
+    def _matching_item(self, task_path: Path):
+        index = self.index_for_path(task_path)
+        if index >= 0:
+            yield index, self._items[index]
+
+    def _reindex(self) -> None:
+        self._path_rows = {}
+        for index, item in enumerate(self._items):
+            self._path_rows.setdefault(item.path, index)
 
     def add_items(self, items: list[TaskItem]) -> None:
         if not items:
@@ -162,24 +165,28 @@ class QueueModel(QtCore.QAbstractListModel):
         end = start + len(items) - 1
         self.beginInsertRows(QtCore.QModelIndex(), start, end)
         self._items.extend(items)
+        for index, item in enumerate(items, start):
+            self._path_rows.setdefault(item.path, index)
         self.endInsertRows()
 
     def set_items(self, items: list[TaskItem]) -> None:
         self.beginResetModel()
         self._items = list(items)
+        self._reindex()
         self.endResetModel()
 
-    def update_item(self, index: int, item: TaskItem) -> None:
+    def update_item(self, index: int, item: TaskItem, roles: list[int] | None = None) -> None:
         if index < 0 or index >= len(self._items):
             return
+        path_changed = self._items[index].path != item.path
         self._items[index] = item
+        if path_changed:
+            self._reindex()
         model_index = self.index(index, 0)
-        self.dataChanged.emit(model_index, model_index, list(self.roleNames().keys()))
+        self.dataChanged.emit(model_index, model_index, list(self.roleNames()) if roles is None else roles)
 
     def update_task_state(self, task_path: Path, status: str, message: str = "", output_path: str = "") -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             if status == TaskStatus.RUNNING:
                 item.attempts += 1
                 item.progress = 0.0
@@ -202,36 +209,43 @@ class QueueModel(QtCore.QAbstractListModel):
                 item.eta_text = ""
             if output_path:
                 item.last_output = output_path
-            self.update_item(idx, item)
+            self.update_item(
+                idx,
+                item,
+                [
+                    self.StatusRole,
+                    self.ErrorRole,
+                    self.AttemptsRole,
+                    self.OutputRole,
+                    self.ProgressRole,
+                    self.EtaRole,
+                    self.SpeedRole,
+                    self.ExitCodeRole,
+                ],
+            )
             return
 
     def set_task_progress(self, task_path: Path, progress: float, eta_text: str = "", speed_text: str = "") -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             bounded = max(0.0, min(float(progress), 1.0))
             if item.progress == bounded and item.eta_text == eta_text and item.speed_text == speed_text:
                 return
             item.progress = bounded
             item.eta_text = eta_text
             item.speed_text = speed_text
-            self.update_item(idx, item)
+            self.update_item(idx, item, [self.ProgressRole, self.EtaRole, self.SpeedRole])
             return
 
     def set_preview_output(self, task_path: Path, preview_output: str) -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             if item.preview_output == preview_output:
                 return
             item.preview_output = preview_output
-            self.update_item(idx, item)
+            self.update_item(idx, item, [self.PreviewRole])
             return
 
     def set_media_summary(self, task_path: Path, info: MediaInfo) -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             duration_text = format_time(info.duration) if info.duration else "—"
             size_text = format_bytes(info.size_bytes)
             item.probe_data = info
@@ -240,57 +254,47 @@ class QueueModel(QtCore.QAbstractListModel):
                 return
             item.duration_text = duration_text
             item.size_text = size_text
-            self.update_item(idx, item)
+            self.update_item(idx, item, [self.DurationRole, self.SizeRole])
             return
 
     def set_prediction(self, task_path: Path, predicted_bytes: int) -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             predicted = max(0, int(predicted_bytes or 0))
             if item.predicted_output_bytes == predicted:
                 return
             item.predicted_output_bytes = predicted
-            self.update_item(idx, item)
+            self.update_item(idx, item, [self.PredictedSizeRole])
             return
 
     def set_smart_recommendation(self, task_path: Path, text: str) -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             value = str(text or "")
             if item.smart_recommendation == value:
                 return
             item.smart_recommendation = value
-            self.update_item(idx, item)
+            self.update_item(idx, item, [self.SmartRecommendationRole])
             return
 
     def set_priority(self, task_path: Path, priority: int) -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             value = max(0, min(5, int(priority or 0)))
             if item.priority == value:
                 return
             item.priority = value
-            self.update_item(idx, item)
+            self.update_item(idx, item, [self.PriorityRole])
             return
 
     def set_pinned(self, task_path: Path, pinned: bool) -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             value = bool(pinned)
             if item.pinned == value:
                 return
             item.pinned = value
-            self.update_item(idx, item)
+            self.update_item(idx, item, [self.PinnedRole])
             return
 
     def set_output_stats(self, task_path: Path, output_path_text: str) -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             output_text = str(output_path_text or "").split(";", 1)[0].strip()
             if not output_text:
                 return
@@ -307,31 +311,28 @@ class QueueModel(QtCore.QAbstractListModel):
             item.output_bytes = output_bytes
             item.input_bytes = input_bytes
             item.compression_ratio = (input_bytes / output_bytes) if input_bytes and output_bytes else 0.0
-            self.update_item(idx, item)
+            self.update_item(idx, item, [self.CompressionRole])
             return
 
     def set_file_size(self, task_path: Path) -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             try:
-                size_text = format_bytes(item.path.stat().st_size)
+                item.input_bytes = item.path.stat().st_size
+                size_text = format_bytes(item.input_bytes)
             except Exception:
                 size_text = "—"
             if item.size_text == size_text:
                 return
             item.size_text = size_text
-            self.update_item(idx, item)
+            self.update_item(idx, item, [self.SizeRole])
             return
 
     def set_thumbnail(self, task_path: Path, thumbnail_path: str) -> None:
-        for idx, item in enumerate(self._items):
-            if item.path != task_path:
-                continue
+        for idx, item in self._matching_item(task_path):
             if item.thumbnail_path == thumbnail_path:
                 return
             item.thumbnail_path = thumbnail_path
-            self.update_item(idx, item)
+            self.update_item(idx, item, [self.ThumbnailRole])
             return
 
     def paths_set(self) -> set[Path]:
@@ -351,6 +352,8 @@ class QueueModel(QtCore.QAbstractListModel):
 
 
 class LogModel(QtCore.QAbstractListModel):
+    MAX_ENTRIES = 2000
+
     TimeRole = QtCore.Qt.UserRole + 1
     LevelRole = QtCore.Qt.UserRole + 2
     MessageRole = QtCore.Qt.UserRole + 3
@@ -390,6 +393,10 @@ class LogModel(QtCore.QAbstractListModel):
         }
 
     def append(self, level: str, message: str) -> None:
+        if len(self._items) >= self.MAX_ENTRIES:
+            self.beginRemoveRows(QtCore.QModelIndex(), 0, 0)
+            del self._items[0]
+            self.endRemoveRows()
         time_text = time.strftime("%H:%M:%S")
         line = f"[{time_text}] {level}: {message}"
         row = len(self._items)
@@ -481,7 +488,28 @@ class QueueFilterModel(QtCore.QSortFilterProxyModel):
         self.search = ""
         self.status = "all"
         self.media_kind = "all"
-        self.setDynamicSortFilter(True)
+        self.setDynamicSortFilter(False)
+        self.setFilterRole(QueueModel.StatusRole)
+
+    def setSourceModel(self, model):
+        previous = self.sourceModel()
+        if previous is not None:
+            previous.dataChanged.disconnect(self._source_data_changed)
+        super().setSourceModel(model)
+        if model is not None:
+            model.dataChanged.connect(self._source_data_changed)
+
+    def _source_data_changed(self, _top, _bottom, roles):
+        filter_roles = {QueueModel.NameRole, QueueModel.PathRole, QueueModel.TypeRole, QueueModel.StatusRole}
+        if not roles or filter_roles.intersection(roles):
+            self._invalidate_rows()
+
+    def _invalidate_rows(self):
+        if hasattr(self, "beginFilterChange") and hasattr(self, "endFilterChange"):
+            self.beginFilterChange()
+            self.endFilterChange(QtCore.QSortFilterProxyModel.Direction.Rows)
+        else:
+            self.invalidateFilter()
 
     def roleNames(self):
         return {**super().roleNames(), self.SourceIndexRole: b"sourceIndex"}
@@ -492,10 +520,13 @@ class QueueFilterModel(QtCore.QSortFilterProxyModel):
         return super().data(index, role)
 
     def set_filters(self, search, status, media_kind):
-        self.search = str(search or "").strip().lower()
+        values = (str(search or "").strip().lower(), str(status or "all"), str(media_kind or "all"))
+        if values == (self.search, self.status, self.media_kind):
+            return
+        self.search = values[0]
         self.status = str(status or "all")
         self.media_kind = str(media_kind or "all")
-        self.invalidateFilter()
+        self._invalidate_rows()
 
     def filterAcceptsRow(self, source_row, source_parent):
         model = self.sourceModel()

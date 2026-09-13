@@ -32,8 +32,16 @@ Rectangle {
 
     implicitHeight: compact ? 56 : 64
     color: selected ? Theme.selectionBackground : mouse.containsMouse ? Theme.overlayHover : Theme.panelBackground
-    border.width: selected ? 1 : 0
-    border.color: selected ? Theme.accentPrimary : Theme.transparent
+    activeFocusOnTab: true
+    Accessible.role: Accessible.ListItem
+    Accessible.name: fileName + ", " + statusLabel()
+    Accessible.selected: selected
+    Accessible.onPressAction: root.selectedRequested(root.filePath, Qt.NoModifier)
+    Keys.onSpacePressed: root.selectedRequested(root.filePath, Qt.ControlModifier)
+    Keys.onReturnPressed: root.quickConvertRequested(root.filePath, root.fileName, root.mediaType, root.itemIndex)
+    Keys.onEnterPressed: root.quickConvertRequested(root.filePath, root.fileName, root.mediaType, root.itemIndex)
+    border.width: selected || activeFocus ? 1 : 0
+    border.color: activeFocus ? Theme.focusRing : selected ? Theme.accentPrimary : Theme.transparent
     clip: true
     Drag.active: dragHandler.active
     Drag.source: root
@@ -78,6 +86,7 @@ Rectangle {
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onClicked: function(event) {
+            root.forceActiveFocus()
             if (event.button === Qt.RightButton)
                 rowMenu.open()
             else
@@ -96,6 +105,7 @@ Rectangle {
             Layout.preferredWidth: 22
             Layout.preferredHeight: 22
             checked: root.selected
+            Accessible.name: I18n.t("select_file") + ": " + root.fileName
             onToggled: if (checked !== root.selected) root.selectedRequested(root.filePath, Qt.ControlModifier)
         }
 
@@ -107,8 +117,8 @@ Rectangle {
             border.width: 1
             border.color: Theme.borderMuted
             clip: true
-            Image { anchors.fill: parent; source: root.thumbnailSource; fillMode: Image.PreserveAspectCrop; asynchronous: true; visible: source.toString().length > 0 }
-            AppIcon { anchors.centerIn: parent; visible: root.thumbnailSource.length === 0; name: "file"; iconColor: Theme.textSecondary; width: 16; height: 16 }
+            Image { id: thumbnail; anchors.fill: parent; source: root.thumbnailSource; sourceSize: Qt.size(64, 64); fillMode: Image.PreserveAspectCrop; asynchronous: true; visible: source.toString().length > 0 }
+            AppIcon { anchors.centerIn: parent; visible: thumbnail.status !== Image.Ready; name: root.mediaType === "video" ? "film" : root.mediaType === "audio" ? "music" : root.mediaType === "image" ? "image" : "file"; iconColor: Theme.textSecondary; width: 16; height: 16 }
         }
 
         ColumnLayout {
@@ -136,7 +146,7 @@ Rectangle {
 
         Label {
             visible: !root.compact
-            Layout.preferredWidth: 52
+            Layout.preferredWidth: 64
             text: root.fileExtension()
             color: Theme.textSecondary
             font.family: Theme.monoFont
@@ -147,7 +157,7 @@ Rectangle {
 
         Label {
             visible: !root.compact
-            Layout.preferredWidth: 84
+            Layout.preferredWidth: 140
             text: (root.sizeText || "—") + (root.durationText ? " · " + root.durationText : "")
             color: Theme.textSecondary
             font.family: Theme.monoFont
@@ -157,15 +167,27 @@ Rectangle {
         }
 
         ColumnLayout {
-            visible: !root.compact && (root.status === "running" || root.status === "paused")
-            Layout.preferredWidth: root.compact ? 72 : 112
+            visible: !root.compact
+            opacity: root.status === "running" || root.status === "paused" ? 1 : 0
+            Layout.preferredWidth: 112
+            Layout.minimumWidth: 112
+            Layout.maximumWidth: 112
+            Layout.fillWidth: false
             spacing: 3
             AppProgressBar { Layout.fillWidth: true; value: Math.max(0, Math.min(1, root.progress)) }
             Label { Layout.fillWidth: true; text: root.speedText || Math.round(root.progress * 100) + "%"; color: Theme.textMuted; font.family: Theme.monoFont; font.pixelSize: 10; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight }
         }
 
+        Rectangle {
+            visible: root.compact && (root.status === "running" || root.status === "paused")
+            Layout.preferredWidth: 42
+            Layout.preferredHeight: 24
+            color: Theme.transparent
+            Label { anchors.centerIn: parent; text: Math.round(root.progress * 100) + "%"; color: Theme.textSecondary; font.pixelSize: Theme.fontMeta }
+        }
+
         StatusBadge {
-            Layout.preferredWidth: root.compact ? 82 : 92
+            Layout.preferredWidth: 112
             status: root.status
             label: root.statusLabel()
         }

@@ -52,9 +52,10 @@ BODY = r'''                        self.speedHistoryChanged.emit(list(self._spee
                     selected = self.queue_model.item_at(self._selected_index)
                     if info and selected and selected.path == path:
                         self._update_info(info)
-                    self._refresh_output_preview(dict(self._last_settings_map))
+                    self._schedule_output_preview()
                 elif etype == "thumbnail":
                     _, path, thumbnail_path = event
+                    self._thumbnail_pending.discard(path)
                     self.queue_model.set_thumbnail(path, thumbnail_path)
                     if str(path) == self._selected_path:
                         self.selectedDetailsChanged.emit()
@@ -91,7 +92,7 @@ BODY = r'''                        self.speedHistoryChanged.emit(list(self._spee
                         if str(path) == self._active_task_path:
                             self._active_task_path = ""
                     self._notify_queue_stats()
-                    self._save_state()
+                    self._schedule_state_save()
                 elif etype == "run_summary":
                     _, summary = event
                     if isinstance(summary, dict):

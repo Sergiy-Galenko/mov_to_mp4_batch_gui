@@ -26,9 +26,8 @@ Rectangle {
             spacing: 5
             RowLayout {
                 Layout.fillWidth: true
-                Label { text: backend ? backend.totalProgressText : "--"; color: Theme.textPrimary; font.pixelSize: Theme.fontSizeSm; font.weight: Font.DemiBold }
-                Item { Layout.fillWidth: true }
-                Label { text: I18n.t("eta") + ": " + (backend ? backend.sessionEtaText : "--:--"); color: Theme.textSecondary; font.family: Theme.monoFont; font.pixelSize: Theme.fontMeta }
+                Label { Layout.fillWidth: true; text: backend ? backend.totalProgressText : "--"; elide: Text.ElideRight; color: Theme.textPrimary; font.pixelSize: Theme.fontSizeSm; font.weight: Font.DemiBold }
+                Label { visible: root.width > 840; text: I18n.t("eta") + ": " + (backend ? backend.sessionEtaText : "--:--"); color: Theme.textSecondary; font.family: Theme.monoFont; font.pixelSize: Theme.fontMeta }
                 Label { visible: root.width > 980; text: backend ? backend.sessionAvgSpeedText : "--"; color: Theme.textMuted; font.family: Theme.monoFont; font.pixelSize: Theme.fontMeta }
             }
             AppProgressBar { Layout.fillWidth: true; value: backend ? backend.totalProgress : 0 }
@@ -74,7 +73,9 @@ Rectangle {
 
         Button {
             id: convertButton
-            Layout.preferredWidth: root.width > 900 ? 138 : 112
+            Layout.preferredWidth: 178
+            Layout.minimumWidth: 178
+            Layout.fillWidth: false
             implicitHeight: 36
             enabled: backend ? backend.queueCount > 0 && !backend.isRunning && appRoot && appRoot.formValid : false
             hoverEnabled: true

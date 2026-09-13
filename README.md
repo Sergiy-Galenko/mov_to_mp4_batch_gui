@@ -1,6 +1,6 @@
 # Media Converter
 
-Desktop batch converter for video, photos, audio, subtitles, and text files. The app is built with Python, PySide6, QML, FFmpeg, and a lightweight built-in text converter.
+Desktop batch converter for video, photos, audio, subtitles, and text files. The app is built with Python, PySide6, QML, FFmpeg, a built-in text converter, and optional Rust acceleration.
 
 ## Features
 
@@ -49,6 +49,32 @@ Install dependencies:
 ```bash
 python -m pip install -r requirements.txt
 ```
+
+### Rust acceleration and responsiveness
+
+The optional Rust extension accelerates RTF export and PDF literal decoding and releases Python's GIL during these loops. RTF export correctly preserves non-BMP characters such as emoji. Video/audio encoding continues to use FFmpeg and its configured hardware encoders.
+
+With a Rust toolchain installed, build the extension into the same Python environment as the application:
+
+```bash
+python -m pip install ./native
+python -c "from services.native_acceleration import NATIVE_AVAILABLE; print(NATIVE_AVAILABLE)"
+```
+
+For development:
+
+```bash
+python -m pip install 'maturin>=1.9,<2'
+maturin develop --manifest-path native/Cargo.toml --release
+cargo test --manifest-path native/Cargo.toml
+python scripts/benchmark_performance.py
+```
+
+Build the extension before running PyInstaller to include it in the distribution. Wheels use Python's stable ABI for Python 3.12+ and must match the target OS/architecture. Without the extension, the application uses the Python implementation; set `MEDIA_CONVERTER_DISABLE_NATIVE=1` to test that path explicitly.
+
+On an Apple Silicon development machine with Python 3.14, a release build measured **9–11× faster RTF serialization** (1.15 million input characters) and **115–122× faster PDF literal decoding** (2.9 MB). These ranges come from two benchmark runs, each using five-run median timings for individual kernels, including the Python/Rust call, rather than whole-document or FFmpeg conversion speeds. The benchmark checks identical outputs and also measures queue updates at 100 and 10,000 rows.
+
+The interface now uses indexed queue lookups, targeted progress signals, bounded event processing, cached statistics, background resource sampling, and at most two simultaneous thumbnail jobs. Hidden queue views detach their models; thumbnails decode at display-appropriate sizes. Search is debounced, list/grid views have scrollbars, filter reset and keyboard selection are available, and live logs retain the latest 2,000 entries. Metadata preview refreshes and task-state saves are coalesced, with state flushed on completion and exit.
 
 On Windows, `run_windows.cmd` checks Python automatically and starts the app when Python 3.12+ is already available.
 System Python installation, package installation, and launch-time Desktop `.exe` creation are explicit opt-in actions:

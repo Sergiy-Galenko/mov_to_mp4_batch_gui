@@ -43,6 +43,15 @@ BODY = r'''        self._youtube_history = self.settings_manager.youtube_history
         self._info_analysis = "—"
         self._info_warnings = "—"
 
+        self._preview_refresh_timer = QtCore.QTimer(self)
+        self._preview_refresh_timer.setSingleShot(True)
+        self._preview_refresh_timer.setInterval(150)
+        self._preview_refresh_timer.timeout.connect(lambda: self._refresh_output_preview(dict(self._last_settings_map)))
+        self._state_save_timer = QtCore.QTimer(self)
+        self._state_save_timer.setSingleShot(True)
+        self._state_save_timer.setInterval(300)
+        self._state_save_timer.timeout.connect(self._save_state)
+
         self._refresh_presets()
         self._refresh_recent_folders()
         self.history_model.set_entries(self.history_store.entries)
@@ -61,7 +70,38 @@ BODY = r'''        self._youtube_history = self.settings_manager.youtube_history
         self._scheduler_timer.setInterval(30000)
         self._scheduler_timer.timeout.connect(self._check_scheduler)
         self._scheduler_timer.start()
+        self._resource_timer = QtCore.QTimer(self)
+        self._resource_timer.setInterval(int(RESOURCE_SAMPLE_INTERVAL_SEC * 1000))
+        self._resource_timer.timeout.connect(
+            lambda: self._sample_resources() if self._scheduler_enabled or self._is_running else None
+        )
+        self._resource_timer.start()
         QtCore.QTimer.singleShot(2000, self._maybe_check_paid_update_on_startup)
+
+    def _schedule_output_preview(self) -> None:
+        if not self._preview_refresh_timer.isActive():
+            self._preview_refresh_timer.start()
+
+    def _schedule_state_save(self) -> None:
+        if not self._state_save_timer.isActive():
+            self._state_save_timer.start()
+
+    @QtCore.Slot()
+    def shutdown(self) -> None:
+        self._timer.stop()
+        self._watch_timer.stop()
+        self._scheduler_timer.stop()
+        self._resource_timer.stop()
+        self._preview_refresh_timer.stop()
+        self._state_save_timer.stop()
+        self._save_state()
+        if self._converter_service is not None:
+            self._converter_service.stop()
+        if self._youtube_cancel_event is not None:
+            self._youtube_cancel_event.set()
+        self.watch_service.stop()
+        self._probe_executor.shutdown(wait=False, cancel_futures=True)
+        self._thumbnail_executor.shutdown(wait=False, cancel_futures=True)
 
     @property
     def converter(self):

@@ -34,6 +34,8 @@ def main() -> None:
 
     QQuickStyle.setStyle("Basic")
     app = QtWidgets.QApplication(sys.argv)
+    app.setOrganizationName("MediaConverter")
+    app.setApplicationName("MediaConverter")
 
     base_dir = Path(__file__).resolve().parent
     logo_path = base_dir / "assets" / "app-logo.png"
@@ -46,6 +48,7 @@ def main() -> None:
     engine = QtQml.QQmlApplicationEngine()
     engine.addImportPath(str(qml_dir))
     backend = Backend()
+    app.aboutToQuit.connect(backend.shutdown)
     engine.rootContext().setContextProperty("backend", backend)
     engine.load(QtCore.QUrl.fromLocalFile(str(main_qml)))
 

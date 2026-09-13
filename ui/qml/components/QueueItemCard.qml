@@ -32,8 +32,16 @@ Rectangle {
     height: 230
     radius: Theme.radiusMd
     color: selected ? Theme.selectionBackground : mouse.containsMouse ? Theme.overlayHover : Theme.panelBackground
-    border.width: selected ? 2 : 1
-    border.color: selected ? Theme.accentPrimary : (mouse.containsMouse ? Theme.borderStrong : Theme.borderMuted)
+    activeFocusOnTab: true
+    Accessible.role: Accessible.ListItem
+    Accessible.name: fileName + ", " + statusText()
+    Accessible.selected: selected
+    Accessible.onPressAction: root.selectedRequested(root.filePath, Qt.NoModifier)
+    Keys.onSpacePressed: root.selectedRequested(root.filePath, Qt.ControlModifier)
+    Keys.onReturnPressed: root.quickConvertRequested(root.filePath, root.fileName, root.mediaType, root.itemIndex)
+    Keys.onEnterPressed: root.quickConvertRequested(root.filePath, root.fileName, root.mediaType, root.itemIndex)
+    border.width: selected || activeFocus ? 2 : 1
+    border.color: activeFocus ? Theme.focusRing : selected ? Theme.accentPrimary : (mouse.containsMouse ? Theme.borderStrong : Theme.borderMuted)
     clip: true
 
     function fileExtension() {
@@ -61,6 +69,7 @@ Rectangle {
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onClicked: function(event) {
+            root.forceActiveFocus()
             if (event.button === Qt.RightButton)
                 cardMenu.open()
             else
@@ -81,8 +90,10 @@ Rectangle {
             clip: true
 
             Image {
+                id: thumbnail
                 anchors.fill: parent
                 source: root.thumbnailSource
+                sourceSize: Qt.size(448, 280)
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 visible: source.toString().length > 0
@@ -90,7 +101,7 @@ Rectangle {
 
             AppIcon {
                 anchors.centerIn: parent
-                visible: root.thumbnailSource.length === 0
+                visible: thumbnail.status !== Image.Ready
                 name: root.mediaType === "video" ? "film" : (root.mediaType === "audio" ? "music" : (root.mediaType === "image" ? "image" : "file"))
                 iconColor: Theme.textMuted
                 width: 42
@@ -103,6 +114,7 @@ Rectangle {
                 anchors.top: parent.top
                 anchors.margins: 6
                 checked: root.selected
+                Accessible.name: I18n.t("select_file") + ": " + root.fileName
                 onToggled: if (checked !== root.selected) root.selectedRequested(root.filePath, Qt.ControlModifier)
             }
 
@@ -200,7 +212,7 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 4
-                visible: mouse.containsMouse
+                visible: mouse.containsMouse || root.activeFocus
 
                 AppIconButton {
                     visible: root.status === "failed"

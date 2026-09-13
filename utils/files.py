@@ -28,18 +28,18 @@ def is_text(path: Path) -> bool:
     return path.suffix.lower() in TEXT_EXTS
 
 
+_MEDIA_TYPES = {
+    extension: kind
+    for kind, extensions in (
+        ("text", TEXT_EXTS), ("subtitle", SUBTITLE_EXTS), ("audio", AUDIO_EXTS),
+        ("image", IMAGE_EXTS), ("video", VIDEO_EXTS),
+    )
+    for extension in extensions
+}
+
+
 def media_type(path: Path) -> str | None:
-    if is_video(path):
-        return "video"
-    if is_image(path):
-        return "image"
-    if is_audio(path):
-        return "audio"
-    if is_subtitle(path):
-        return "subtitle"
-    if is_text(path):
-        return "text"
-    return None
+    return _MEDIA_TYPES.get(path.suffix.lower())
 
 
 def safe_output_path(out_path: Path) -> Path:

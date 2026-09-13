@@ -1,4 +1,5 @@
 import QtQuick 2.15
+import App 1.0
 
 Canvas {
     id: root
@@ -63,6 +64,21 @@ Canvas {
             ctx.beginPath(); ctx.moveTo(pt(3), pt(7)); ctx.lineTo(pt(9), pt(7)); ctx.lineTo(pt(11), pt(9)); ctx.lineTo(pt(21), pt(9)); ctx.lineTo(pt(19), pt(19)); ctx.lineTo(pt(3), pt(19)); ctx.closePath(); ctx.stroke()
         } else if (name === "file") {
             ctx.beginPath(); ctx.moveTo(pt(6), pt(3)); ctx.lineTo(pt(14), pt(3)); ctx.lineTo(pt(19), pt(8)); ctx.lineTo(pt(19), pt(21)); ctx.lineTo(pt(6), pt(21)); ctx.closePath(); ctx.stroke(); line(14, 3, 14, 8); line(14, 8, 19, 8)
+        } else if (name === "film" || name === "video") {
+            rect(3, 4, 18, 16, 2); line(7, 4, 7, 20); line(17, 4, 17, 20)
+            for (var frame = 8; frame <= 16; frame += 4) { line(3, frame, 7, frame); line(17, frame, 21, frame) }
+        } else if (name === "image") {
+            rect(3, 4, 18, 16, 2); line(4, 18, 10, 11); line(10, 11, 15, 17); line(15, 17, 18, 13); line(18, 13, 21, 17)
+            ctx.beginPath(); ctx.arc(pt(16), pt(8), 1.5 * u, 0, Math.PI * 2); ctx.stroke()
+        } else if (name === "music" || name === "audio") {
+            line(10, 17, 10, 5); line(10, 5, 20, 3); line(20, 3, 20, 15)
+            ctx.beginPath(); ctx.arc(pt(7), pt(18), 3 * u, 0, Math.PI * 2); ctx.stroke()
+            ctx.beginPath(); ctx.arc(pt(17), pt(16), 3 * u, 0, Math.PI * 2); ctx.stroke()
+        } else if (name === "grid") {
+            rect(3, 3, 7, 7, 1); rect(14, 3, 7, 7, 1); rect(3, 14, 7, 7, 1); rect(14, 14, 7, 7, 1)
+        } else if (name === "refresh") {
+            ctx.beginPath(); ctx.arc(pt(12), pt(12), 8 * u, Math.PI * .2, Math.PI * 1.85); ctx.stroke()
+            line(20, 3, 20, 8); line(15, 8, 20, 8)
         } else if (name === "search") {
             ctx.beginPath(); ctx.arc(pt(10), pt(10), 5.5 * u, 0, Math.PI * 2); ctx.stroke(); line(14, 14, 20, 20)
         } else if (name === "bell") {

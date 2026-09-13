@@ -396,6 +396,14 @@ def _decode_pdf_hex_string(token: bytes) -> str:
 
 
 def _unescape_pdf_literal(data: bytes) -> bytes:
+    from services.native_acceleration import native
+
+    if native is not None:
+        return native.unescape_pdf_literal(data)
+    return _unescape_pdf_literal_python(data)
+
+
+def _unescape_pdf_literal_python(data: bytes) -> bytes:
     out = bytearray()
     i = 0
     while i < len(data):
@@ -510,6 +518,14 @@ def _write_tsv(text: str, output: Path) -> None:
 
 
 def _to_rtf(text: str) -> str:
+    from services.native_acceleration import native
+
+    if native is not None:
+        return native.to_rtf(text)
+    return _to_rtf_python(text)
+
+
+def _to_rtf_python(text: str) -> str:
     body = "".join(_rtf_char(ch) for ch in text)
     return "{\\rtf1\\ansi\\deff0\n" + body + "\n}\n"
 
@@ -526,6 +542,9 @@ def _rtf_char(ch: str) -> str:
     code = ord(ch)
     if code < 128:
         return ch
+    if code > 0xFFFF:
+        code -= 0x10000
+        return f"\\u{(0xD800 + (code >> 10)) - 65536}?\\u{(0xDC00 + (code & 0x3FF)) - 65536}?"
     if code > 32767:
         code -= 65536
     return f"\\u{code}?"

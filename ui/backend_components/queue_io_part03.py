@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''            except Exception:
-                pass
-        saved = max(input_bytes - output_bytes, 0)
+BODY = r'''        saved = max(input_bytes - output_bytes, 0)
         speeds = [point.get("speed", 0.0) for point in self._speed_history if point.get("speed", 0.0) > 0]
         avg_speed = sum(speeds) / len(speeds) if speeds else 0.0
         self._session_elapsed_text = format_time(elapsed)
@@ -36,34 +34,7 @@ BODY = r'''            except Exception:
         return codec or "Unknown"
 
     def _sample_resources(self) -> Dict[str, float]:
-        cpu = 0.0
-        ram = 0.0
-        gpu = 0.0
-        try:
-            import psutil  # type: ignore
-
-            cpu = float(psutil.cpu_percent(interval=None))
-            ram = float(psutil.virtual_memory().percent)
-        except Exception:
-            pass
-        try:
-            result = subprocess.run(
-                [
-                    "nvidia-smi",
-                    "--query-gpu=utilization.gpu",
-                    "--format=csv,noheader,nounits",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=0.4,
-            )
-            if result.returncode == 0:
-                values = [float(line.strip()) for line in result.stdout.splitlines() if line.strip()]
-                if values:
-                    gpu = max(values)
-        except Exception:
-            pass
-        return {"cpu": cpu, "gpu": gpu, "ram": ram}
+        return self._resource_monitor.sample()
 
     def _append_resource_sample(self, now: float) -> None:
         if not self._run_started_monotonic:

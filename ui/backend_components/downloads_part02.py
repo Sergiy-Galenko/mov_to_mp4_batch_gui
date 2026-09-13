@@ -44,7 +44,7 @@ BODY = r'''            self.event_queue.put(("youtube_download_progress", downlo
 
     def _collect_folder_async(self, folder: Path) -> None:
         try:
-            items = [path for path in folder.rglob("*") if path.is_file()]
+            items = FolderScanner().scan(folder)
         except Exception as exc:
             self.event_queue.put(("log", "ERROR", f"Не вдалося просканувати папку {folder}: {exc}"))
             return

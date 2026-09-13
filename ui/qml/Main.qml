@@ -57,11 +57,21 @@ ApplicationWindow {
     property string selectedTextPreview: ""
     property int selectedIndex: -1
 
-    onQueueSearchTextChanged: syncQueueFilter()
+    onQueueSearchTextChanged: {
+        if (queueSearchText.length === 0) syncQueueFilter()
+        else queueSearchTimer.restart()
+    }
+
+    Timer {
+        id: queueSearchTimer
+        interval: 180
+        onTriggered: root.syncQueueFilter()
+    }
     onQueueStatusFilterChanged: syncQueueFilter()
     onActiveWorkspaceModeChanged: syncQueueFilter()
 
     function syncQueueFilter() {
+        queueSearchTimer.stop()
         if (backend)
             backend.setQueueFilter(root.queueSearchText, root.queueStatusFilter, workspaceMediaType())
     }
@@ -78,7 +88,7 @@ ApplicationWindow {
     }
 
     function retainVisibleSelection() {
-        if (!backend)
+        if (!backend || root.selectedPaths.length === 0)
             return
         var visible = backend.visibleQueuePaths
         var next = root.selectedPaths.filter(function(path) { return visible.indexOf(path) >= 0 })
@@ -156,7 +166,7 @@ ApplicationWindow {
         to: 1
         duration: 1200
         loops: Animation.Infinite
-        running: !root.highLoadMode
+        running: root.visible && root.active && !root.highLoadMode && backend && backend.isRunning
     }
 
     function scheduleSettingsSync() {

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import contextlib
 import subprocess
@@ -39,8 +39,11 @@ class PreviewBuilder:
         base_settings = settings_map_to_model(settings_map, defaults=ConversionSettings())
         resolved_by_path: dict[Path, ConversionSettings] = {}
         for task in tasks:
-            merged_map = merge_settings_maps(settings_map, task.overrides)
-            resolved = settings_map_to_model(merged_map, defaults=ConversionSettings())
+            if task.overrides:
+                merged_map = merge_settings_maps(settings_map, task.overrides)
+                resolved = settings_map_to_model(merged_map, defaults=ConversionSettings())
+            else:
+                resolved = base_settings
             resolved_by_path[task.path] = apply_smart_settings(
                 resolved,
                 info_cache.get(task.path),
@@ -48,11 +51,7 @@ class PreviewBuilder:
                 source_path=task.path,
             )
 
-        merge_candidates = [
-            task
-            for task in tasks
-            if task.media_type == "video" and resolved_by_path[task.path].operation == "convert"
-        ]
+        merge_candidates = [task for task in tasks if task.media_type == "video" and resolved_by_path[task.path].operation == "convert"]
         merge_enabled = base_settings.merge and len(merge_candidates) >= 2
         merge_paths = {task.path for task in merge_candidates} if merge_enabled else set()
         merge_desired_path: Path | None = None

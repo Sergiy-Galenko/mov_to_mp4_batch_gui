@@ -1,6 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable, Sequence
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -123,19 +125,25 @@ class QueueManager:
         unique: list[TaskItem] = []
         removed = 0
         log_lines: list[str] = []
+        sizes: dict[Path, int] = {}
         for item in items:
-            try:
-                size = item.path.stat().st_size
-            except Exception:
+            with suppress(OSError):
+                sizes[item.path] = item.path.stat().st_size
+        counts = Counter(sizes.get(item.path) for item in items)
+        for item in items:
+            size = sizes.get(item.path)
+            if size is None or counts[size] < 2:
                 unique.append(item)
                 continue
-            if not item.content_hash and item.path.exists():
-                try:
-                    item.content_hash = file_sha256(item.path)
-                except Exception as exc:
-                    log_lines.append(f"Не вдалося порахувати hash для {item.path.name}: {exc}")
-                    unique.append(item)
-                    continue
+            # Hash only size-collision candidates. Re-read their contents: cached
+            # hashes can be stale after an external edit of the source file.
+            item.content_hash = ""
+            try:
+                item.content_hash = file_sha256(item.path)
+            except Exception as exc:
+                log_lines.append(f"Не вдалося порахувати hash для {item.path.name}: {exc}")
+                unique.append(item)
+                continue
             key = (size, item.content_hash)
             if item.content_hash and key in seen:
                 removed += 1

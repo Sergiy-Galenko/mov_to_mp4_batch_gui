@@ -24,13 +24,16 @@ BODY = r'''    def _probe_media_async(self, path: Path) -> None:
         if media_kind != "video":
             return
         current = self.queue_model.item_by_path(path)
-        if current and current.thumbnail_path:
+        if path in self._thumbnail_pending or (current and current.thumbnail_path):
             return
-        threading.Thread(target=self._create_thumbnail_async, args=(path, media_kind), daemon=True).start()
+        self._thumbnail_pending.add(path)
+        self._thumbnail_executor.submit(self._create_thumbnail_async, path, media_kind)
 
     def _create_thumbnail_async(self, path: Path, media_kind: str) -> None:
-        thumbnail = self.media_analysis.thumbnail_for(path, media_kind)
-        if thumbnail:
+        thumbnail = ""
+        try:
+            thumbnail = self.media_analysis.thumbnail_for(path, media_kind) or ""
+        finally:
             self.event_queue.put(("thumbnail", path, thumbnail))
 
     def _update_info(self, info: MediaInfo) -> None:

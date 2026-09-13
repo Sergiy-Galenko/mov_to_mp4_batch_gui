@@ -71,9 +71,11 @@ Rectangle {
                 clip: true
 
                 Image {
+                    id: selectedThumbnail
                     anchors.fill: parent
                     anchors.margins: 8
                     source: appRoot ? appRoot.selectedThumbnailSource : ""
+                    sourceSize: Qt.size(960, 640)
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
                     visible: source.toString().length > 0
@@ -81,7 +83,7 @@ Rectangle {
 
                 AppIcon {
                     anchors.centerIn: parent
-                    visible: !(appRoot && appRoot.selectedThumbnailSource.length > 0)
+                    visible: selectedThumbnail.status !== Image.Ready
                     name: "file"
                     iconColor: Theme.textMuted
                     width: 36

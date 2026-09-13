@@ -10,11 +10,14 @@ Supports:
 
 from __future__ import annotations
 
+import math
 import sys
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from app.paths import APP_DATA_DIR
+from app.theme_palette import COLOR_GROUPS, COLOR_KEYS, THEME_MODES, normalize_color, resolve_palette
 from utils.state import load_json_state, save_json_state
 
 THEME_STATE_PATH = APP_DATA_DIR / "theme_config.json"
@@ -62,22 +65,89 @@ class ThemeManager:
     def __init__(self, path: Path = THEME_STATE_PATH) -> None:
         self.path = path
         self._state = load_json_state(path)
+        self._palette_cache: dict[str, dict[str, str]] = {}
 
-    def accent_color(self) -> str:
-        return str(self._state.get("accent_color") or "#2563EB")
+    def effective_mode(self) -> str:
+        mode = self.theme_mode()
+        return ("dark" if self.detect_os_dark_mode() else "light") if mode == "auto" else mode
 
-    def set_accent_color(self, color: str) -> None:
-        self._state["accent_color"] = str(color or "#2563EB")
+    def palette(self, mode: str | None = None) -> dict[str, str]:
+        mode = mode or self.effective_mode()
+        if mode not in self._palette_cache:
+            colors = self.color_overrides(mode)
+            legacy_accent = self._state.get("accent_color")
+            if legacy_accent and "accent" not in colors:
+                try:
+                    colors["accent"] = normalize_color(legacy_accent)
+                except ValueError:
+                    pass
+            self._palette_cache[mode] = resolve_palette(mode, colors)
+        return dict(self._palette_cache[mode])
+
+    def color_overrides(self, mode: str | None = None) -> dict[str, str]:
+        all_colors = self._state.get("custom_colors", {})
+        raw = all_colors.get(mode or self.effective_mode(), {}) if isinstance(all_colors, dict) else {}
+        colors = {}
+        if isinstance(raw, dict):
+            for key, value in raw.items():
+                if key in COLOR_KEYS:
+                    try:
+                        colors[key] = normalize_color(value)
+                    except ValueError:
+                        pass
+        return colors
+
+    def set_color(self, key: str, color: str, mode: str | None = None) -> None:
+        if key not in COLOR_KEYS:
+            raise ValueError(f"Unknown theme color: {key}")
+        value = normalize_color(color)
+        mode = mode or self.effective_mode()
+        colors = self.color_overrides(mode)
+        colors[key] = value
+        if not isinstance(self._state.get("custom_colors"), dict):
+            self._state["custom_colors"] = {}
+        self._state["custom_colors"][mode] = colors
+        if key == "accent":
+            self._state.pop("accent_color", None)
         self._save()
 
+    def reset_color(self, key: str, mode: str | None = None) -> None:
+        if key not in COLOR_KEYS:
+            raise ValueError(f"Unknown theme color: {key}")
+        mode = mode or self.effective_mode()
+        colors = self.color_overrides(mode)
+        colors.pop(key, None)
+        if not isinstance(self._state.get("custom_colors"), dict):
+            self._state["custom_colors"] = {}
+        self._state["custom_colors"][mode] = colors
+        if key == "accent":
+            self._state.pop("accent_color", None)
+        self._save()
+
+    def reset_colors(self, mode: str | None = None) -> None:
+        colors = self._state.get("custom_colors", {})
+        if isinstance(colors, dict):
+            colors.pop(mode or self.effective_mode(), None)
+        self._state.pop("accent_color", None)
+        self._save()
+
+    @staticmethod
+    def color_definitions() -> list[dict[str, str]]:
+        return [{"key": key, "group": group} for group, keys in COLOR_GROUPS.items() for key in keys]
+
+    def accent_color(self) -> str:
+        return self.palette()["accent"]
+
+    def set_accent_color(self, color: str) -> None:
+        self.set_color("accent", color)
+
     def theme_mode(self) -> str:
-        """Return 'dark', 'light', 'obsidian', 'oled', 'midnight', 'auto', or 'high_contrast'."""
-        return str(self._state.get("theme_mode") or "dark")
+        mode = self._state.get("theme_mode", "dark")
+        return mode if isinstance(mode, str) and mode in THEME_MODES else "dark"
 
     def set_theme_mode(self, mode: str) -> None:
         normalized = "auto" if mode == "system" else str(mode or "dark")
-        valid_modes = {"dark", "light", "obsidian", "oled", "midnight", "auto", "high_contrast"}
-        self._state["theme_mode"] = normalized if normalized in valid_modes else "dark"
+        self._state["theme_mode"] = normalized if normalized in THEME_MODES else "dark"
         self._save()
 
     def queue_view_mode(self) -> str:
@@ -102,14 +172,20 @@ class ThemeManager:
         return dict(LAYOUT_MODES.get(mode, LAYOUT_MODES["comfortable"]))
 
     def font_scale(self) -> float:
-        """Return custom font scaling factor."""
-        scale = self._state.get("font_scale")
-        if scale is not None:
-            return max(0.7, min(float(scale), 1.5))
-        return self.layout_config().get("font_scale", 1.0)
+        try:
+            return self._normalize_scale(self._state.get("font_scale", self.layout_config().get("font_scale", 1.0)))
+        except (ValueError, TypeError):
+            return 1.0
+
+    @staticmethod
+    def _normalize_scale(scale: float) -> float:
+        value = float(scale)
+        if not math.isfinite(value):
+            raise ValueError("Font scale must be finite")
+        return max(0.7, min(value, 1.5))
 
     def set_font_scale(self, scale: float) -> None:
-        self._state["font_scale"] = max(0.7, min(float(scale), 1.5))
+        self._state["font_scale"] = self._normalize_scale(scale)
         self._save()
 
     def window_state(self) -> dict[str, int]:
@@ -144,11 +220,13 @@ class ThemeManager:
         """Return list of accent color presets."""
         return list(ACCENT_PRESETS)
 
-    def export_theme(self) -> dict[str, Any]:
-        """Export current theme configuration."""
+    def export_theme(self, mode: str | None = None) -> dict[str, Any]:
+        """Export a complete palette so a shared theme has the same appearance."""
         return {
-            "accent_color": self.accent_color(),
-            "theme_mode": self.theme_mode(),
+            "schema_version": 2,
+            "theme_mode": mode or self.effective_mode(),
+            "colors": self.palette(mode),
+            "accent_color": self.palette(mode)["accent"],
             "layout_mode": self.layout_mode(),
             "font_scale": self.font_scale(),
             "sidebar_collapsed": self.sidebar_collapsed(),
@@ -156,21 +234,68 @@ class ThemeManager:
         }
 
     def import_theme(self, data: dict[str, Any]) -> None:
-        """Import theme configuration from a dict."""
-        if not isinstance(data, dict):
-            return
-        if "accent_color" in data:
-            self.set_accent_color(str(data["accent_color"]))
-        if "theme_mode" in data:
-            self.set_theme_mode(str(data["theme_mode"]))
-        if "layout_mode" in data:
-            self.set_layout_mode(str(data["layout_mode"]))
-        if "font_scale" in data:
-            self.set_font_scale(float(data["font_scale"]))
-        if "beginner_mode" in data:
-            self.set_beginner_mode(bool(data["beginner_mode"]))
+        """Validate first, then persist once; a bad file cannot partially apply."""
+        if not isinstance(data, dict) or not any(key in data for key in ("colors", "theme_mode", "accent_color")):
+            raise ValueError("Not a theme configuration")
+        if data.get("schema_version", 1) not in (1, 2):
+            raise ValueError("Unsupported theme version")
+        mode = data.get("theme_mode", self.theme_mode())
+        mode = "auto" if mode == "system" else mode
+        if not isinstance(mode, str) or mode not in THEME_MODES:
+            raise ValueError("Unknown theme mode")
+        colors = data.get("colors", {})
+        if not isinstance(colors, dict) or any(key not in COLOR_KEYS for key in colors):
+            raise ValueError("Invalid theme color names")
+        colors = {key: normalize_color(value) for key, value in colors.items()}
+        if "accent_color" in data and "accent" not in colors:
+            colors["accent"] = normalize_color(data["accent_color"])
+        layout = data.get("layout_mode", self.layout_mode())
+        if not isinstance(layout, str) or layout not in LAYOUT_MODES:
+            raise ValueError("Unknown layout mode")
+        scale = self._normalize_scale(data.get("font_scale", self.font_scale()))
+        state = deepcopy(self._state)
+        state.update(theme_mode=mode, layout_mode=layout, font_scale=scale)
+        state.pop("accent_color", None)
+        if not isinstance(state.get("custom_colors"), dict):
+            state["custom_colors"] = {}
+        target = ("dark" if self.detect_os_dark_mode() else "light") if mode == "auto" else mode
+        state["custom_colors"][target] = colors
+        for key in ("beginner_mode", "sidebar_collapsed"):
+            if key in data:
+                if not isinstance(data[key], bool):
+                    raise ValueError(f"{key} must be a boolean")
+                state[key] = data[key]
+        save_json_state(self.path, state)
+        self._state = state
+        self._palette_cache.clear()
+
+    def saved_themes(self) -> list[str]:
+        themes = self._state.get("saved_themes", {})
+        return sorted(themes) if isinstance(themes, dict) else []
+
+    def save_theme(self, name: str, mode: str | None = None) -> None:
+        name = str(name or "").strip()
+        if not name or len(name) > 64:
+            raise ValueError("Theme names must contain 1–64 characters")
+        if not isinstance(self._state.get("saved_themes"), dict):
+            self._state["saved_themes"] = {}
+        self._state["saved_themes"][name] = self.export_theme(mode)
+        self._save()
+
+    def load_theme(self, name: str) -> None:
+        themes = self._state.get("saved_themes", {})
+        if not isinstance(themes, dict) or name not in themes:
+            raise ValueError("Theme not found")
+        self.import_theme(themes[name])
+
+    def delete_theme(self, name: str) -> None:
+        themes = self._state.get("saved_themes", {})
+        if isinstance(themes, dict):
+            themes.pop(name, None)
+            self._save()
 
     def _save(self) -> None:
+        self._palette_cache.clear()
         save_json_state(self.path, self._state)
 
     @staticmethod

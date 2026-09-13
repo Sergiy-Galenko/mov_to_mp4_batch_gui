@@ -58,7 +58,7 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
 
     def __init__(self) -> None:
         super().__init__()
-        self.event_queue: "queue.Queue[tuple]" = queue.Queue()
+        self.event_queue: "queue.Queue[tuple]" = UiEventQueue()
         self.ffmpeg_service = FfmpegService(find_ffmpeg(), None)
         self.ffmpeg_service.ffprobe_path = find_ffprobe(self.ffmpeg_service.ffmpeg_path)
         self._converter_service = None
@@ -67,6 +67,7 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
         self._preview_builder = None
         self._validation = None
         self._preflight_result: Dict[str, Any] = {"ok": True, "summary": "Preflight ще не запускався.", "errors": {}, "warnings": []}
+        self._resource_monitor = ResourceMonitor()
         self.queue_manager = QueueManager()
         self.settings_manager = SettingsManager()
         self.ffmpeg_auto_installer = FfmpegAutoInstaller()
@@ -156,6 +157,8 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
         self.media_info_cache: Dict[Path, MediaInfo] = {}
         self._probe_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ffprobe-prefetch")
         self._probe_pending: set[Path] = set()
+        self._thumbnail_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="thumbnail")
+        self._thumbnail_pending: set[Path] = set()
         self._log_lines: List[str] = []
         self._selected_index = -1
         self._selected_path = ""

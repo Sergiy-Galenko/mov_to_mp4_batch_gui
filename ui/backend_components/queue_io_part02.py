@@ -26,6 +26,7 @@ BODY = r'''            self._save_state()
         self.event_queue.put(("preview_generated", str(path), preview_data))
 
     def _save_state(self, *, pending_recovery: Optional[bool] = None) -> None:
+        self._state_save_timer.stop()
         self.settings_manager.save(
             recent_folders=self._recent_folders[:RECENT_FOLDERS_LIMIT],
             watch_folder=self._watch_folder,
@@ -63,6 +64,7 @@ BODY = r'''            self._save_state()
 
     def _append_log(self, level: str, msg: str) -> None:
         self._log_lines.append(f"{level}: {msg}")
+        del self._log_lines[:-LogModel.MAX_ENTRIES]
         self.log_model.append(level, msg)
         self.logAdded.emit(level, msg)
         if str(level).upper() == "ERROR":
@@ -123,19 +125,11 @@ BODY = r'''            self._save_state()
 
     def _refresh_session_stats(self, *, total_eta: Optional[float] = None) -> None:
         elapsed = time.monotonic() - self._run_started_monotonic if self._run_started_monotonic else 0.0
-        input_bytes = 0
-        output_bytes = 0
-        for item in self.queue_model.items():
-            try:
-                if item.path.exists():
-                    input_bytes += item.path.stat().st_size
-            except Exception:
-                pass
-            output_text = (item.last_output or "").split(";", 1)[0].strip()
-            if not output_text:
-                continue
-            try:
-                output_path = Path(output_text).expanduser()
-                if output_path.exists():
-                    output_bytes += output_path.stat().st_size
+        now = time.monotonic()
+        if total_eta is not None and total_eta != 0.0 and now - getattr(self, "_last_session_refresh", 0.0) < 0.25:
+            return
+        self._last_session_refresh = now
+        items = self.queue_model.items()
+        input_bytes = sum(item.input_bytes for item in items)
+        output_bytes = sum(item.output_bytes for item in items)
 '''

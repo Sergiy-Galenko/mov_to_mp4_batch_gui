@@ -485,5 +485,19 @@
   "pos_top_right": "Top-right",
   "pos_bottom_left": "Bottom-left",
   "pos_bottom_right": "Bottom-right",
-  "pos_center": "Center"
+  "pos_center": "Center",
+  "clear_search": "Clear search",
+  "list_view": "List view",
+  "grid_view": "Grid view",
+  "reset_filters": "Reset filters",
+  "select_file": "Select file",
+  "shortcut_search": "Search shortcuts",
+  "reset": "Reset",
+  "trim_out": "End",
+  "trim": "Trim",
+  "keyboard_shortcuts": "Keyboard shortcuts",
+  "lossless_fast_copy": "Lossless fast copy",
+  "trim_in": "Start",
+  "no_matching_files": "No files match these filters",
+  "format": "Format"
 }

@@ -19,6 +19,7 @@ TextField {
     selectedTextColor: Theme.textOnAccent
     verticalAlignment: TextInput.AlignVCenter
     selectByMouse: true
+    Accessible.name: placeholderText
     clip: true
     hoverEnabled: true
 
