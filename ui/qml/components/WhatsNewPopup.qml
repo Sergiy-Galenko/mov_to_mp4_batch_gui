@@ -14,7 +14,7 @@ Popup {
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-    property string currentVersion: (typeof backend !== "undefined" && backend) ? backend.appVersion : "1.2.2"
+    property string currentVersion: (typeof backend !== "undefined" && backend) ? backend.appVersion : "2.0.0"
     property url logoSource: Qt.resolvedUrl("../../../assets/app-logo.png")
     property bool compact: width < 520
     property int adaptiveMargin: compact ? Theme.space4 : Theme.space5
@@ -105,27 +105,33 @@ Popup {
                 spacing: root.compact ? Theme.space3 : Theme.space4
 
                 ReleaseSection {
-                    title: I18n.t("whats_new_workspace_title")
+                    title: I18n.t("whats_new_ebooks_title")
                     accent: Theme.accentPrimary
-                    body: I18n.t("whats_new_workspace_body")
+                    body: I18n.t("whats_new_ebooks_body")
                 }
 
                 ReleaseSection {
-                    title: I18n.t("whats_new_preview_title")
+                    title: I18n.t("whats_new_ocr_title")
                     accent: Theme.statusSuccess
-                    body: I18n.t("whats_new_preview_body")
+                    body: I18n.t("whats_new_ocr_body")
                 }
 
                 ReleaseSection {
-                    title: I18n.t("whats_new_text_title")
+                    title: I18n.t("whats_new_editor_title")
                     accent: Theme.statusWarning
-                    body: I18n.t("whats_new_text_body")
+                    body: I18n.t("whats_new_editor_body")
                 }
 
                 ReleaseSection {
-                    title: I18n.t("whats_new_ui_title")
+                    title: I18n.t("whats_new_merge_loudnorm_title")
+                    accent: Theme.accentSecondary
+                    body: I18n.t("whats_new_merge_loudnorm_body")
+                }
+
+                ReleaseSection {
+                    title: I18n.t("whats_new_apple_whisper_title")
                     accent: Theme.statusRunning
-                    body: I18n.t("whats_new_ui_body")
+                    body: I18n.t("whats_new_apple_whisper_body")
                 }
             }
         }

@@ -26,7 +26,7 @@ class ResourceMonitor:
     def _collect(self) -> None:
         sample = {"cpu": 100.0, "gpu": 0.0, "ram": 0.0}
         try:
-            import psutil
+            import psutil  # type: ignore
 
             # Sample in the worker: a new thread's first non-blocking CPU reading
             # is meaningless and could incorrectly trigger the idle scheduler.

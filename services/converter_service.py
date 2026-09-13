@@ -187,7 +187,7 @@ class ConverterService:
             return
         descendants = []
         with contextlib.suppress(Exception):
-            import psutil
+            import psutil  # type: ignore
             descendants = psutil.Process(proc.pid).children(recursive=True)
             for child in descendants:
                 with contextlib.suppress(Exception):
@@ -247,7 +247,7 @@ class ConverterService:
         if not proc or proc.poll() is not None:
             return
         with contextlib.suppress(Exception):
-            import psutil
+            import psutil  # type: ignore
             for child in psutil.Process(proc.pid).children(recursive=True):
                 with contextlib.suppress(Exception):
                     child.suspend() if suspend else child.resume()

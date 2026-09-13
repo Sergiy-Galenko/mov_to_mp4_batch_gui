@@ -1,6 +1,6 @@
 [project]
 name = "media-converter"
-version = "1.2.2"
+version = "2.0.0"
 requires-python = ">=3.12"
 description = "Desktop batch converter for video, photos, audio, subtitles, and text files."
 license = {text = "MIT"}

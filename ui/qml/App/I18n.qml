@@ -80,7 +80,17 @@ QtObject {
         "status.pending": "pending",
         "status.processing": "processing",
         "status.done": "done",
-        "status.failed": "failed"
+        "status.failed": "failed",
+        "whats_new_ebooks_title": "E-Books & Audiobooks",
+        "whats_new_ebooks_body": "Full support for EPUB, FB2, MOBI: structural reading, conversion to PDF, DOCX, TXT, and generating audiobooks.",
+        "whats_new_ocr_title": "OCR Text Recognition from Scans",
+        "whats_new_ocr_body": "Extract text from images (PNG, JPG, TIFF, WebP) and scanned PDFs with export to TXT, DOCX, MD.",
+        "whats_new_editor_title": "Visual Editing: Trim & Crop",
+        "whats_new_editor_body": "Interactive timeline slider with dual In/Out markers and interactive visual crop frame directly over preview.",
+        "whats_new_merge_loudnorm_title": "Media Merge & EBU R128 Loudness",
+        "whats_new_merge_loudnorm_body": "Fast concatenation for audio/video files and two-pass EBU R128 loudness normalization.",
+        "whats_new_apple_whisper_title": "Apple Silicon & Whisper Model Manager",
+        "whats_new_apple_whisper_body": "VideoToolbox hardware acceleration on macOS M1-M4 and modal manager for Whisper AI models."
     })
 
     Component.onCompleted: syncFromBackend()
