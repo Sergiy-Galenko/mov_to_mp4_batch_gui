@@ -10,6 +10,7 @@ Supports:
 
 from __future__ import annotations
 
+import contextlib
 import math
 import sys
 from copy import deepcopy
@@ -77,10 +78,8 @@ class ThemeManager:
             colors = self.color_overrides(mode)
             legacy_accent = self._state.get("accent_color")
             if legacy_accent and "accent" not in colors:
-                try:
+                with contextlib.suppress(ValueError):
                     colors["accent"] = normalize_color(legacy_accent)
-                except ValueError:
-                    pass
             self._palette_cache[mode] = resolve_palette(mode, colors)
         return dict(self._palette_cache[mode])
 
@@ -91,10 +90,8 @@ class ThemeManager:
         if isinstance(raw, dict):
             for key, value in raw.items():
                 if key in COLOR_KEYS:
-                    try:
+                    with contextlib.suppress(ValueError):
                         colors[key] = normalize_color(value)
-                    except ValueError:
-                        pass
         return colors
 
     def set_color(self, key: str, color: str, mode: str | None = None) -> None:
