@@ -10,8 +10,9 @@ Handles:
 
 from __future__ import annotations
 
-import os
+import platform
 import shutil
+import sys
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -192,6 +193,6 @@ class WhisperModelManager:
                 devices.append("mps")
         except Exception:
             # Check for Apple Silicon platform
-            if os.uname().machine in {"arm64", "aarch64"} and os.name == "posix":
+            if sys.platform == "darwin" and platform.machine() in {"arm64", "aarch64"}:
                 devices.append("mps")
         return devices
