@@ -142,4 +142,27 @@ BODY = r'''        self._youtube_history = self.settings_manager.youtube_history
 
             self._validation = ValidationService(self.ffmpeg_service)
         return self._validation
+
+    @QtCore.Slot(result=list)
+    def getWhisperModels(self) -> list:
+        return self.whisper_model_manager.list_models()
+
+    @QtCore.Slot(result=list)
+    def getWhisperDevices(self) -> list:
+        return self.whisper_model_manager.detect_available_devices()
+
+    @QtCore.Slot(str)
+    def downloadWhisperModel(self, model_name: str) -> None:
+        def on_progress(pct: float, msg: str) -> None:
+            self.whisperDownloadProgress.emit(model_name, pct, msg)
+            if pct >= 1.0 or pct <= 0.0:
+                self.whisperModelsChanged.emit()
+
+        self.whisper_model_manager.download_model(model_name, on_progress)
+
+    @QtCore.Slot(str, result=bool)
+    def deleteWhisperModel(self, model_name: str) -> bool:
+        res = self.whisper_model_manager.delete_model(model_name)
+        self.whisperModelsChanged.emit()
+        return res
 '''

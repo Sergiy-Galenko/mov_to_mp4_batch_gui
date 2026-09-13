@@ -886,11 +886,18 @@ class ConverterService:
         )
         self._run_hook(settings.before_hook, "before", env=hook_env)
 
-        merge_candidates = [task for task in tasks if task.media_type == "video" and self._effective_settings(task, settings).operation == "convert"]
+        merge_candidates = [
+            task
+            for task in tasks
+            if task.media_type in {"video", "audio"}
+            and self._effective_settings(task, settings).operation in {"convert", "audio_only"}
+        ]
         merge_enabled = settings.merge and len(merge_candidates) >= 2
+        is_audio_merge = merge_enabled and all(task.media_type == "audio" for task in merge_candidates)
+        merge_out_format = settings.out_audio_format if is_audio_merge else settings.out_video_format
         if settings.merge and not merge_enabled:
-            self._log("WARN", "Merge доступний лише для щонайменше 2 відео в режимі конвертації.")
-        if merge_enabled and settings.replace_audio_path.strip():
+            self._log("WARN", "Merge доступний лише для щонайменше 2 відео або аудіо файлів.")
+        if merge_enabled and settings.replace_audio_path.strip() and not is_audio_merge:
             self._log("WARN", "Merge + replace audio не підтримується. Використовую аудіо з джерел.")
 
         merged_video_paths = {task.path for task in merge_candidates} if merge_enabled else set()
@@ -899,7 +906,7 @@ class ConverterService:
             outp = build_merge_output_path(
                 out_dir,
                 settings.merge_name,
-                settings.out_video_format,
+                merge_out_format,
                 overwrite=settings.overwrite,
                 skip_existing=settings.skip_existing,
             )
@@ -914,37 +921,48 @@ class ConverterService:
                 self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
             else:
                 self._emit("status", f"Обробка (merge): {outp.name}")
-                self._log("INFO", f"Merge відео: {len(merge_candidates)} файлів → {outp.name}")
+                media_label = "аудіо" if is_audio_merge else "відео"
+                self._log("INFO", f"Merge {media_label}: {len(merge_candidates)} файлів → {outp.name}")
                 for task in merge_candidates:
                     self._task_state(task.path, "running")
                 try:
-                    _filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
-                        merge_candidates[0].path,
-                        settings,
-                        outp.suffix,
-                        log_cb=self._log,
-                    )
-                    audio_processing = self.ffmpeg.has_audio_processing(settings)
-                    trim_args = self.ffmpeg.build_trim_args(settings, log_cb=self._log)
-                    fast_copy_ok, reason = self.ffmpeg.merge_copy_allowed(
-                        [task.path for task in merge_candidates],
-                        outp.suffix,
-                        self.media_info,
-                        filters_used,
-                        audio_processing,
-                        trim_args,
-                    )
-                    allow_fast = settings.fast_copy and fast_copy_ok
-                    if settings.fast_copy and not fast_copy_ok:
-                        self._log("WARN", f"Fast copy (merge) вимкнено: {reason}")
-                    cmd, list_path = self.ffmpeg.build_merge_command(
-                        [task.path for task in merge_candidates],
-                        outp,
-                        settings,
-                        self.media_info,
-                        allow_fast,
-                        log_cb=self._log,
-                    )
+                    if is_audio_merge:
+                        allow_fast = settings.fast_copy
+                        cmd, list_path = self.ffmpeg.build_audio_merge_command(
+                            [task.path for task in merge_candidates],
+                            outp,
+                            settings,
+                            allow_fast_copy=allow_fast,
+                            log_cb=self._log,
+                        )
+                    else:
+                        _filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
+                            merge_candidates[0].path,
+                            settings,
+                            outp.suffix,
+                            log_cb=self._log,
+                        )
+                        audio_processing = self.ffmpeg.has_audio_processing(settings)
+                        trim_args = self.ffmpeg.build_trim_args(settings, log_cb=self._log)
+                        fast_copy_ok, reason = self.ffmpeg.merge_copy_allowed(
+                            [task.path for task in merge_candidates],
+                            outp.suffix,
+                            self.media_info,
+                            filters_used,
+                            audio_processing,
+                            trim_args,
+                        )
+                        allow_fast = settings.fast_copy and fast_copy_ok
+                        if settings.fast_copy and not fast_copy_ok:
+                            self._log("WARN", f"Fast copy (merge) вимкнено: {reason}")
+                        cmd, list_path = self.ffmpeg.build_merge_command(
+                            [task.path for task in merge_candidates],
+                            outp,
+                            settings,
+                            self.media_info,
+                            allow_fast,
+                            log_cb=self._log,
+                        )
                     try:
                         rc = self._run_ffmpeg(
                             cmd,
@@ -1117,7 +1135,20 @@ class ConverterService:
                         elif task.media_type == "image":
                             cmd = self.ffmpeg.build_image_command(task.path, outp, settings_for_task, log_cb=self._log)
                         elif task.media_type == "audio":
+                            measured_norm = None
+                            if settings_for_task.normalize_audio in {"ebu_r128", "ebu_r128_2pass"}:
+                                self._emit("status", f"EBU R128 аналіз: {task.path.name}")
+                                self._log("INFO", f"EBU R128 прохід 1 (аналіз): {task.path.name}")
+                                measured_norm = self.ffmpeg.analyze_loudnorm(task.path)
                             cmd = self.ffmpeg.build_audio_command(task.path, outp, settings_for_task, duration=duration, log_cb=self._log)
+                            if measured_norm:
+                                norm_af = self.ffmpeg.build_audio_filter(settings_for_task, measured_loudnorm=measured_norm)
+                                if norm_af and "-filter:a" in cmd:
+                                    idx = cmd.index("-filter:a")
+                                    cmd[idx + 1] = norm_af
+                                elif norm_af:
+                                    cmd.insert(-1, "-filter:a")
+                                    cmd.insert(-1, norm_af)
                         elif task.media_type == "subtitle":
                             cmd = self.ffmpeg.build_subtitle_file_command(task.path, outp, settings_for_task)
                         elif task.media_type == "text":

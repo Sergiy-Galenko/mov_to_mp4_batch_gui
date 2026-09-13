@@ -3,6 +3,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -388,12 +389,14 @@ class FfmpegService:
             return "libx264", False
 
         hw_map = {
+            "apple": {"h264": "h264_videotoolbox", "h265": "hevc_videotoolbox", "prores": "prores_videotoolbox"},
             "nvidia": {"h264": "h264_nvenc", "h265": "hevc_nvenc", "av1": "av1_nvenc"},
             "intel": {"h264": "h264_qsv", "h265": "hevc_qsv", "av1": "av1_qsv"},
             "amd": {"h264": "h264_amf", "h265": "hevc_amf", "av1": "av1_amf"},
         }
 
         if hw_pref == "cpu" or codec in {"prores", "mpeg2"}:
+        if hw_pref == "cpu" or codec == "mpeg2" or (codec == "prores" and hw_pref != "apple"):
             encoder = cpu_map[codec]
             if self.encoder_caps and encoder not in self.encoder_caps:
                 if log_cb:
@@ -403,6 +406,8 @@ class FfmpegService:
 
         if hw_pref == "auto":
             for vendor in ["nvidia", "intel", "amd"]:
+            vendors = ["apple", "nvidia", "intel", "amd"] if sys.platform == "darwin" else ["nvidia", "intel", "amd", "apple"]
+            for vendor in vendors:
                 encoder = hw_map.get(vendor, {}).get(codec)
                 if encoder and encoder in self.encoder_caps:
                     return encoder, True
@@ -433,9 +438,14 @@ class FfmpegService:
             return ["-crf", str(crf), "-b:v", "0"]
         if encoder == "prores_ks":
             return ["-profile:v", "3"]
+        if encoder == "prores_videotoolbox":
+            return ["-profile:v", "standard"]
         if encoder == "mpeg2video":
             qscale = max(2, min(31, round(2 + (max(0, min(51, int(crf))) / 51.0) * 29)))
             return ["-q:v", str(qscale)]
+        if encoder.endswith("_videotoolbox"):
+            vt_quality = max(1, min(100, round((51 - crf) * 100 / 51)))
+            return ["-q:v", str(vt_quality)]
         if encoder.endswith("_nvenc"):
             return ["-rc:v", "vbr", "-cq", str(crf), "-b:v", "0"]
         if encoder.endswith("_qsv"):
@@ -467,6 +477,7 @@ class FfmpegService:
         if profile not in {"baseline", "main", "high"}:
             return []
         if encoder in {"libx264", "h264_nvenc", "h264_qsv", "h264_amf"}:
+        if encoder in {"libx264", "h264_nvenc", "h264_qsv", "h264_amf", "h264_videotoolbox"}:
             return ["-profile:v", profile]
         return []
 
@@ -542,6 +553,61 @@ class FfmpegService:
         return ",".join([f"atempo={factor:.3f}" for factor in chain])
 
     def build_audio_filter(self, settings: ConversionSettings) -> str | None:
+    def analyze_loudnorm(
+        self,
+        inp: Path,
+        target_i: float = -16.0,
+        target_tp: float = -1.5,
+        target_lra: float = 11.0,
+        timeout: int = 120,
+    ) -> dict[str, str]:
+        if not self.ffmpeg_path or not inp.exists():
+            return {}
+        cmd = [
+            self.ffmpeg_path,
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            str(inp),
+            "-vn",
+            "-sn",
+            "-dn",
+            "-af",
+            f"loudnorm=I={target_i:.1f}:TP={target_tp:.1f}:LRA={target_lra:.1f}:print_format=json",
+            "-f",
+            "null",
+            _null_output(),
+        ]
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            match = re.search(r"\{\s*\"input_i\"[\s\S]*?\}", res.stderr)
+            if match:
+                return json.loads(match.group(0))
+        except Exception:
+            pass
+        return {}
+
+    def build_two_pass_loudnorm_filter(
+        self,
+        measured: dict[str, str],
+        target_i: float = -16.0,
+        target_tp: float = -1.5,
+        target_lra: float = 11.0,
+    ) -> str:
+        if not measured or "input_i" not in measured:
+            return f"loudnorm=I={target_i:.1f}:TP={target_tp:.1f}:LRA={target_lra:.1f}"
+        return (
+            f"loudnorm=I={target_i:.1f}:TP={target_tp:.1f}:LRA={target_lra:.1f}:"
+            f"measured_I={measured.get('input_i')}:"
+            f"measured_TP={measured.get('input_tp')}:"
+            f"measured_LRA={measured.get('input_lra')}:"
+            f"measured_thresh={measured.get('input_thresh')}:"
+            f"offset={measured.get('target_offset', '0.0')}:linear=true"
+        )
+
+    def build_audio_filter(
+        self, settings: ConversionSettings, measured_loudnorm: dict[str, str] | None = None
+    ) -> str | None:
         filters: list[str] = []
 
         speed_filter = self.build_audio_speed_filter(settings)
@@ -559,6 +625,11 @@ class FfmpegService:
 
         if settings.normalize_audio == "ebu_r128":
             filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
+        if settings.normalize_audio in {"ebu_r128", "ebu_r128_2pass"}:
+            if measured_loudnorm:
+                filters.append(self.build_two_pass_loudnorm_filter(measured_loudnorm))
+            else:
+                filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
 
         if settings.audio_peak_limit_db is not None:
             peak_linear = pow(10.0, float(settings.audio_peak_limit_db) / 20.0)
@@ -1301,6 +1372,40 @@ class FfmpegService:
         cmd.append(str(outp))
         return cmd
 
+    def build_audio_merge_command(
+        self,
+        inputs: list[Path],
+        outp: Path,
+        settings: ConversionSettings,
+        allow_fast_copy: bool = True,
+        log_cb=None,
+    ) -> tuple[list[str], str]:
+        overwrite = "-y" if settings.overwrite else "-n"
+        list_path = self._write_concat_list(inputs)
+        out_ext = outp.suffix.lower()
+        cmd = [self.ffmpeg_path, overwrite, "-f", "concat", "-safe", "0", "-i", list_path]
+        if allow_fast_copy:
+            cmd += ["-c", "copy"]
+        else:
+            codec_map = {
+                ".mp3": "libmp3lame",
+                ".m4a": "aac",
+                ".aac": "aac",
+                ".wav": "pcm_s16le",
+                ".flac": "flac",
+                ".opus": "libopus",
+            }
+            codec = codec_map.get(out_ext, "aac")
+            cmd += ["-c:a", codec]
+            if settings.audio_bitrate and codec in {"libmp3lame", "aac", "libopus"}:
+                cmd += ["-b:a", settings.audio_bitrate]
+            audio_filter = self.build_audio_filter(settings)
+            if audio_filter:
+                cmd += ["-filter:a", audio_filter]
+        cmd += self.metadata_args(settings)
+        cmd.append(str(outp))
+        return cmd, list_path
+
     def build_merge_command(
         self,
         inputs: list[Path],
@@ -1310,6 +1415,10 @@ class FfmpegService:
         allow_fast_copy: bool,
         log_cb=None,
     ) -> tuple[list[str], str]:
+        out_ext = outp.suffix.lower()
+        if out_ext in {".mp3", ".m4a", ".aac", ".wav", ".flac", ".opus"}:
+            return self.build_audio_merge_command(inputs, outp, settings, allow_fast_copy, log_cb=log_cb)
+
         overwrite = "-y" if settings.overwrite else "-n"
         list_path = self._write_concat_list(inputs)
         out_ext = outp.suffix.lower()

@@ -49,6 +49,9 @@ TEXT_EXTS = {
     ".ppt",
     ".odp",
     ".otp",
+    ".epub",
+    ".fb2",
+    ".mobi",
 }
 
 OUT_VIDEO_FORMATS = ["mp4", "mkv", "webm", "mov", "avi", "gif", "mpg", "m2ts"]
@@ -138,6 +141,7 @@ VIDEO_CODEC_MAP = {
 HW_ENCODER_OPTIONS = [
     "auto",
     "cpu",
+    "Apple (VideoToolbox)",
     "NVIDIA (NVENC)",
     "Intel (QSV)",
     "AMD (AMF)",
@@ -149,6 +153,9 @@ HW_ENCODER_MAP = {
     "cpu": "cpu",
     "CPU only": "cpu",
     "Тільки CPU": "cpu",
+    "Apple (VideoToolbox)": "apple",
+    "apple": "apple",
+    "videotoolbox": "apple",
     "NVIDIA (NVENC)": "nvidia",
     "Intel (QSV)": "intel",
     "AMD (AMF)": "amd",

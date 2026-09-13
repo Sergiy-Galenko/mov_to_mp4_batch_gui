@@ -77,7 +77,7 @@ junit.xml
 htmlcov/
 .tox/
 
-/tests/*
+!/tests/*.py
 
 # Local application state, queue exports, previews, and conversion results
 /data/

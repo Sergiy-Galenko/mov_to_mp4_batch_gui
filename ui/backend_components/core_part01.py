@@ -55,9 +55,12 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
     queueViewModeChanged = QtCore.Signal()
     concurrencyLimitChanged = QtCore.Signal()
     outputTemplateChanged = QtCore.Signal()
+    whisperModelsChanged = QtCore.Signal()
+    whisperDownloadProgress = QtCore.Signal(str, float, str)
 
     def __init__(self) -> None:
         super().__init__()
+        self.whisper_model_manager = WhisperModelManager()
         self.event_queue: "queue.Queue[tuple]" = UiEventQueue()
         self.ffmpeg_service = FfmpegService(find_ffmpeg(), None)
         self.ffmpeg_service.ffprobe_path = find_ffprobe(self.ffmpeg_service.ffmpeg_path)

@@ -2310,6 +2310,25 @@ ApplicationWindow {
                 AppTextField { id: subtitleLanguageField; text: "auto"; onEditingFinished: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("model"); visible: backend ? backend.isWhisperAvailable : true }
                 AppComboBox { id: subtitleModelCombo; model: ["tiny", "base", "small", "medium", "large"]; currentIndex: 1; visible: backend ? backend.isWhisperAvailable : true; enabled: visible; onActivated: scheduleSettingsSync() }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    AppComboBox {
+                        id: subtitleModelCombo
+                        Layout.fillWidth: true
+                        model: ["tiny", "base", "small", "medium", "large", "large-v3", "large-v3-turbo"]
+                        currentIndex: 1
+                        visible: backend ? backend.isWhisperAvailable : true
+                        enabled: visible
+                        onActivated: scheduleSettingsSync()
+                    }
+                    SecondaryButton {
+                        text: "Керування..."
+                        implicitHeight: 32
+                        visible: backend ? backend.isWhisperAvailable : true
+                        onClicked: whisperModal.open()
+                    }
+                }
                 FieldLabel { text: I18n.t("engine"); visible: backend ? backend.isWhisperAvailable : true }
                 AppComboBox { id: subtitleEngineCombo; model: ["auto", "whisper"]; currentIndex: 0; visible: backend ? backend.isWhisperAvailable : true; enabled: visible; onActivated: scheduleSettingsSync() }
                 Label {
@@ -2842,6 +2861,10 @@ ApplicationWindow {
 
     ShortcutCheatSheetModal {
         id: shortcutCheatSheet
+    }
+
+    WhisperModelManagerModal {
+        id: whisperModal
     }
 
     function shortcutAllowed(action) {

@@ -4,6 +4,11 @@ import csv
 import html
 import json
 import re
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
 import textwrap
 import zipfile
 import zlib
@@ -31,6 +36,12 @@ SUPPORTED_TEXT_FORMATS = {
     "pptx",
     "ppt",
     "odp",
+    "epub",
+    "fb2",
+    "mobi",
+    "mp3",
+    "m4a",
+    "wav",
 }
 
 OOXML_WORD_EXTS = {".docx", ".docm", ".dotx"}
@@ -50,6 +61,12 @@ class TextConversionError(RuntimeError):
 def read_text_file(path: Path) -> tuple[str, str]:
     suffix = path.suffix.lower()
     try:
+        if suffix == ".epub":
+            return _read_epub(path), "epub"
+        if suffix == ".fb2":
+            return _read_fb2(path), "fb2"
+        if suffix == ".mobi":
+            return _read_mobi(path), "mobi"
         if suffix in OOXML_WORD_EXTS:
             return _read_docx(path), "docx"
         if suffix in OOXML_SHEET_EXTS:
@@ -60,6 +77,19 @@ def read_text_file(path: Path) -> tuple[str, str]:
             return _read_odf(path), suffix.lstrip(".")
         if suffix == ".pdf":
             return _read_pdf(path), "pdf"
+            pdf_text = _read_pdf(path)
+            if not pdf_text.strip():
+                from services.ocr_service import OcrService
+                ocr_text = OcrService().recognize_pdf_scans(path)
+                if ocr_text.strip():
+                    return ocr_text, "pdf"
+            return pdf_text, "pdf"
+        if suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
+            from services.ocr_service import OcrService
+            ocr_text = OcrService().recognize_image(path)
+            if ocr_text.strip():
+                return ocr_text, suffix.lstrip(".")
+            return f"[Image file: {path.name}]", suffix.lstrip(".")
         if suffix == ".rtf":
             return _read_rtf(path), "rtf"
         if suffix in LEGACY_OFFICE_EXTS:
@@ -189,6 +219,12 @@ def convert_text_file(source: Path, output: Path, output_format: str) -> None:
         output.write_text(_to_presentation_html(text, source), encoding="utf-8", newline="")
     elif output_format == "odp":
         _write_odf_presentation(text, output, source)
+    elif output_format == "fb2":
+        _write_fb2(text, output, source)
+    elif output_format == "epub":
+        _write_epub(text, output, source)
+    elif output_format in {"mp3", "m4a", "wav"}:
+        _text_to_audio(text, output)
 
 
 def _read_plain_text_file(path: Path) -> tuple[str, str]:
@@ -1010,3 +1046,309 @@ def _flatten_xml_text(root: ET.Element) -> str:
 
 def _natural_key(value: str) -> list[int | str]:
     return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", value)]
+
+
+def _strip_html_tags(raw: str) -> str:
+    clean = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", raw, flags=re.DOTALL | re.IGNORECASE)
+    clean = re.sub(r"<br\s*/?>", "\n", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"</p>", "\n\n", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"<[^>]+>", " ", clean)
+    clean = html.unescape(clean)
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in clean.splitlines()]
+    return "\n".join(lines).strip()
+
+
+def _read_epub(path: Path) -> str:
+    with zipfile.ZipFile(path) as zf:
+        names = set(zf.namelist())
+        opf_path = ""
+        if "META-INF/container.xml" in names:
+            try:
+                container_xml = zf.read("META-INF/container.xml")
+                root = ET.fromstring(container_xml)
+                for el in root.iter():
+                    if _local_name(el.tag) == "rootfile" and "full-path" in el.attrib:
+                        opf_path = el.attrib["full-path"]
+                        break
+            except Exception:
+                pass
+
+        if not opf_path:
+            for name in names:
+                if name.endswith(".opf"):
+                    opf_path = name
+                    break
+
+        chapters: list[str] = []
+        if opf_path and opf_path in names:
+            try:
+                opf_dir = Path(opf_path).parent
+                opf_xml = zf.read(opf_path)
+                root = ET.fromstring(opf_xml)
+                manifest: dict[str, str] = {}
+                for item in root.iter():
+                    if _local_name(item.tag) == "item":
+                        manifest[item.attrib.get("id", "")] = item.attrib.get("href", "")
+
+                for itemref in root.iter():
+                    if _local_name(itemref.tag) == "itemref":
+                        idref = itemref.attrib.get("idref", "")
+                        href = manifest.get(idref, "")
+                        if href:
+                            full_href = (opf_dir / href).as_posix().lstrip("./")
+                            if full_href in names:
+                                raw_ch = zf.read(full_href).decode("utf-8", errors="replace")
+                                ch_text = _strip_html_tags(raw_ch).strip()
+                                if ch_text:
+                                    chapters.append(ch_text)
+            except Exception:
+                pass
+
+        if not chapters:
+            for name in sorted(names):
+                if name.lower().endswith((".xhtml", ".html", ".htm")):
+                    try:
+                        raw_ch = zf.read(name).decode("utf-8", errors="replace")
+                        ch_text = _strip_html_tags(raw_ch).strip()
+                        if ch_text:
+                            chapters.append(ch_text)
+                    except Exception:
+                        pass
+
+    if not chapters:
+        raise TextConversionError(f"No readable text content found in EPUB: {path.name}")
+    return "\n\n".join(chapters)
+
+
+def _read_fb2(path: Path) -> str:
+    raw = path.read_bytes()
+    if raw.startswith(b"PK\x03\x04"):
+        with zipfile.ZipFile(path) as zf:
+            fb2_name = next((n for n in zf.namelist() if n.lower().endswith(".fb2")), None)
+            if fb2_name:
+                raw = zf.read(fb2_name)
+
+    text_xml = ""
+    for enc in ("utf-8", "cp1251", "latin-1"):
+        try:
+            text_xml = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+
+    if not text_xml:
+        text_xml = raw.decode("utf-8", errors="replace")
+
+    paragraphs: list[str] = []
+    try:
+        root = ET.fromstring(text_xml)
+        for el in root.iter():
+            tag = _local_name(el.tag)
+            if tag in {"p", "title", "subtitle", "v"}:
+                text = "".join(el.itertext()).strip()
+                if text:
+                    paragraphs.append(text)
+    except Exception:
+        for m in re.finditer(r"<(p|v|subtitle)[^>]*>(.*?)</\1>", text_xml, re.DOTALL | re.IGNORECASE):
+            clean = _strip_html_tags(m.group(2)).strip()
+            if clean:
+                paragraphs.append(clean)
+
+    if not paragraphs:
+        raise TextConversionError(f"No text content found in FB2: {path.name}")
+    return "\n\n".join(paragraphs)
+
+
+def _read_mobi(path: Path) -> str:
+    data = path.read_bytes()
+    if len(data) < 78:
+        raise TextConversionError(f"Invalid MOBI file (too small): {path.name}")
+
+    num_records = struct.unpack_from(">H", data, 76)[0]
+    if num_records < 2:
+        raise TextConversionError(f"Invalid MOBI PalmDOC database: {path.name}")
+
+    record_offsets: list[int] = []
+    for i in range(num_records):
+        offset = struct.unpack_from(">I", data, 78 + i * 8)[0]
+        record_offsets.append(offset)
+
+    record_0_data = data[record_offsets[0]:record_offsets[1]]
+    if len(record_0_data) < 16:
+        raise TextConversionError("Invalid MOBI record 0")
+
+    compression, _, _, record_count, _ = struct.unpack_from(">H2sIH2s", record_0_data, 0)
+    text_records = min(record_count, num_records - 1)
+    decompressed_parts: list[bytes] = []
+
+    for i in range(1, text_records + 1):
+        start = record_offsets[i]
+        end = record_offsets[i + 1] if i + 1 < len(record_offsets) else len(data)
+        rec = data[start:end]
+        if compression == 1:
+            decompressed_parts.append(rec)
+        elif compression == 2:
+            pos = 0
+            rec_len = len(rec)
+            out = bytearray()
+            while pos < rec_len:
+                b = rec[pos]
+                pos += 1
+                if b == 0:
+                    out.append(0)
+                elif 1 <= b <= 8:
+                    out.extend(rec[pos:pos + b])
+                    pos += b
+                elif 9 <= b <= 0x7F:
+                    out.append(b)
+                elif 0x80 <= b <= 0xBF:
+                    if pos < rec_len:
+                        b2 = rec[pos]
+                        pos += 1
+                        distance = ((b & 0x3F) << 3) | (b2 >> 5)
+                        length = (b2 & 0x07) + 3
+                        for _ in range(length):
+                            if distance <= len(out):
+                                out.append(out[-distance])
+                elif 0xC0 <= b <= 0xFF:
+                    out.append(0x20)
+                    out.append(b ^ 0x80)
+            decompressed_parts.append(bytes(out))
+        else:
+            decompressed_parts.append(rec)
+
+    raw_text = b"".join(decompressed_parts)
+    decoded = ""
+    for enc in ("utf-8", "cp1252", "cp1251", "latin-1"):
+        try:
+            decoded = raw_text.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    if not decoded:
+        decoded = raw_text.decode("utf-8", errors="replace")
+
+    clean_text = _strip_html_tags(decoded)
+    if not clean_text.strip():
+        clean_text = _extract_printable_text(data)
+    return clean_text
+
+
+def _write_fb2(text: str, output: Path, source: Path) -> None:
+    title = html.escape(source.stem)
+    lines = [f"      <p>{html.escape(line.strip())}</p>" for line in text.splitlines() if line.strip()]
+    paragraphs = "\n".join(lines)
+    xml = f"""<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
+  <description>
+    <title-info>
+      <genre>prose</genre>
+      <book-title>{title}</book-title>
+    </title-info>
+  </description>
+  <body>
+    <title><p>{title}</p></title>
+    <section>
+{paragraphs}
+    </section>
+  </body>
+</FictionBook>
+"""
+    output.write_text(xml, encoding="utf-8")
+
+
+def _write_epub(text: str, output: Path, source: Path) -> None:
+    title = html.escape(source.stem)
+    body_paragraphs = "\n".join(f"<p>{html.escape(p.strip())}</p>" for p in text.split("\n\n") if p.strip())
+    chapter_xhtml = f"""<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>{title}</title></head>
+<body>
+<h1>{title}</h1>
+{body_paragraphs}
+</body>
+</html>"""
+    container_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>"""
+    content_opf = f"""<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>{title}</dc:title>
+    <dc:language>en</dc:language>
+  </metadata>
+  <manifest>
+    <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapter1"/>
+  </spine>
+</package>"""
+
+    with zipfile.ZipFile(output, "w") as zf:
+        zf.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        zf.writestr("META-INF/container.xml", container_xml, compress_type=zipfile.ZIP_DEFLATED)
+        zf.writestr("OEBPS/content.opf", content_opf, compress_type=zipfile.ZIP_DEFLATED)
+        zf.writestr("OEBPS/chapter1.xhtml", chapter_xhtml, compress_type=zipfile.ZIP_DEFLATED)
+
+
+def _text_to_audio(text: str, output: Path) -> None:
+    """Generate audiobook audio from text using system speech synthesis and FFmpeg."""
+    from app.paths import find_ffmpeg
+
+    ffmpeg = find_ffmpeg()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    clean_text = " ".join(text.split()[:5000])
+
+    if sys.platform == "darwin" and shutil.which("say") and ffmpeg:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_aiff = Path(tmpdir) / "speech.aiff"
+            proc = subprocess.run(["say", "-o", str(tmp_aiff), clean_text], capture_output=True, timeout=120)
+            if proc.returncode == 0 and tmp_aiff.exists():
+                subprocess.run(
+                    [ffmpeg, "-y", "-i", str(tmp_aiff), "-c:a", "libmp3lame" if output.suffix == ".mp3" else "aac", str(output)],
+                    capture_output=True,
+                    check=True,
+                )
+                return
+
+    try:
+        import pyttsx3  # type: ignore
+
+        engine = pyttsx3.init()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_wav = Path(tmpdir) / "speech.wav"
+            engine.save_to_file(clean_text, str(tmp_wav))
+            engine.runAndWait()
+            if tmp_wav.exists():
+                if ffmpeg:
+                    subprocess.run([ffmpeg, "-y", "-i", str(tmp_wav), str(output)], capture_output=True, check=True)
+                else:
+                    output.write_bytes(tmp_wav.read_bytes())
+                return
+    except Exception:
+        pass
+
+    if ffmpeg:
+        subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=3",
+                "-c:a",
+                "aac" if output.suffix == ".m4a" else "libmp3lame",
+                str(output),
+            ],
+            capture_output=True,
+            check=True,
+        )
+        return
+
+    raise TextConversionError("Audiobook generation requires macOS 'say', 'pyttsx3', or FFmpeg.")

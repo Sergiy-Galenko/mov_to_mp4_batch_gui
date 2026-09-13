@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 
 @dataclass
 class HardwareCapabilities:
+    apple_available: bool = False
+    videotoolbox_encoders: list[str] = field(default_factory=list)
     nvidia_available: bool = False
     nvidia_encoders: list[str] = field(default_factory=list)
     intel_qsv_available: bool = False
@@ -20,9 +22,12 @@ class HardwareCapabilities:
     @property
     def has_gpu(self) -> bool:
         return self.nvidia_available or self.intel_qsv_available or self.amd_amf_available
+        return self.apple_available or self.nvidia_available or self.intel_qsv_available or self.amd_amf_available
 
     @property
     def best_vendor(self) -> str:
+        if self.apple_available:
+            return "apple"
         if self.nvidia_available:
             return "nvidia"
         if self.intel_qsv_available:
@@ -33,6 +38,8 @@ class HardwareCapabilities:
 
     def summary(self) -> str:
         parts: list[str] = []
+        if self.apple_available:
+            parts.append(f"Apple VideoToolbox ({len(self.videotoolbox_encoders)} enc)")
         if self.nvidia_available:
             parts.append(f"NVIDIA NVENC ({len(self.nvidia_encoders)} enc)")
         if self.intel_qsv_available:
@@ -44,6 +51,7 @@ class HardwareCapabilities:
         return " | ".join(parts)
 
 
+_VIDEOTOOLBOX_ENCODERS = {"h264_videotoolbox", "hevc_videotoolbox", "prores_videotoolbox"}
 _NVIDIA_ENCODERS = {"h264_nvenc", "hevc_nvenc", "av1_nvenc"}
 _QSV_ENCODERS = {"h264_qsv", "hevc_qsv", "av1_qsv", "vp9_qsv"}
 _AMF_ENCODERS = {"h264_amf", "hevc_amf", "av1_amf"}
@@ -70,6 +78,8 @@ class HardwareService:
         try:
             all_encoders = self._list_encoders()
             caps.all_encoders = all_encoders
+            caps.videotoolbox_encoders = sorted(_VIDEOTOOLBOX_ENCODERS & all_encoders)
+            caps.apple_available = bool(caps.videotoolbox_encoders)
             caps.nvidia_encoders = sorted(_NVIDIA_ENCODERS & all_encoders)
             caps.nvidia_available = bool(caps.nvidia_encoders)
             caps.qsv_encoders = sorted(_QSV_ENCODERS & all_encoders)
@@ -100,6 +110,7 @@ class HardwareService:
             if len(parts) >= 2:
                 name = parts[1]
                 if parts[0].startswith("V") or name in (_NVIDIA_ENCODERS | _QSV_ENCODERS | _AMF_ENCODERS):
+                if parts[0].startswith("V") or name in (_VIDEOTOOLBOX_ENCODERS | _NVIDIA_ENCODERS | _QSV_ENCODERS | _AMF_ENCODERS):
                     encoders.add(name)
         return encoders
 

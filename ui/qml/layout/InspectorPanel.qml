@@ -13,6 +13,7 @@ Rectangle {
     border.color: Theme.borderMuted
     clip: true
 
+    property bool cropModeEnabled: false
     readonly property bool batchSelection: appRoot && appRoot.selectedPaths.length > 1
     readonly property bool hasSelection: appRoot && appRoot.selectedPath.length > 0
 
@@ -20,6 +21,8 @@ Rectangle {
         var details = appRoot ? appRoot.selectedDetails : ({})
         trimStartSpin.value = Math.round(Number(details.trimStart || 0))
         trimEndSpin.value = Math.round(Number(details.trimEnd || 0))
+        timelineTrim.trimStart = trimStartSpin.value
+        timelineTrim.trimEnd = trimEndSpin.value
         fastCopyCheck.checked = !!details.fastCopy
     }
 
@@ -64,6 +67,7 @@ Rectangle {
                 visible: !root.batchSelection && appRoot && appRoot.selectedMediaType !== "text"
                 Layout.fillWidth: true; Layout.minimumWidth: 0
                 Layout.preferredHeight: 154
+                Layout.preferredHeight: 164
                 radius: Theme.radiusMd
                 color: Theme.panelSecondary
                 border.width: 1
@@ -88,6 +92,52 @@ Rectangle {
                     iconColor: Theme.textMuted
                     width: 36
                     height: 36
+                }
+
+                CropOverlay {
+                    id: cropOverlay
+                    active: root.cropModeEnabled && selectedThumbnail.visible
+                    nativeWidth: {
+                        var res = backend ? (backend.infoRes || "") : ""
+                        var m = res.match(/(\d+)\s*[x×]\s*(\d+)/)
+                        return m ? parseInt(m[1]) : 1920
+                    }
+                    nativeHeight: {
+                        var res = backend ? (backend.infoRes || "") : ""
+                        var m = res.match(/(\d+)\s*[x×]\s*(\d+)/)
+                        return m ? parseInt(m[2]) : 1080
+                    }
+                    onCropChanged: function(x, y, w, h) {
+                        if (backend && appRoot.selectedPath.length > 0) {
+                            backend.updateTaskOverrideByPath(appRoot.selectedPath, {
+                                crop_x: x,
+                                crop_y: y,
+                                crop_w: w,
+                                crop_h: h
+                            })
+                        }
+                    }
+                    onResetRequested: {
+                        if (backend && appRoot.selectedPath.length > 0) {
+                            backend.updateTaskOverrideByPath(appRoot.selectedPath, {
+                                crop_x: null,
+                                crop_y: null,
+                                crop_w: null,
+                                crop_h: null
+                            })
+                        }
+                    }
+                }
+
+                // Toggle Crop button in top-right of preview
+                Button {
+                    visible: selectedThumbnail.visible && (appRoot.selectedMediaType === "video" || appRoot.selectedMediaType === "image")
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 6
+                    text: root.cropModeEnabled ? "✓ Готово" : "✂ Crop"
+                    implicitHeight: 24
+                    onClicked: root.cropModeEnabled = !root.cropModeEnabled
                 }
             }
 
@@ -188,9 +238,33 @@ Rectangle {
                         onClicked: {
                             trimStartSpin.value = 0
                             trimEndSpin.value = 0
+                            timelineTrim.trimStart = 0
+                            timelineTrim.trimEnd = 0
                             if (backend && appRoot.selectedPath.length > 0) {
                                 backend.updateTaskOverrideByPath(appRoot.selectedPath, { trim_start: null, trim_end: null })
                             }
+                        }
+                    }
+                }
+
+                // Interactive Timeline Trim Slider
+                TimelineTrimSlider {
+                    id: timelineTrim
+                    Layout.fillWidth: true
+                    totalDuration: {
+                        var d = appRoot && appRoot.selectedDetails ? Number(appRoot.selectedDetails.durationSec || 0) : 0
+                        return d > 0 ? d : 120.0
+                    }
+                    trimStart: trimStartSpin.value
+                    trimEnd: trimEndSpin.value
+                    onTrimModified: function(start, end) {
+                        trimStartSpin.value = start
+                        trimEndSpin.value = end
+                        if (backend && appRoot.selectedPath.length > 0) {
+                            backend.updateTaskOverrideByPath(appRoot.selectedPath, {
+                                trim_start: start > 0 ? start : null,
+                                trim_end: end > 0 ? end : null
+                            })
                         }
                     }
                 }
@@ -208,6 +282,7 @@ Rectangle {
                         to: 999999
                         value: 0
                         onValueModified: {
+                            timelineTrim.trimStart = value
                             if (backend && appRoot.selectedPath.length > 0) {
                                 backend.updateTaskOverrideByPath(appRoot.selectedPath, { trim_start: value > 0 ? value : null })
                             }
@@ -223,6 +298,7 @@ Rectangle {
                         to: 999999
                         value: 0
                         onValueModified: {
+                            timelineTrim.trimEnd = value
                             if (backend && appRoot.selectedPath.length > 0) {
                                 backend.updateTaskOverrideByPath(appRoot.selectedPath, { trim_end: value > 0 ? value : null })
                             }
