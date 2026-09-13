@@ -2309,7 +2309,6 @@ ApplicationWindow {
                 FieldLabel { text: I18n.t("language_field") }
                 AppTextField { id: subtitleLanguageField; text: "auto"; onEditingFinished: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("model"); visible: backend ? backend.isWhisperAvailable : true }
-                AppComboBox { id: subtitleModelCombo; model: ["tiny", "base", "small", "medium", "large"]; currentIndex: 1; visible: backend ? backend.isWhisperAvailable : true; enabled: visible; onActivated: scheduleSettingsSync() }
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6

@@ -66,7 +66,6 @@ Rectangle {
             Rectangle {
                 visible: !root.batchSelection && appRoot && appRoot.selectedMediaType !== "text"
                 Layout.fillWidth: true; Layout.minimumWidth: 0
-                Layout.preferredHeight: 154
                 Layout.preferredHeight: 164
                 radius: Theme.radiusMd
                 color: Theme.panelSecondary

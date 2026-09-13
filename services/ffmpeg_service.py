@@ -395,7 +395,6 @@ class FfmpegService:
             "amd": {"h264": "h264_amf", "h265": "hevc_amf", "av1": "av1_amf"},
         }
 
-        if hw_pref == "cpu" or codec in {"prores", "mpeg2"}:
         if hw_pref == "cpu" or codec == "mpeg2" or (codec == "prores" and hw_pref != "apple"):
             encoder = cpu_map[codec]
             if self.encoder_caps and encoder not in self.encoder_caps:
@@ -405,7 +404,6 @@ class FfmpegService:
             return encoder, False
 
         if hw_pref == "auto":
-            for vendor in ["nvidia", "intel", "amd"]:
             vendors = ["apple", "nvidia", "intel", "amd"] if sys.platform == "darwin" else ["nvidia", "intel", "amd", "apple"]
             for vendor in vendors:
                 encoder = hw_map.get(vendor, {}).get(codec)
@@ -476,7 +474,6 @@ class FfmpegService:
         profile = str(settings.video_profile or "").strip().lower()
         if profile not in {"baseline", "main", "high"}:
             return []
-        if encoder in {"libx264", "h264_nvenc", "h264_qsv", "h264_amf"}:
         if encoder in {"libx264", "h264_nvenc", "h264_qsv", "h264_amf", "h264_videotoolbox"}:
             return ["-profile:v", profile]
         return []
@@ -552,7 +549,6 @@ class FfmpegService:
             return None
         return ",".join([f"atempo={factor:.3f}" for factor in chain])
 
-    def build_audio_filter(self, settings: ConversionSettings) -> str | None:
     def analyze_loudnorm(
         self,
         inp: Path,
@@ -623,8 +619,6 @@ class FfmpegService:
                 f"stop_periods=-1:stop_duration={silence_duration:.2f}:stop_threshold={silence_threshold}dB"
             )
 
-        if settings.normalize_audio == "ebu_r128":
-            filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
         if settings.normalize_audio in {"ebu_r128", "ebu_r128_2pass"}:
             if measured_loudnorm:
                 filters.append(self.build_two_pass_loudnorm_filter(measured_loudnorm))

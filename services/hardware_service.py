@@ -109,7 +109,6 @@ class HardwareService:
             parts = line.split()
             if len(parts) >= 2:
                 name = parts[1]
-                if parts[0].startswith("V") or name in (_NVIDIA_ENCODERS | _QSV_ENCODERS | _AMF_ENCODERS):
                 if parts[0].startswith("V") or name in (_VIDEOTOOLBOX_ENCODERS | _NVIDIA_ENCODERS | _QSV_ENCODERS | _AMF_ENCODERS):
                     encoders.add(name)
         return encoders
