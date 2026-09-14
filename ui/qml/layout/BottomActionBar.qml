@@ -71,27 +71,18 @@ Rectangle {
             onClicked: backend && backend.stopConversion()
         }
 
-        Button {
+        PrimaryButton {
             id: convertButton
-            Layout.preferredWidth: 178
-            Layout.minimumWidth: 178
+            objectName: "convertAllButton"
+            text: I18n.t("convert_all")
+            iconName: "play"
+            Layout.preferredWidth: Math.max(178, implicitWidth)
+            Layout.minimumWidth: Math.max(178, implicitWidth)
             Layout.fillWidth: false
-            implicitHeight: 36
             enabled: backend ? backend.queueCount > 0 && !backend.isRunning && appRoot && appRoot.formValid : false
             hoverEnabled: true
             Accessible.name: I18n.t("convert_all")
             onClicked: appRoot && appRoot.startIfValid()
-            background: Rectangle {
-                radius: Theme.radiusSm
-                color: !convertButton.enabled ? Theme.disabledBg : convertButton.down ? Theme.accentPressed : convertButton.hovered ? Theme.accentHover : Theme.accentPrimary
-                border.width: convertButton.activeFocus ? 2 : 1
-                border.color: convertButton.activeFocus ? Theme.focusRing : Theme.accentPrimary
-            }
-            contentItem: RowLayout {
-                spacing: 6
-                AppIcon { Layout.preferredWidth: 16; Layout.preferredHeight: 16; Layout.leftMargin: 10; name: "play"; iconColor: Theme.textOnAccent }
-                Label { Layout.fillWidth: true; text: I18n.t("convert_all"); color: Theme.textOnAccent; font.pixelSize: Theme.fontSizeSm; font.weight: Font.DemiBold; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-            }
         }
     }
 }

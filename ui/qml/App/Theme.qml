@@ -85,7 +85,7 @@ QtObject {
     readonly property int sidebarWidth: 236
     readonly property int compactBreakpoint: 1120
     readonly property int maxWidth: 1480
-    readonly property int buttonHeight: Math.max(32, Math.round(36 * fontScale))
+    readonly property int buttonHeight: Math.max(36, Math.round(38 * fontScale))
     readonly property int inputHeight: buttonHeight
     readonly property int checkboxSize: 18
     readonly property int cardPadding: space3
@@ -103,8 +103,8 @@ QtObject {
     readonly property int fontDisplay: Math.round(28 * fontScale)
 
     readonly property int space0: space1
-    readonly property int radiusButton: radiusSm
-    readonly property int radiusInput: radiusSm
+    readonly property int radiusButton: 10
+    readonly property int radiusInput: 8
     readonly property int radiusPanel: radiusMd
     readonly property int radiusCard: radiusMd
     readonly property int radiusSection: radiusMd

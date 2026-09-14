@@ -108,20 +108,14 @@ Rectangle {
                             height: 34
                             hoverEnabled: true
                             focusPolicy: Qt.StrongFocus
+                            highlighted: root.activeIndex === index
                             Accessible.name: I18n.t(modelData.title)
                             ToolTip.visible: root.collapsed && hovered
                             ToolTip.delay: 550
                             ToolTip.text: I18n.t(modelData.title)
                             onClicked: root.sectionRequested(modelData.page, modelData.target || "", index)
 
-                            background: Rectangle {
-                                radius: Theme.radiusSm
-                                color: root.activeIndex === index
-                                       ? Theme.selectionBackground
-                                       : navButton.hovered ? Theme.overlayHover : Theme.transparent
-                                border.width: navButton.activeFocus ? 2 : 0
-                                border.color: Theme.focusRing
-                            }
+                            background: ButtonSurface { control: navButton; variant: "ghost" }
 
                             contentItem: RowLayout {
                                 spacing: root.collapsed ? 0 : Theme.space2
@@ -173,10 +167,7 @@ Rectangle {
                 ToolTip.visible: root.collapsed && hovered
                 ToolTip.text: I18n.t("add_files")
                 onClicked: root.addFilesRequested()
-                background: Rectangle {
-                    radius: Theme.radiusSm
-                    color: addFilesButton.hovered ? Theme.overlayHover : Theme.transparent
-                }
+                background: ButtonSurface { control: addFilesButton; variant: "ghost" }
                 contentItem: RowLayout {
                     spacing: Theme.space2
                     AppIcon { Layout.preferredWidth: 18; Layout.preferredHeight: 18; Layout.leftMargin: root.collapsed ? 8 : 10; name: "plus"; iconColor: Theme.textSecondary }
@@ -193,10 +184,7 @@ Rectangle {
                 ToolTip.visible: root.collapsed && hovered
                 ToolTip.text: I18n.t("add_folder")
                 onClicked: root.addFolderRequested()
-                background: Rectangle {
-                    radius: Theme.radiusSm
-                    color: addFolderButton.hovered ? Theme.overlayHover : Theme.transparent
-                }
+                background: ButtonSurface { control: addFolderButton; variant: "ghost" }
                 contentItem: RowLayout {
                     spacing: Theme.space2
                     AppIcon { Layout.preferredWidth: 18; Layout.preferredHeight: 18; Layout.leftMargin: root.collapsed ? 8 : 10; name: "folder"; iconColor: Theme.textSecondary }

@@ -129,13 +129,13 @@ Rectangle {
                 }
 
                 // Toggle Crop button in top-right of preview
-                Button {
+                AppButton {
                     visible: selectedThumbnail.visible && (appRoot.selectedMediaType === "video" || appRoot.selectedMediaType === "image")
                     anchors.top: parent.top
                     anchors.right: parent.right
                     anchors.margins: 6
                     text: root.cropModeEnabled ? "✓ Готово" : "✂ Crop"
-                    implicitHeight: 24
+                    implicitHeight: 30
                     onClicked: root.cropModeEnabled = !root.cropModeEnabled
                 }
             }
@@ -231,9 +231,9 @@ Rectangle {
                         font.pixelSize: Theme.fontSizeSm
                         font.weight: Font.DemiBold
                     }
-                    Button {
+                    AppButton {
                         text: I18n.t("reset")
-                        implicitHeight: 22
+                        implicitHeight: 30
                         onClicked: {
                             trimStartSpin.value = 0
                             trimEndSpin.value = 0
@@ -337,7 +337,7 @@ Rectangle {
                 wrapMode: Text.WordWrap
             }
 
-            Button {
+            AppButton {
                 visible: root.batchSelection
                 Layout.fillWidth: true; Layout.minimumWidth: 0
                 implicitHeight: Theme.buttonHeight
@@ -346,7 +346,7 @@ Rectangle {
                 onClicked: appRoot && appRoot.openSidebarSection(5, "selected_override", appRoot.navIndexFor(5, "selected_override"))
             }
 
-            Button {
+            AppButton {
                 visible: root.batchSelection
                 Layout.fillWidth: true; Layout.minimumWidth: 0
                 implicitHeight: Theme.buttonHeight
@@ -355,7 +355,7 @@ Rectangle {
                 onClicked: appRoot && appRoot.convertSelectedPaths()
             }
 
-            Button {
+            AppButton {
                 visible: root.batchSelection
                 Layout.fillWidth: true; Layout.minimumWidth: 0
                 implicitHeight: Theme.buttonHeight
@@ -364,7 +364,7 @@ Rectangle {
                 onClicked: appRoot && appRoot.removeSelectedPaths()
             }
 
-            Button {
+            AppButton {
                 visible: !root.batchSelection
                 Layout.fillWidth: true; Layout.minimumWidth: 0
                 implicitHeight: Theme.buttonHeight
@@ -373,7 +373,7 @@ Rectangle {
                 onClicked: appRoot && appRoot.convertSelectedFormat(formatCombo.currentText)
             }
 
-            Button {
+            AppButton {
                 visible: !root.batchSelection
                 Layout.fillWidth: true; Layout.minimumWidth: 0
                 implicitHeight: Theme.buttonHeight

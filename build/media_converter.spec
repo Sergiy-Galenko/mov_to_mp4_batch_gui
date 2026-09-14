@@ -6,7 +6,7 @@ from pathlib import Path
 project_root = Path(SPEC).resolve().parent.parent
 bundle_dir = os.environ.get("MEDIA_CONVERTER_BUNDLE_FFMPEG_DIR", "").strip()
 portable_build = os.environ.get("MEDIA_CONVERTER_PORTABLE_BUILD", "").strip().lower() in {"1", "true", "yes"}
-icon_path = project_root / "assets" / "app-logo.ico"
+icon_path = project_root / "assets" / "app-logo-v2.ico"
 icon_arg = str(icon_path) if icon_path.exists() else None
 
 datas = [

@@ -16,7 +16,7 @@ Popup {
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     property string currentVersion: (typeof backend !== "undefined" && backend) ? backend.appVersion : "2.0.0"
-    property url logoSource: Qt.resolvedUrl("../../../assets/app-logo.png")
+    property url logoSource: Qt.resolvedUrl("../../../assets/app-logo-v2.png")
     property bool compact: width < 520
     property int adaptiveMargin: compact ? Theme.space4 : Theme.space5
     property int logoSize: compact ? 48 : 64
@@ -51,6 +51,7 @@ Popup {
             spacing: Theme.space3
 
             BrandMark {
+                source: root.logoSource
                 Layout.preferredWidth: root.logoSize
                 Layout.preferredHeight: root.logoSize
             }

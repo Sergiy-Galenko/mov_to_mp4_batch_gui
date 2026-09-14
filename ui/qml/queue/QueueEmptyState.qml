@@ -43,8 +43,8 @@ Item {
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: Theme.space2
-                Button { text: I18n.t("add_files"); onClicked: root.addFilesRequested() }
-                Button { text: I18n.t("add_folder"); onClicked: root.addFolderRequested() }
+                PrimaryButton { Layout.fillWidth: false; iconName: "plus"; text: I18n.t("add_files"); onClicked: root.addFilesRequested() }
+                SecondaryButton { Layout.fillWidth: false; iconName: "folder"; text: I18n.t("add_folder"); onClicked: root.addFolderRequested() }
             }
             Label { Layout.fillWidth: true; text: I18n.t("formats_hint"); color: Theme.textMuted; font.pixelSize: Theme.fontMeta; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight }
         }

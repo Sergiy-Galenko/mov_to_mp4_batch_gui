@@ -40,7 +40,7 @@ def main() -> None:
     app.setApplicationName("MediaConverter")
 
     base_dir = Path(__file__).resolve().parent
-    logo_path = base_dir / "assets" / "app-logo.png"
+    logo_path = base_dir / "assets" / "app-logo-v2.png"
     if logo_path.exists():
         app.setWindowIcon(QtGui.QIcon(str(logo_path)))
 

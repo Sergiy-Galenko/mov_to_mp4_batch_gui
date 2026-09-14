@@ -5,6 +5,7 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 ## Features
 
 - Black-and-white dark interface with customizable backgrounds, text, controls, status indicators, borders, and media icons.
+- A new monochrome app icon and rounded controls with keyboard focus, hover/press feedback, and theme-aware colors. See the [branding and button previews](docs/branding.md).
 - **Progressive Disclosure**: Advanced settings and sidebar are hidden by default to keep the main conversion screen incredibly simple and focused.
 - Outline icons and labeled statuses keep navigation and progress readable in a monochrome palette.
 - **Modern Drag & Drop Zone**: A large, interactive glassmorphism drop zone for importing files directly from the desktop.

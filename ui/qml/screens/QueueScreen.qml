@@ -42,25 +42,25 @@ Item {
 
                     ColumnLayout {
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         spacing: 1
-                        Label { text: appRoot ? appRoot.workspaceTitle() : I18n.t("nav_queue"); color: Theme.textPrimary; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
+                        Label { Layout.fillWidth: true; text: appRoot ? appRoot.workspaceTitle() : I18n.t("nav_queue"); color: Theme.textPrimary; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold; elide: Text.ElideRight }
                         Label { text: backend ? backend.visibleQueueCount + " " + I18n.t("files") : "0 " + I18n.t("files"); color: Theme.textSecondary; font.pixelSize: Theme.fontMeta }
                     }
 
-                    Button {
+                    AppButton {
+                        objectName: "addFilesButton"
+                        iconName: "plus"
                         Layout.fillWidth: false
-                        Layout.preferredWidth: 110
-                        implicitHeight: 32
                         hoverEnabled: true
                         text: I18n.t("add_files")
                         onClicked: appRoot && appRoot.addFilesForWorkspace()
                     }
 
-                    Button {
+                    AppButton {
+                        iconName: "folder"
                         visible: root.width > 800
                         Layout.fillWidth: false
-                        Layout.preferredWidth: 112
-                        implicitHeight: 32
                         hoverEnabled: true
                         text: I18n.t("add_folder")
                         onClicked: appRoot && appRoot.addFolderForWorkspace()
@@ -90,11 +90,11 @@ Item {
                     anchors.rightMargin: Theme.space3
                     spacing: Theme.space2
                     Label { text: I18n.t("selected") + ": " + (appRoot ? appRoot.selectedPaths.length : 0); color: Theme.textPrimary; font.pixelSize: Theme.fontSizeSm; font.weight: Font.DemiBold }
-                    Button { text: I18n.t("move_up"); implicitHeight: 28; onClicked: backend && backend.moveSelectedPathsUp(appRoot.selectedPaths) }
-                    Button { text: I18n.t("move_down"); implicitHeight: 28; onClicked: backend && backend.moveSelectedPathsDown(appRoot.selectedPaths) }
-                    Button { text: I18n.t("batch_override"); implicitHeight: 28; onClicked: appRoot && appRoot.openSidebarSection(5, "selected_override", appRoot.navIndexFor(5, "selected_override")) }
+                    AppButton { text: I18n.t("move_up"); implicitHeight: 28; onClicked: backend && backend.moveSelectedPathsUp(appRoot.selectedPaths) }
+                    AppButton { text: I18n.t("move_down"); implicitHeight: 28; onClicked: backend && backend.moveSelectedPathsDown(appRoot.selectedPaths) }
+                    AppButton { text: I18n.t("batch_override"); implicitHeight: 28; onClicked: appRoot && appRoot.openSidebarSection(5, "selected_override", appRoot.navIndexFor(5, "selected_override")) }
                     Item { Layout.fillWidth: true }
-                    Button { text: I18n.t("batch_remove"); implicitHeight: 28; onClicked: appRoot && appRoot.removeSelectedPaths() }
+                    AppButton { text: I18n.t("batch_remove"); implicitHeight: 28; onClicked: appRoot && appRoot.removeSelectedPaths() }
                     AppIconButton { iconName: "close"; accessibleLabel: I18n.t("cancel"); onClicked: root.clearSelection() }
                 }
             }
@@ -112,7 +112,7 @@ Item {
                     spacing: Theme.space3
                     AppIcon { Layout.preferredWidth: 16; Layout.preferredHeight: 16; name: "info"; iconColor: Theme.warning }
                     Label { Layout.fillWidth: true; text: I18n.t("output_folder_required_detail"); color: Theme.textPrimary; font.pixelSize: Theme.fontSizeSm; elide: Text.ElideRight }
-                    Button { text: I18n.t("choose"); implicitHeight: 28; onClicked: backend && backend.ensureOutputDirSelected() }
+                    AppButton { text: I18n.t("choose"); implicitHeight: 28; onClicked: backend && backend.ensureOutputDirSelected() }
                 }
             }
 

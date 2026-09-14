@@ -20,8 +20,9 @@ Rectangle {
         spacing: Theme.space3
 
         BrandMark {
-            Layout.preferredWidth: 28
-            Layout.preferredHeight: 28
+            source: root.logoSource
+            Layout.preferredWidth: 36
+            Layout.preferredHeight: 36
         }
 
         Label {
@@ -35,25 +36,22 @@ Rectangle {
 
         Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 22; color: Theme.borderMuted }
 
-        Button {
+        AppButton {
             id: workspaceButton
-            Layout.preferredWidth: 156
+            Layout.preferredWidth: root.width > 900 ? 194 : 156
             implicitHeight: 32
+            leftPadding: 8
+            rightPadding: 8
             hoverEnabled: true
             Accessible.name: I18n.t("mode")
+            text: appRoot ? appRoot.workspaceTitle() : I18n.t("nav_queue")
             onClicked: workspaceMenu.open()
-            background: Rectangle {
-                radius: Theme.radiusSm
-                color: workspaceButton.hovered ? Theme.overlayHover : Theme.transparent
-                border.width: workspaceButton.activeFocus ? 2 : 1
-                border.color: workspaceButton.activeFocus ? Theme.focusRing : Theme.borderMuted
-            }
             contentItem: RowLayout {
                 spacing: Theme.space2
                 Label {
                     Layout.fillWidth: true
                     Layout.leftMargin: Theme.space2
-                    text: appRoot ? appRoot.workspaceTitle() : I18n.t("nav_queue")
+                    text: workspaceButton.text
                     color: Theme.textPrimary
                     font.pixelSize: Theme.fontSizeSm
                     elide: Text.ElideRight
@@ -107,19 +105,16 @@ Rectangle {
             }
         }
 
-        Button {
+        AppButton {
             id: languageButton
+            variant: "ghost"
             Layout.preferredWidth: 52
             implicitHeight: 32
+            leftPadding: 4
+            rightPadding: 4
             hoverEnabled: true
             Accessible.name: I18n.t("language")
             onClicked: languagePopup.open()
-            background: Rectangle {
-                radius: Theme.radiusSm
-                color: languageButton.hovered ? Theme.overlayHover : Theme.transparent
-                border.width: languageButton.activeFocus ? 2 : 0
-                border.color: Theme.focusRing
-            }
             contentItem: RowLayout {
                 spacing: 3
                 AppIcon { Layout.preferredWidth: 16; Layout.preferredHeight: 16; Layout.leftMargin: 4; name: "language"; iconColor: Theme.textSecondary }

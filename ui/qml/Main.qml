@@ -49,7 +49,7 @@ ApplicationWindow {
     }
 
     property bool hasBackend: backend !== null
-    property url appLogoSource: Qt.resolvedUrl("../../assets/app-logo.png")
+    property url appLogoSource: Qt.resolvedUrl("../../assets/app-logo-v2.png")
     property bool sidebarCollapsed: false
     property bool compactMode: width < Theme.compactBreakpoint || (backend && backend.layoutMode === "compact")
     property int activeSection: 0
@@ -1244,49 +1244,27 @@ ApplicationWindow {
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
-            Button {
+            AppButton {
                 id: youtubeVideoSegment
                 Layout.fillWidth: true
                 Layout.preferredHeight: 54
                 text: I18n.t("video")
+                iconName: "film"
+                highlighted: selectedDownloadMode === "video"
+                font.pixelSize: Theme.fontSizeLg
                 hoverEnabled: true
                 onClicked: selectedDownloadMode = "video"
-                background: Rectangle {
-                    radius: Theme.radiusButton
-                    color: selectedDownloadMode === "video" ? Theme.accentSoft : Theme.bgElevated
-                    border.width: 1
-                    border.color: selectedDownloadMode === "video" ? Theme.accent : Theme.borderSubtle
-                }
-                contentItem: Label {
-                    text: youtubeVideoSegment.text
-                    color: selectedDownloadMode === "video" ? Theme.textPrimary : Theme.textSecondary
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.pixelSize: Theme.fontSizeLg
-                    font.bold: selectedDownloadMode === "video"
-                }
             }
-            Button {
+            AppButton {
                 id: youtubeAudioSegment
                 Layout.fillWidth: true
                 Layout.preferredHeight: 54
                 text: I18n.t("audio_only")
+                iconName: "music"
+                highlighted: selectedDownloadMode === "audio"
+                font.pixelSize: Theme.fontSizeLg
                 hoverEnabled: true
                 onClicked: selectedDownloadMode = "audio"
-                background: Rectangle {
-                    radius: Theme.radiusButton
-                    color: selectedDownloadMode === "audio" ? Theme.accentSoft : Theme.bgElevated
-                    border.width: 1
-                    border.color: selectedDownloadMode === "audio" ? Theme.accent : Theme.borderSubtle
-                }
-                contentItem: Label {
-                    text: youtubeAudioSegment.text
-                    color: selectedDownloadMode === "audio" ? Theme.textPrimary : Theme.textSecondary
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.pixelSize: Theme.fontSizeLg
-                    font.bold: selectedDownloadMode === "audio"
-                }
             }
         }
 

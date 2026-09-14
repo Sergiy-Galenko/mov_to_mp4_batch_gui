@@ -4,9 +4,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from PySide6.QtCore import QMetaObject, QObject, QSettings, Qt, QUrl
+from PySide6.QtCore import QMetaObject, QObject, QPointF, QSettings, Qt, QUrl
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
+from PySide6.QtQuick import QQuickItem
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -43,6 +44,9 @@ class QmlLoadTest(unittest.TestCase):
 
         self.assertTrue(engine.rootObjects(), "QML root objects should be created")
         root = engine.rootObjects()[0]
+        brand = root.findChild(QObject, "brandMark")
+        self.assertIsNotNone(brand)
+        self.assertTrue(brand.property("ready"), "The integrated logo should load from the bundled assets")
         self.assertGreater(
             root.property("queueDropZoneHeight"),
             0,
@@ -201,6 +205,55 @@ QueueItemCard {
                 self.assertEqual(backend.themeColorOverrides, {})
             finally:
                 backend.shutdown()
+
+    def test_button_mouse_keyboard_and_disabled_interactions(self):
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        engine = QQmlApplicationEngine()
+        engine.addImportPath(str(qml_dir))
+        engine.loadData(b'''
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import "components"
+ApplicationWindow {
+    visible: true; width: 640; height: 160
+    property int activationCount: 0
+    PrimaryButton { objectName: "primaryAction"; x: 20; y: 50; text: "Convert"; iconName: "play"; onClicked: activationCount++ }
+    SecondaryButton { objectName: "disabledAction"; x: 220; y: 50; text: "Unavailable"; enabled: false; onClicked: activationCount++ }
+    GhostButton { objectName: "toggleAction"; x: 420; y: 50; text: "Preview"; checkable: true }
+}
+''', QUrl.fromLocalFile(str(qml_dir / "ButtonInteractionTest.qml")))
+        self.assertTrue(engine.rootObjects())
+        window = engine.rootObjects()[0]
+        try:
+            window.requestActivate()
+            QTest.qWait(60)
+            primary = window.findChild(QQuickItem, "primaryAction")
+            disabled = window.findChild(QQuickItem, "disabledAction")
+            toggle = window.findChild(QQuickItem, "toggleAction")
+
+            def center(item):
+                return item.mapToScene(QPointF(item.width() / 2, item.height() / 2)).toPoint()
+
+            QTest.mouseMove(window, center(primary))
+            self.assertTrue(primary.property("hovered"))
+            QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, center(primary))
+            self.assertTrue(primary.property("down"))
+            QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, center(primary))
+            self.assertEqual(window.property("activationCount"), 1)
+            QTest.keyClick(window, Qt.Key_Tab)
+            self.assertTrue(toggle.property("activeFocus"), "Tab must skip the disabled action")
+            QTest.keyClick(window, Qt.Key_Space)
+            self.assertTrue(toggle.property("checked"))
+            QTest.keyClick(window, Qt.Key_Tab, Qt.ShiftModifier)
+            self.assertTrue(primary.property("visualFocus"))
+            QTest.keyClick(window, Qt.Key_Space)
+            self.assertEqual(window.property("activationCount"), 2)
+            QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, center(disabled))
+            primary.setProperty("enabled", False)
+            QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, center(primary))
+            self.assertEqual(window.property("activationCount"), 2)
+        finally:
+            window.close()
 
     def test_media_editing_components_load(self):
         qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"

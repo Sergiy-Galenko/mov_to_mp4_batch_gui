@@ -156,7 +156,7 @@ htmlcov/
 !/docs/**/*.jpeg
 !/docs/**/*.webp
 !/docs/**/*.gif
-/assets/app-logo.ico
+/assets/app-logo*.ico
 
 # Private configuration, credentials, browser cookies, and license files
 .env
