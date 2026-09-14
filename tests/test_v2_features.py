@@ -370,7 +370,7 @@ def test_all_theme_colors_and_modes_have_translations():
     i18n_dir = Path(__file__).resolve().parents[1] / "ui" / "i18n"
     groups = {field["group"] for field in ThemeManager.color_definitions()}
     for locale in ("uk", "en", "pl", "de"):
-        messages = json.loads((i18n_dir / f"{locale}.json").read_text())
+        messages = json.loads((i18n_dir / f"{locale}.json").read_text(encoding="utf-8"))
         for prefix, values in (("color", COLOR_KEYS), ("mode", THEME_MODES), ("group", groups)):
             for value in values:
                 assert messages[f"appearance.{prefix}.{value}"], (locale, prefix, value)

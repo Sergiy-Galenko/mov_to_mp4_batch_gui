@@ -82,16 +82,25 @@ class QmlLoadTest(unittest.TestCase):
             self.assertEqual(queue_grid.property("count"), 2)
 
             root.setProperty("queueSearchText", "second")
-            QTest.qWait(230)
+            for _ in range(30):
+                QTest.qWait(50)
+                if backend.visibleQueuePaths == [str(second.path)]:
+                    break
             self.assertEqual(backend.visibleQueuePaths, [str(second.path)])
             self.assertEqual(queue_grid.property("count"), 1)
 
             root.setProperty("queueSearchText", "")
             root.setProperty("queueStatusFilter", "processing")
-            QTest.qWait(30)
+            for _ in range(30):
+                QTest.qWait(50)
+                if backend.visibleQueuePaths == [str(first.path)]:
+                    break
             self.assertEqual(backend.visibleQueuePaths, [str(first.path)])
             backend.queue_model.update_task_state(first.path, TaskStatus.SUCCESS)
-            QTest.qWait(30)
+            for _ in range(30):
+                QTest.qWait(50)
+                if backend.visibleQueueCount == 0 and queue_grid.property("count") == 0:
+                    break
             self.assertEqual(backend.visibleQueueCount, 0)
             self.assertEqual(queue_grid.property("count"), 0)
         finally:
