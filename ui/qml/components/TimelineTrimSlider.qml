@@ -100,13 +100,13 @@ Item {
                 width: 14
                 height: 24
                 radius: 3
-                color: inDragArea.containsPress ? Theme.accentHover : (inDragArea.containsMouse ? Theme.accentPrimary : "#E0E0E0")
+                color: inDragArea.containsPress ? Theme.accentPressed : (inDragArea.containsMouse ? Theme.accentHover : Theme.accent)
                 border.width: 1
                 border.color: Theme.accentPrimary
                 anchors.verticalCenter: parent.verticalCenter
                 x: Math.min(
                     Math.max(0, (root.trimStart / root.effectiveDuration) * trackContainer.availableTrackWidth),
-                    rightHandle.x - width
+                    Math.max(0, (root.effectiveEnd / root.effectiveDuration) * trackContainer.availableTrackWidth - width)
                 )
 
                 // Grip lines inside handle
@@ -115,7 +115,7 @@ Item {
                     spacing: 2
                     Repeater {
                         model: 3
-                        Rectangle { width: 6; height: 1; color: "#444444" }
+                        Rectangle { width: 6; height: 1; color: Theme.textOnAccent }
                     }
                 }
 
@@ -147,7 +147,7 @@ Item {
                 width: 14
                 height: 24
                 radius: 3
-                color: outDragArea.containsPress ? Theme.accentHover : (outDragArea.containsMouse ? Theme.accentPrimary : "#E0E0E0")
+                color: outDragArea.containsPress ? Theme.accentPressed : (outDragArea.containsMouse ? Theme.accentHover : Theme.accent)
                 border.width: 1
                 border.color: Theme.accentPrimary
                 anchors.verticalCenter: parent.verticalCenter
@@ -165,7 +165,7 @@ Item {
                     spacing: 2
                     Repeater {
                         model: 3
-                        Rectangle { width: 6; height: 1; color: "#444444" }
+                        Rectangle { width: 6; height: 1; color: Theme.textOnAccent }
                     }
                 }
 
@@ -193,4 +193,3 @@ Item {
         }
     }
 }
-

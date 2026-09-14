@@ -16,6 +16,12 @@ ApplicationWindow {
     title: I18n.t("app.title")
     color: Theme.bgBase
 
+    palette.windowText: Theme.textPrimary
+    palette.alternateBase: Theme.panelSecondary
+    palette.placeholderText: Theme.textDisabled
+    palette.toolTipBase: Theme.panelSecondary
+    palette.toolTipText: Theme.textPrimary
+    palette.accent: Theme.accent
     palette.window: Theme.bgBase
     palette.base: Theme.input
     palette.text: Theme.textPrimary
@@ -23,6 +29,24 @@ ApplicationWindow {
     palette.buttonText: Theme.textPrimary
     palette.highlight: Theme.accentPrimary
     palette.highlightedText: Theme.textOnAccent
+
+    function openAppearance() {
+        if (themeEditorLoader.item) themeEditorLoader.item.open()
+        else themeEditorLoader.active = true
+    }
+
+    Loader {
+        id: themeEditorLoader
+        active: false
+        source: "components/ThemeEditorDialog.qml"
+        onLoaded: item.open()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Alt+0"
+        context: Qt.ApplicationShortcut
+        onActivated: if (backend) { backend.themeMode = "dark"; backend.resetThemeColors() }
+    }
 
     property bool hasBackend: backend !== null
     property url appLogoSource: Qt.resolvedUrl("../../assets/app-logo.png")
@@ -931,6 +955,7 @@ ApplicationWindow {
     Popup {
         id: quickConvertPopup
         modal: true
+        Overlay.modal: Rectangle { color: Theme.modalScrim }
         focus: true
         width: Math.min(root.width - 48, 560)
         x: Math.round((root.width - width) / 2)

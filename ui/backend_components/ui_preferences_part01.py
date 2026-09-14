@@ -4,12 +4,11 @@ BODY = r'''    # --- Theme properties ---
 
     @QtCore.Property(str, notify=themeChanged)
     def accentColor(self) -> str:
-        return self.theme_manager.accent_color()
+        return self.themePalette["accent"]
 
     @accentColor.setter
     def accentColor(self, value: str) -> None:
-        self.theme_manager.set_accent_color(value)
-        self.themeChanged.emit()
+        self.setThemeColor("accent", value)
 
     @QtCore.Property(str, notify=themeChanged)
     def themeMode(self) -> str:
@@ -26,7 +25,8 @@ BODY = r'''    # --- Theme properties ---
         if mode == "high_contrast":
             return "high_contrast"
         if mode == "auto":
-            return "obsidian" if ThemeManager.detect_os_dark_mode() else "light"
+            scheme = QtGui.QGuiApplication.styleHints().colorScheme()
+            return "light" if scheme == QtCore.Qt.ColorScheme.Light else "dark"
         valid_modes = {"dark", "light", "obsidian", "oled", "midnight", "high_contrast"}
         return mode if mode in valid_modes else "dark"
 
@@ -114,15 +114,19 @@ BODY = r'''    # --- Theme properties ---
         is_dark = ThemeManager.detect_os_dark_mode()
         self.themeMode = "dark" if is_dark else "light"
 
-    @QtCore.Slot("QVariantMap")
-    def importTheme(self, data: Dict[str, Any]) -> None:
-        self.theme_manager.import_theme(dict(data or {}))
+    @QtCore.Slot("QVariantMap", result=bool)
+    def importTheme(self, data: Dict[str, Any]) -> bool:
+        try:
+            self.theme_manager.import_theme(data)
+        except (ValueError, TypeError, OSError) as exc:
+            self.toastRequested.emit(self._tr("appearance.invalid_file") + ": " + str(exc))
+            return False
         self.themeChanged.emit()
-        self._append_log("OK", "Тему імпортовано.")
+        return True
 
     @QtCore.Slot(result="QVariantMap")
     def exportTheme(self) -> Dict[str, Any]:
-        return self.theme_manager.export_theme()
+        return self.theme_manager.export_theme(self.effectiveThemeMode)
 
     @QtCore.Property(bool, notify=errorStateChanged)
     def hasLastError(self) -> bool:

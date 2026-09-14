@@ -14,14 +14,15 @@ COLOR_KEYS = frozenset(key for keys in COLOR_GROUPS.values() for key in keys)
 THEME_MODES = ("dark", "light", "obsidian", "oled", "midnight", "high_contrast", "auto")
 
 DARK_BASE = {
-    "windowBackground": "#111318", "sidebarBackground": "#151820",
-    "panelBackground": "#1B1E27", "panelSecondary": "#242834",
-    "input": "#141720", "borderDefault": "#404757", "borderMuted": "#303644",
-    "textPrimary": "#F2F4F8", "textSecondary": "#B7BECF", "textDisabled": "#8C95A8",
-    "accent": "#7C9AFF", "statusSuccess": "#63D6A3", "statusWarning": "#F1C76B", "statusError": "#FF8296",
-    "mediaImage": "#63D6A3", "mediaVideo": "#B5A0FF", "mediaAudio": "#F1C76B", "mediaSubtitle": "#6ED6E2",
-    "mediaOverlay": "#141720", "textOnMedia": "#FFFFFF", "modalScrim": "#99000000",
+    "windowBackground": "#0C0C0C", "sidebarBackground": "#111111",
+    "panelBackground": "#181818", "panelSecondary": "#242424",
+    "input": "#101010", "borderDefault": "#505050", "borderMuted": "#333333",
+    "textPrimary": "#F5F5F5", "textSecondary": "#BDBDBD", "textDisabled": "#929292",
+    "accent": "#EEEEEE", "statusSuccess": "#E0E0E0", "statusWarning": "#C4C4C4", "statusError": "#FFFFFF",
+    "mediaImage": "#D6D6D6", "mediaVideo": "#E8E8E8", "mediaAudio": "#BDBDBD", "mediaSubtitle": "#CCCCCC",
+    "mediaOverlay": "#101010", "textOnMedia": "#FFFFFF", "modalScrim": "#AA000000",
 }
+
 PRESET_BASES = {
     "dark": DARK_BASE,
     "light": {
@@ -88,7 +89,7 @@ def resolve_palette(mode: str = "dark", overrides: dict[str, str] | None = None)
     soft = mix(panel, accent, 0.18)
     derived = {
         "accentHover": mix(accent, text, 0.16), "accentPressed": mix(accent, panel, 0.18),
-        "textOnAccent": "#101218" if contrast_ratio(accent, "#101218") >= contrast_ratio(accent, "#FFFFFF") else "#FFFFFF",
+        "textOnAccent": "#111111" if contrast_ratio(accent, "#111111") >= contrast_ratio(accent, "#FFFFFF") else "#FFFFFF",
         "inputHover": mix(base["input"], text, 0.05), "panelHover": mix(panel, text, 0.06),
         "subtleFill": mix(panel, text, 0.025), "disabledBg": base["panelSecondary"],
         "accentSoft": soft, "selectionBackground": soft, "focusRing": accent,

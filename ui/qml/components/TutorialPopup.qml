@@ -10,6 +10,7 @@ Popup {
     x: parent ? Math.round((parent.width - width) / 2) : 0
     y: parent ? Math.round((parent.height - height) / 2) : 0
     modal: true
+    Overlay.modal: Rectangle { color: Theme.modalScrim }
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 

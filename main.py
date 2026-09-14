@@ -33,7 +33,9 @@ def main() -> None:
     from ui.backend import Backend
 
     QQuickStyle.setStyle("Basic")
+    QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_DontUseNativeDialogs)
     app = QtWidgets.QApplication(sys.argv)
+    app.setStyle("Fusion")
     app.setOrganizationName("MediaConverter")
     app.setApplicationName("MediaConverter")
 

@@ -1,15 +1,18 @@
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from PySide6.QtCore import QObject, QSettings, QUrl
+from PySide6.QtCore import QMetaObject, QObject, QSettings, Qt, QUrl
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from app.models import TaskItem, TaskStatus
+from services.theme_manager import ThemeManager
 from ui.backend import Backend
 
 
@@ -120,6 +123,87 @@ QueueItemCard {
         item = component.create()
         self.assertIsNotNone(item, "Queue item with media type icon should be created")
         item.deleteLater()
+
+    def test_theme_editor_live_colors_modes_and_recovery(self):
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        with tempfile.TemporaryDirectory() as temporary:
+            backend = Backend()
+            backend.settings_manager.save = Mock()
+            backend.theme_manager = ThemeManager(Path(temporary) / "theme.json")
+            engine = QQmlApplicationEngine()
+            engine.addImportPath(str(qml_dir))
+            engine.rootContext().setContextProperty("backend", backend)
+            try:
+                engine.load(QUrl.fromLocalFile(str(qml_dir / "Main.qml")))
+                self.assertTrue(engine.rootObjects())
+                root = engine.rootObjects()[0]
+                root.setProperty("visibility", 2)
+                root.setWidth(1100)
+                root.setHeight(800)
+                self.assertTrue(QMetaObject.invokeMethod(root, "openAppearance"))
+                QTest.qWait(100)
+                editor = root.findChild(QObject, "themeEditorDialog")
+                self.assertIsNotNone(editor)
+                self.assertTrue(editor.property("visible"))
+                self.assertEqual(root.property("color").name(), "#0c0c0c")
+
+                def find_visual(item, name):
+                    if item.objectName() == name:
+                        return item
+                    for child in item.childItems():
+                        found = find_visual(child, name)
+                        if found is not None:
+                            return found
+                    return None
+
+                color_list = editor.findChild(QObject, "themeColorList")
+                field = find_visual(color_list.property("contentItem"), "themeHex_windowBackground")
+                self.assertIsNotNone(field)
+                field.setProperty("text", "#112233")
+                self.assertTrue(QMetaObject.invokeMethod(field, "editingFinished"))
+                QTest.qWait(30)
+                self.assertEqual(root.property("color").name(), "#112233")
+                self.assertEqual(ThemeManager(backend.theme_manager.path).palette()["windowBackground"], "#112233")
+                editor.setProperty("editingColorKey", "accent")
+                picker = editor.findChild(QObject, "themeColorDialog")
+                self.assertIsNotNone(picker)
+                self.assertTrue(QMetaObject.invokeMethod(picker, "open"))
+                QTest.qWait(30)
+                self.assertTrue(picker.property("visible"))
+                picker.setProperty("selectedColor", QColor("#80556677"))
+                self.assertTrue(QMetaObject.invokeMethod(picker, "accepted"))
+                QMetaObject.invokeMethod(picker, "close")
+                self.assertEqual(backend.themePalette["accent"], "#80556677")
+                self.assertTrue(backend.setThemeColor("textPrimary", "#CDEFFF"))
+                self.assertEqual(QApplication.palette().color(QPalette.Text).name(), "#cdefff")
+                backend.saveNamedTheme("Test colors")
+                backend.themeMode = "light"
+                QTest.qWait(30)
+                self.assertEqual(editor.findChild(QObject, "themeModeCombo").property("currentIndex"), 1)
+                self.assertNotEqual(root.property("color").name(), "#112233")
+                self.assertTrue(backend.loadNamedTheme("Test colors"))
+                QTest.qWait(30)
+                self.assertEqual(root.property("color").name(), "#112233")
+                root.requestActivate()
+                QTest.qWait(30)
+                QTest.keyClick(root, Qt.Key_0, Qt.ControlModifier | Qt.AltModifier)
+                QTest.qWait(30)
+                self.assertEqual(root.property("color").name(), "#0c0c0c")
+                self.assertEqual(backend.themeColorOverrides, {})
+            finally:
+                backend.shutdown()
+
+    def test_media_editing_components_load(self):
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        engine = QQmlApplicationEngine()
+        engine.addImportPath(str(qml_dir))
+        for name in ("ABCompareSlider", "TimelineTrimSlider", "CropOverlay"):
+            with self.subTest(component=name):
+                component = QQmlComponent(engine, QUrl.fromLocalFile(str(qml_dir / "components" / f"{name}.qml")))
+                self.assertFalse(component.isError(), "\n".join(error.toString() for error in component.errors()))
+                item = component.create()
+                self.assertIsNotNone(item)
+                item.deleteLater()
 
 
 if __name__ == "__main__":

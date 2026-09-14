@@ -18,7 +18,7 @@ ProgressBar {
             width: control.visualPosition * parent.width
             height: parent.height
             radius: 3
-            color: Theme.accentPrimary
+            color: Theme.progressHighlight
             Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
         }
     }

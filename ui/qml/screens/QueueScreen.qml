@@ -371,6 +371,7 @@ Item {
         width: Math.min(340, root.width - 36)
         height: root.height
         modal: true
+        Overlay.modal: Rectangle { color: Theme.modalScrim }
         interactive: true
         background: Rectangle { color: Theme.panelBackground; border.width: 1; border.color: Theme.borderDefault }
         AppLayout.InspectorPanel { anchors.fill: parent; appRoot: root.appRoot }

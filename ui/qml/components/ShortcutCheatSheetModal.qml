@@ -7,6 +7,7 @@ Dialog {
     id: root
     title: ""
     modal: true
+    Overlay.modal: Rectangle { color: Theme.modalScrim }
     dim: true
     x: (parent ? (parent.width - width) / 2 : 100)
     y: (parent ? (parent.height - height) / 2 : 100)

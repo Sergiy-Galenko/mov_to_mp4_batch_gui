@@ -53,6 +53,9 @@ BODY = r'''        self._youtube_history = self.settings_manager.youtube_history
         self._state_save_timer.timeout.connect(self._save_state)
 
         self._refresh_presets()
+        self.themeChanged.connect(self._apply_widget_theme)
+        QtGui.QGuiApplication.styleHints().colorSchemeChanged.connect(self._on_system_theme_changed)
+        self._apply_widget_theme()
         self._refresh_recent_folders()
         self.history_model.set_entries(self.history_store.entries)
         self._refresh_output_preview(dict(self._last_settings_map))

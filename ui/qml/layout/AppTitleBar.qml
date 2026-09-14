@@ -19,16 +19,13 @@ Rectangle {
         anchors.rightMargin: Theme.space3
         spacing: Theme.space3
 
-        Image {
+        BrandMark {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
-            source: root.logoSource
-            fillMode: Image.PreserveAspectFit
-            asynchronous: true
-            smooth: true
         }
 
         Label {
+            visible: root.width > 900
             text: I18n.t("app.title")
             color: Theme.textPrimary
             font.family: Theme.displayFont
@@ -106,7 +103,7 @@ Rectangle {
             onClicked: {
                 if (!backend)
                     return
-                backend.themeMode = backend.themeMode === "light" ? "dark" : "light"
+                backend.themeMode = Theme.lightMode ? "dark" : "light"
             }
         }
 
@@ -153,6 +150,13 @@ Rectangle {
                     }
                 }
             }
+        }
+
+        AppIconButton {
+            objectName: "appearanceButton"
+            iconName: "palette"
+            accessibleLabel: I18n.t("appearance.title")
+            onClicked: appRoot && appRoot.openAppearance()
         }
 
         AppIconButton {

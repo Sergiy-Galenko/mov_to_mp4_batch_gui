@@ -79,6 +79,12 @@ Canvas {
         } else if (name === "refresh") {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 8 * u, Math.PI * .2, Math.PI * 1.85); ctx.stroke()
             line(20, 3, 20, 8); line(15, 8, 20, 8)
+        } else if (name === "palette") {
+            ctx.beginPath(); ctx.arc(pt(12), pt(12), 9 * u, 0, Math.PI * 2); ctx.stroke()
+            for (var dot = 0; dot < 3; ++dot) {
+                ctx.beginPath(); ctx.arc(pt(7 + dot * 5), pt(dot === 1 ? 7 : 11), 1.5 * u, 0, Math.PI * 2); ctx.fill()
+            }
+            ctx.beginPath(); ctx.arc(pt(12), pt(17), 2 * u, 0, Math.PI * 2); ctx.stroke()
         } else if (name === "search") {
             ctx.beginPath(); ctx.arc(pt(10), pt(10), 5.5 * u, 0, Math.PI * 2); ctx.stroke(); line(14, 14, 20, 20)
         } else if (name === "bell") {

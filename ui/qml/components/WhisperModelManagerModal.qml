@@ -7,6 +7,7 @@ Dialog {
     id: root
     title: "Керування моделями Whisper (Субтитри)"
     modal: true
+    Overlay.modal: Rectangle { color: Theme.modalScrim }
     width: 620
     height: 520
     x: Math.round((parent.width - width) / 2)
@@ -154,14 +155,14 @@ Dialog {
                                 radius: 3
                                 height: 16
                                 width: statusText.implicitWidth + 8
-                                color: modelData.downloaded ? "#22C55E22" : "#6B728022"
+                                color: modelData.downloaded ? Theme.successSoft : Theme.subtleFill
                                 border.width: 1
-                                border.color: modelData.downloaded ? "#22C55E" : "#6B7280"
+                                border.color: modelData.downloaded ? Theme.statusSuccess : Theme.borderDefault
                                 Text {
                                     id: statusText
                                     anchors.centerIn: parent
                                     text: modelData.downloaded ? "Завантажено (" + modelData.disk_size_mb + " MB)" : "Не завантажено"
-                                    color: modelData.downloaded ? "#22C55E" : Theme.textMuted
+                                    color: modelData.downloaded ? Theme.statusSuccess : Theme.textMuted
                                     font.pixelSize: 10
                                     font.weight: Font.Medium
                                 }
@@ -217,4 +218,3 @@ Dialog {
         }
     }
 }
-

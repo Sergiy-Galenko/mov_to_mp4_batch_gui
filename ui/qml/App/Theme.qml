@@ -9,48 +9,50 @@ QtObject {
     readonly property bool obsidianMode: activeMode === "obsidian"
     readonly property bool midnightMode: activeMode === "midnight"
 
-    // Semantic desktop colour tokens. Legacy aliases below keep existing controls compatible.
-    readonly property color windowBackground: highContrastMode ? "#000000"
-        : oledMode ? "#000000"
-        : obsidianMode ? "#0D1117"
-        : midnightMode ? "#0A0E1A"
-        : lightMode ? "#F4F8FF"
-        : "#050907"
+    readonly property var colors: (typeof backend !== "undefined" && backend) ? backend.themePalette : ({})
+    readonly property real fontScale: (typeof backend !== "undefined" && backend) ? backend.fontScale : 1
+    readonly property real spacingScale: (typeof backend !== "undefined" && backend) ? backend.layoutConfig.spacing_scale : 1
+    function colorToken(name, fallback) { return colors[name] || fallback }
 
-    readonly property color sidebarBackground: highContrastMode ? "#000000"
-        : oledMode ? "#050505"
-        : obsidianMode ? "#161B22"
-        : midnightMode ? "#10162A"
-        : lightMode ? "#FFFFFF"
-        : "#07140F"
-
-    readonly property color panelBackground: highContrastMode ? "#000000"
-        : oledMode ? "#0A0A0A"
-        : obsidianMode ? "#161B22"
-        : midnightMode ? "#131B32"
-        : lightMode ? "#FFFFFF"
-        : "#0B2018"
-
-    readonly property color panelSecondary: highContrastMode ? "#0A0A0A"
-        : oledMode ? "#121212"
-        : obsidianMode ? "#21262D"
-        : midnightMode ? "#1C2544"
-        : lightMode ? "#EFF6FF"
-        : "#102D21"
-
-    readonly property color borderDefault: highContrastMode ? "#FFFFFF"
-        : oledMode ? "#2A2A2A"
-        : obsidianMode ? "#30363D"
-        : midnightMode ? "#2A365D"
-        : lightMode ? "#BFDBFE"
-        : "#2E6249"
-
-    readonly property color borderMuted: highContrastMode ? "#A8A8A8"
-        : oledMode ? "#1A1A1A"
-        : obsidianMode ? "#21262D"
-        : midnightMode ? "#1B2440"
-        : lightMode ? "#DBEAFE"
-        : "#1E4936"
+    readonly property color accent: colorToken("accent", "#EEEEEE")
+    readonly property color accentHover: colorToken("accentHover", "#EFEFEF")
+    readonly property color accentPressed: colorToken("accentPressed", "#C7C7C7")
+    readonly property color accentSoft: colorToken("accentSoft", "#3F3F3F")
+    readonly property color borderDefault: colorToken("borderDefault", "#505050")
+    readonly property color borderMuted: colorToken("borderMuted", "#333333")
+    readonly property color dangerSoft: colorToken("dangerSoft", "#3D3D3D")
+    readonly property color disabledBg: colorToken("disabledBg", "#242424")
+    readonly property color input: colorToken("input", "#101010")
+    readonly property color inputHover: colorToken("inputHover", "#1B1B1B")
+    readonly property color mediaAudio: colorToken("mediaAudio", "#BDBDBD")
+    readonly property color mediaFile: colorToken("mediaFile", "#BDBDBD")
+    readonly property color mediaImage: colorToken("mediaImage", "#D6D6D6")
+    readonly property color mediaOverlay: colorToken("mediaOverlay", "#101010")
+    readonly property color mediaSubtitle: colorToken("mediaSubtitle", "#CCCCCC")
+    readonly property color mediaVideo: colorToken("mediaVideo", "#E8E8E8")
+    readonly property color modalScrim: colorToken("modalScrim", "#AA000000")
+    readonly property color overlayHover: colorToken("overlayHover", "#252525")
+    readonly property color overlayPressed: colorToken("overlayPressed", "#303030")
+    readonly property color panelBackground: colorToken("panelBackground", "#181818")
+    readonly property color panelHover: colorToken("panelHover", "#252525")
+    readonly property color panelSecondary: colorToken("panelSecondary", "#242424")
+    readonly property color progressHighlight: colorToken("progressHighlight", "#EEEEEE")
+    readonly property color progressTrack: colorToken("progressTrack", "#333333")
+    readonly property color selectionBackground: colorToken("selectionBackground", "#3F3F3F")
+    readonly property color sidebarBackground: colorToken("sidebarBackground", "#111111")
+    readonly property color statusError: colorToken("statusError", "#FFFFFF")
+    readonly property color statusRunning: colorToken("statusRunning", "#EEEEEE")
+    readonly property color statusSuccess: colorToken("statusSuccess", "#E0E0E0")
+    readonly property color statusWarning: colorToken("statusWarning", "#C4C4C4")
+    readonly property color subtleFill: colorToken("subtleFill", "#1E1E1E")
+    readonly property color successSoft: colorToken("successSoft", "#383838")
+    readonly property color textDisabled: colorToken("textDisabled", "#929292")
+    readonly property color textOnAccent: colorToken("textOnAccent", "#111111")
+    readonly property color textOnMedia: colorToken("textOnMedia", "#FFFFFF")
+    readonly property color textPrimary: colorToken("textPrimary", "#F5F5F5")
+    readonly property color textSecondary: colorToken("textSecondary", "#BDBDBD")
+    readonly property color warningSoft: colorToken("warningSoft", "#343434")
+    readonly property color windowBackground: colorToken("windowBackground", "#0C0C0C")
 
     readonly property color bgPrimary: windowBackground
     readonly property color bgSecondary: panelBackground
@@ -58,46 +60,18 @@ QtObject {
     readonly property color borderSubtle: borderMuted
     readonly property color borderStrong: borderDefault
 
-    readonly property color textPrimary: highContrastMode ? "#FFFFFF"
-        : lightMode ? "#102A56"
-        : obsidianMode ? "#F0F6FC"
-        : midnightMode ? "#F1F5F9"
-        : "#F0FFF6"
+    readonly property int fontSizeXs: Math.round(12 * fontScale)
+    readonly property int fontSizeSm: Math.round(13 * fontScale)
+    readonly property int fontSizeMd: Math.round(14 * fontScale)
+    readonly property int fontSizeLg: Math.round(16 * fontScale)
+    readonly property int fontSizeXl: Math.round(20 * fontScale)
 
-    readonly property color textSecondary: highContrastMode ? "#FFFFFF"
-        : lightMode ? "#3D5E8B"
-        : obsidianMode ? "#8B949E"
-        : midnightMode ? "#94A3B8"
-        : "#B8D9C4"
-
-    readonly property color textDisabled: highContrastMode ? "#C8C8C8"
-        : lightMode ? "#6B88B3"
-        : obsidianMode ? "#484F58"
-        : midnightMode ? "#475569"
-        : "#7EAB90"
-    readonly property color textOnAccent: highContrastMode ? "#000000" : "#FFFFFF"
-
-    readonly property color accent: highContrastMode ? "#FFFF00" : (typeof backend !== "undefined" && backend ? backend.accentColor : "#2563EB")
-    readonly property color accentHover: highContrastMode ? "#FFFF66" : lightMode ? "#1D4ED8" : "#3B82F6"
-    readonly property color accentPressed: highContrastMode ? "#D6D600" : lightMode ? "#1E40AF" : "#1D4ED8"
-
-    readonly property color statusSuccess: highContrastMode ? "#00FF00" : lightMode ? "#15803D" : "#4ADE80"
-    readonly property color statusWarning: highContrastMode ? "#FFFF00" : lightMode ? "#A16207" : "#FACC15"
-    readonly property color statusError: highContrastMode ? "#FF5555" : lightMode ? "#DC2626" : "#FB7185"
-    readonly property color statusRunning: accent
-
-    readonly property int fontSizeXs: 12
-    readonly property int fontSizeSm: 13
-    readonly property int fontSizeMd: 14
-    readonly property int fontSizeLg: 16
-    readonly property int fontSizeXl: 20
-
-    readonly property int space1: 4
-    readonly property int space2: 8
-    readonly property int space3: 12
-    readonly property int space4: 16
-    readonly property int space5: 24
-    readonly property int space6: 32
+    readonly property int space1: Math.round(4 * spacingScale)
+    readonly property int space2: Math.round(8 * spacingScale)
+    readonly property int space3: Math.round(12 * spacingScale)
+    readonly property int space4: Math.round(16 * spacingScale)
+    readonly property int space5: Math.round(24 * spacingScale)
+    readonly property int space6: Math.round(32 * spacingScale)
 
     readonly property int radiusSm: 4
     readonly property int radiusMd: 6
@@ -111,35 +85,22 @@ QtObject {
     readonly property int sidebarWidth: 236
     readonly property int compactBreakpoint: 1120
     readonly property int maxWidth: 1480
-    readonly property int buttonHeight: 36
-    readonly property int inputHeight: 36
+    readonly property int buttonHeight: Math.max(32, Math.round(36 * fontScale))
+    readonly property int inputHeight: buttonHeight
     readonly property int checkboxSize: 18
     readonly property int cardPadding: space3
     readonly property int sectionPadding: space4
 
+    readonly property color focusRing: colorToken("focusRing", "#EEEEEE")
     readonly property color transparent: "transparent"
-    readonly property color input: highContrastMode ? "#000000" : lightMode ? "#FFFFFF" : "#07140F"
-    readonly property color inputHover: highContrastMode ? "#101010" : lightMode ? "#F8FBFF" : "#0D261B"
-    readonly property color panelHover: highContrastMode ? "#171717" : lightMode ? "#E8F1FF" : "#143A2A"
-    readonly property color accentSoft: highContrastMode ? "#292900" : lightMode ? "#DBEAFE" : "#102B47"
-    readonly property color successSoft: highContrastMode ? "#003300" : lightMode ? "#DCFCE7" : "#123D29"
-    readonly property color warningSoft: highContrastMode ? "#3A3200" : lightMode ? "#FEF3C7" : "#453C0D"
-    readonly property color dangerSoft: highContrastMode ? "#3A0000" : lightMode ? "#FEE2E2" : "#4A1C28"
-    readonly property color disabledBg: highContrastMode ? "#080808" : lightMode ? "#E1ECFC" : "#163626"
-    readonly property color selectionBackground: highContrastMode ? "#292900" : lightMode ? "#DBEAFE" : "#102B47"
     readonly property color selection: selectionBackground
-    readonly property color progressTrack: highContrastMode ? "#000000" : lightMode ? "#D8E8FF" : "#1E4936"
-    readonly property color progressHighlight: accent
-    readonly property color overlayHover: highContrastMode ? "#171717" : lightMode ? "#E8F1FF" : "#143A2A"
-    readonly property color overlayPressed: highContrastMode ? "#222222" : lightMode ? "#D8E8FF" : "#1E4936"
-    readonly property color subtleFill: highContrastMode ? "#050505" : lightMode ? "#F8FBFF" : "#0D261B"
 
     readonly property int fontMeta: fontSizeXs
     readonly property int fontSmall: fontSizeSm
     readonly property int fontBody: fontSizeMd
     readonly property int fontTitle: fontSizeLg
     readonly property int fontHeading: fontSizeXl
-    readonly property int fontDisplay: 28
+    readonly property int fontDisplay: Math.round(28 * fontScale)
 
     readonly property int space0: space1
     readonly property int radiusButton: radiusSm
@@ -153,6 +114,7 @@ QtObject {
     readonly property color bgSurface: bgSecondary
     readonly property color bgBorder: borderSubtle
     readonly property color accentPrimary: accent
+    readonly property color accentSecondary: accentHover
     readonly property color accentSuccess: statusSuccess
     readonly property color accentWarn: statusWarning
     readonly property color accentError: statusError
@@ -169,7 +131,6 @@ QtObject {
     readonly property color sectionAlt: bgElevated
     readonly property color hover: overlayHover
     readonly property color border: borderSubtle
-    readonly property color focusRing: highContrastMode ? "#FFFF00" : lightMode ? "#2563EB" : "#60A5FA"
     readonly property color text: textPrimary
     readonly property color muted: textSecondary
     readonly property color subtleText: textDisabled

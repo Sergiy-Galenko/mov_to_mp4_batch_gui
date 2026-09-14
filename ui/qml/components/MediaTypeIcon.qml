@@ -18,16 +18,11 @@ Item {
         return "file"
     }
 
-    readonly property color primaryColor: effectiveType === "image" ? "#10B981"
-                                      : effectiveType === "video" ? "#7C3AED"
-                                      : effectiveType === "audio" ? "#F59E0B"
-                                      : effectiveType === "subtitle" ? "#06B6D4"
-                                      : "#94A3B8"
-    readonly property color softColor: effectiveType === "image" ? (Theme.lightMode ? "#ECFDF5" : "#052E24")
-                                   : effectiveType === "video" ? (Theme.lightMode ? "#F3E8FF" : "#241033")
-                                   : effectiveType === "audio" ? (Theme.lightMode ? "#FFFBEB" : "#332307")
-                                   : effectiveType === "subtitle" ? (Theme.lightMode ? "#ECFEFF" : "#082F35")
-                                   : (Theme.lightMode ? "#F8FAFC" : "#1F2937")
+    readonly property color primaryColor: effectiveType === "image" ? Theme.mediaImage
+                                      : effectiveType === "video" ? Theme.mediaVideo
+                                      : effectiveType === "audio" ? Theme.mediaAudio
+                                      : effectiveType === "subtitle" ? Theme.mediaSubtitle : Theme.mediaFile
+    readonly property color softColor: Theme.panelSecondary
     readonly property bool hasStatusDot: status === "success" || status === "done"
                                       || status === "failed" || status === "cancelled"
                                       || status === "running" || status === "processing"
@@ -100,7 +95,7 @@ Item {
         roundedRect(ctx, width * 0.13, height * 0.13, width * 0.74, height * 0.22, 3)
         ctx.fill()
 
-        ctx.strokeStyle = Theme.lightMode ? "#F3E8FF" : "#241033"
+        ctx.strokeStyle = root.softColor
         ctx.lineWidth = 2
         ctx.beginPath()
         ctx.moveTo(width * 0.32, height * 0.13)
@@ -263,6 +258,7 @@ Item {
 
     onEffectiveTypeChanged: iconCanvas.requestPaint()
     onPrimaryColorChanged: iconCanvas.requestPaint()
+    onSoftColorChanged: iconCanvas.requestPaint()
     onWidthChanged: iconCanvas.requestPaint()
     onHeightChanged: iconCanvas.requestPaint()
 }

@@ -11,6 +11,7 @@ Popup {
     x: parent ? Math.round((parent.width - width) / 2) : 0
     y: parent ? Math.round((parent.height - height) / 2) : 0
     modal: true
+    Overlay.modal: Rectangle { color: Theme.modalScrim }
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
@@ -49,13 +50,9 @@ Popup {
             Layout.fillWidth: true
             spacing: Theme.space3
 
-            Image {
+            BrandMark {
                 Layout.preferredWidth: root.logoSize
                 Layout.preferredHeight: root.logoSize
-                source: root.logoSource
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                asynchronous: true
             }
 
             ColumnLayout {

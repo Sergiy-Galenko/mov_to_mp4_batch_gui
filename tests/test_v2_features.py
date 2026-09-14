@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import queue
 import threading
 import unittest
@@ -12,6 +13,7 @@ from PySide6 import QtWidgets
 from PySide6.QtTest import QAbstractItemModelTester
 
 from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
+from app.theme_palette import COLOR_KEYS, THEME_MODES, contrast_ratio, resolve_palette
 from services.converter_service import ConverterService
 from services.event_queue import UiEventQueue
 from services.ffmpeg_service import FfmpegService
@@ -259,3 +261,116 @@ def test_backend_stats_never_reads_disk_and_event_processing_yields(qt_app):
     finally:
         backend.settings_manager.save = Mock()
         backend.shutdown()
+
+
+def test_default_theme_is_complete_monochrome_and_readable(tmp_path):
+    manager = ThemeManager(tmp_path / "theme.json")
+    palette = manager.palette()
+    assert manager.theme_mode() == "dark"
+    assert palette.keys() == COLOR_KEYS
+    for value in palette.values():
+        rgb = value[-6:]
+        assert rgb[:2] == rgb[2:4] == rgb[4:]
+    for text, background in (("textPrimary", "windowBackground"), ("textSecondary", "panelBackground"), ("textOnAccent", "accent")):
+        assert contrast_ratio(palette[text], palette[background]) >= 4.5
+
+
+def test_theme_overrides_persist_per_mode_and_reset_derived_colors(tmp_path):
+    path = tmp_path / "theme.json"
+    manager = ThemeManager(path)
+    original = manager.palette()
+    manager.set_color("accent", "#f0a")
+    assert manager.palette()["accent"] == "#FF00AA"
+    assert manager.palette()["accentHover"] != original["accentHover"]
+    manager.set_color("accentHover", "#010203")
+    manager.set_theme_mode("light")
+    assert manager.palette() == resolve_palette("light")
+    manager.set_color("windowBackground", "#ffdead")
+    manager = ThemeManager(path)
+    assert manager.palette()["windowBackground"] == "#FFDEAD"
+    manager.set_theme_mode("dark")
+    assert manager.palette()["accentHover"] == "#010203"
+    manager.reset_color("accentHover")
+    assert manager.palette()["accentHover"] != "#010203"
+    manager.reset_colors()
+    assert manager.palette() == original
+    assert manager.palette("light")["windowBackground"] == "#FFDEAD"
+
+
+def test_theme_palette_is_cached_without_exposing_mutable_state(tmp_path):
+    manager = ThemeManager(tmp_path / "theme.json")
+    with patch("services.theme_manager.resolve_palette", wraps=resolve_palette) as resolve:
+        first = manager.palette()
+        first["accent"] = "#123456"
+        assert manager.palette()["accent"] != first["accent"]
+        assert resolve.call_count == 1
+        manager.set_color("accent", "#123456")
+        assert manager.palette()["accent"] == "#123456"
+        assert resolve.call_count == 2
+
+
+def test_named_themes_and_json_preserve_every_color_and_layout(tmp_path):
+    manager = ThemeManager(tmp_path / "theme.json")
+    manager.set_color("mediaOverlay", "#80445566")
+    manager.set_color("accent", "#987654")
+    manager.set_font_scale(1.25)
+    manager.set_layout_mode("spacious")
+    expected = manager.export_theme()
+    manager.save_theme("Моя схема")
+    manager.reset_colors()
+    manager.set_font_scale(0.8)
+    manager.load_theme("Моя схема")
+    assert manager.export_theme() == expected
+    other = ThemeManager(tmp_path / "imported.json")
+    other.import_theme(json.loads(json.dumps(expected)))
+    assert other.export_theme() == expected
+    assert manager.saved_themes() == ["Моя схема"]
+    manager.delete_theme("Моя схема")
+    assert ThemeManager(manager.path).saved_themes() == []
+
+
+@pytest.mark.parametrize("invalid", [
+    {}, {"schema_version": 99, "theme_mode": "dark"}, {"theme_mode": "unknown"},
+    {"colors": {"accent": "red"}}, {"colors": {"notAColor": "#fff"}},
+    {"colors": []}, {"theme_mode": "light", "font_scale": float("nan")},
+    {"theme_mode": "light", "layout_mode": "unknown"},
+    {"theme_mode": "light", "sidebar_collapsed": "false"},
+])
+def test_invalid_theme_import_leaves_disk_and_active_theme_unchanged(tmp_path, invalid):
+    manager = ThemeManager(tmp_path / "theme.json")
+    manager.set_color("accent", "#456789")
+    before = manager.export_theme()
+    disk = manager.path.read_bytes()
+    with pytest.raises((ValueError, TypeError)):
+        manager.import_theme(invalid)
+    assert manager.export_theme() == before
+    assert manager.path.read_bytes() == disk
+
+
+def test_failed_theme_import_keeps_current_palette(tmp_path):
+    manager = ThemeManager(tmp_path / "theme.json")
+    before = manager.export_theme()
+    with patch("services.theme_manager.save_json_state", side_effect=OSError("Disk full")), pytest.raises(OSError):
+        manager.import_theme({"theme_mode": "light"})
+    assert manager.export_theme() == before
+
+
+def test_legacy_theme_import_and_reset(tmp_path):
+    path = tmp_path / "theme.json"
+    path.write_text(json.dumps({"accent_color": "#123456", "theme_mode": "dark"}))
+    manager = ThemeManager(path)
+    assert manager.accent_color() == "#123456"
+    manager.reset_color("accent")
+    assert manager.palette() == resolve_palette("dark")
+    manager.import_theme({"theme_mode": "oled", "accent_color": "#abc"})
+    assert manager.accent_color() == "#AABBCC"
+
+
+def test_all_theme_colors_and_modes_have_translations():
+    i18n_dir = Path(__file__).resolve().parents[1] / "ui" / "i18n"
+    groups = {field["group"] for field in ThemeManager.color_definitions()}
+    for locale in ("uk", "en", "pl", "de"):
+        messages = json.loads((i18n_dir / f"{locale}.json").read_text())
+        for prefix, values in (("color", COLOR_KEYS), ("mode", THEME_MODES), ("group", groups)):
+            for value in values:
+                assert messages[f"appearance.{prefix}.{value}"], (locale, prefix, value)

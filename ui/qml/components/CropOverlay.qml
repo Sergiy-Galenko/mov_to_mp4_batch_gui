@@ -48,28 +48,28 @@ Item {
         anchors.right: parent.right
         anchors.top: parent.top
         height: Math.max(0, cropBox.y)
-        color: "#99000000"
+        color: Theme.modalScrim
     }
     Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: cropBox.bottom
         anchors.bottom: parent.bottom
-        color: "#99000000"
+        color: Theme.modalScrim
     }
     Rectangle {
         anchors.left: parent.left
         anchors.right: cropBox.left
         y: cropBox.y
         height: cropBox.height
-        color: "#99000000"
+        color: Theme.modalScrim
     }
     Rectangle {
         anchors.left: cropBox.right
         anchors.right: parent.right
         y: cropBox.y
         height: cropBox.height
-        color: "#99000000"
+        color: Theme.modalScrim
     }
 
     // The Crop Box
@@ -92,28 +92,28 @@ Item {
                 y: 0
                 width: 1
                 height: parent.height
-                color: "#66FFFFFF"
+                color: Qt.rgba(Theme.textOnMedia.r, Theme.textOnMedia.g, Theme.textOnMedia.b, 0.4)
             }
             Rectangle {
                 x: (parent.width * 2) / 3
                 y: 0
                 width: 1
                 height: parent.height
-                color: "#66FFFFFF"
+                color: Qt.rgba(Theme.textOnMedia.r, Theme.textOnMedia.g, Theme.textOnMedia.b, 0.4)
             }
             Rectangle {
                 x: 0
                 y: parent.height / 3
                 width: parent.width
                 height: 1
-                color: "#66FFFFFF"
+                color: Qt.rgba(Theme.textOnMedia.r, Theme.textOnMedia.g, Theme.textOnMedia.b, 0.4)
             }
             Rectangle {
                 x: 0
                 y: (parent.height * 2) / 3
                 width: parent.width
                 height: 1
-                color: "#66FFFFFF"
+                color: Qt.rgba(Theme.textOnMedia.r, Theme.textOnMedia.g, Theme.textOnMedia.b, 0.4)
             }
         }
 
@@ -142,7 +142,7 @@ Item {
             height: 20
             width: readoutText.implicitWidth + 12
             radius: 3
-            color: "#CC000000"
+            color: Theme.mediaOverlay
 
             Text {
                 id: readoutText
@@ -154,7 +154,7 @@ Item {
                     var nh = Math.round(cropBox.height * scaleY)
                     return nw + " × " + nh
                 }
-                color: "#FFFFFF"
+                color: Theme.textOnMedia
                 font.pixelSize: 10
                 font.family: Theme.monoFont
             }

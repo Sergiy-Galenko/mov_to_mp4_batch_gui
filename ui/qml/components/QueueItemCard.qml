@@ -148,13 +148,13 @@ Rectangle {
                 height: 18
                 width: durLabel.implicitWidth + 8
                 radius: Theme.radiusSm
-                color: "#000000"
+                color: Theme.mediaOverlay
                 opacity: 0.75
                 Label {
                     id: durLabel
                     anchors.centerIn: parent
                     text: root.durationText
-                    color: "#FFFFFF"
+                    color: Theme.textOnMedia
                     font.family: Theme.monoFont
                     font.pixelSize: 10
                 }

@@ -4,9 +4,9 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 
 ## Features
 
-- **Arc/Linear-Inspired UI**: Completely redesigned interface with deep dark modes, glassmorphism, soft shadows, and clean layouts.
+- Black-and-white dark interface with customizable backgrounds, text, controls, status indicators, borders, and media icons.
 - **Progressive Disclosure**: Advanced settings and sidebar are hidden by default to keep the main conversion screen incredibly simple and focused.
-- **Emoji-Driven Navigation**: Uses clear emoji indicators (🎬, 🎵, ✅, ⏳, 📥) instead of text for instant visual recognition of media types and status.
+- Outline icons and labeled statuses keep navigation and progress readable in a monochrome palette.
 - **Modern Drag & Drop Zone**: A large, interactive glassmorphism drop zone for importing files directly from the desktop.
 - Top workspace switcher for `Photo`, `Video`, and `Text` modes. Each mode filters the queue, file picker, folder import, preview, and relevant edit controls.
 - Large centered selected-file preview: photos display as a larger image, videos display their generated frame thumbnail, and text files show a readable text preview.
@@ -34,6 +34,14 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 - Full batch rename preview with copy/export to CSV before conversion starts.
 - JSON-based localization for Ukrainian, English, Polish, and German.
 - CLI mode for automation without starting the GUI.
+
+## Appearance
+
+Open the palette button in the top bar to customize the interface. The default **Black & white** theme uses neutral dark surfaces and white/gray controls. Other presets include Light, Obsidian, OLED, Midnight, High contrast, and System.
+
+Choose individual colors with the color picker or enter `#RGB`, `#RRGGBB`, or `#AARRGGBB` values. Changes apply immediately and are saved separately for each base theme. The editor also provides text scaling, interface density, named schemes, and JSON import/export. Media previews retain their original colors.
+
+Use **Reset colors** to restore the current preset, or **Ctrl+Alt+0** anywhere in the app to restore the default black-and-white colors. Invalid theme files leave the active theme unchanged.
 
 ## Requirements
 

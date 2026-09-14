@@ -51,23 +51,23 @@ Item {
             anchors.bottom: parent.bottom
             x: parent.width * root.splitPosition - (width / 2)
             width: 2
-            color: "#FFFFFF"
+            color: Theme.textOnMedia
             opacity: 0.9
 
             Rectangle {
                 anchors.centerIn: parent
                 width: 32
--               height: 32
--               radius: 16
--               color: Theme.accentPrimary
+                height: 32
+                radius: 16
+                color: Theme.accentPrimary
                 border.width: 2
--               border.color: "#FFFFFF"
+                border.color: Theme.textOnMedia
 
                 RowLayout {
                     anchors.centerIn: parent
                     spacing: 2
-                    Label { text: "◀"; color: "#FFFFFF"; font.pixelSize: 8 }
-                    Label { text: "▶"; color: "#FFFFFF"; font.pixelSize: 8 }
+                    Label { text: "◀"; color: Theme.textOnAccent; font.pixelSize: 8 }
+                    Label { text: "▶"; color: Theme.textOnAccent; font.pixelSize: 8 }
                 }
             }
         }
@@ -79,13 +79,13 @@ Item {
             height: 22
             width: lblBefore.implicitWidth + 12
             radius: Theme.radiusSm
-            color: "#000000"
+            color: Theme.mediaOverlay
             opacity: 0.75
             Label {
                 id: lblBefore
                 anchors.centerIn: parent
                 text: root.labelBefore
-                color: "#FFFFFF"
+                color: Theme.textOnMedia
                 font.pixelSize: 11
                 font.weight: Font.DemiBold
             }
@@ -98,13 +98,13 @@ Item {
             height: 22
             width: lblAfter.implicitWidth + 12
             radius: Theme.radiusSm
-            color: "#000000"
+            color: Theme.mediaOverlay
             opacity: 0.75
             Label {
                 id: lblAfter
                 anchors.centerIn: parent
                 text: root.labelAfter
-                color: "#FFFFFF"
+                color: Theme.textOnMedia
                 font.pixelSize: 11
                 font.weight: Font.DemiBold
             }
@@ -113,7 +113,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
-            cursorShape: Qt.SplitHGursor
+            cursorShape: Qt.SplitHCursor
             onPositionChanged: function(mouse) {
                 if (pressed) {
                     var pos = mouse.x / root.width
