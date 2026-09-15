@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from dataclasses import dataclass, field
 
 
@@ -21,7 +22,6 @@ class HardwareCapabilities:
 
     @property
     def has_gpu(self) -> bool:
-        return self.nvidia_available or self.intel_qsv_available or self.amd_amf_available
         return self.apple_available or self.nvidia_available or self.intel_qsv_available or self.amd_amf_available
 
     @property
@@ -55,6 +55,31 @@ _VIDEOTOOLBOX_ENCODERS = {"h264_videotoolbox", "hevc_videotoolbox", "prores_vide
 _NVIDIA_ENCODERS = {"h264_nvenc", "hevc_nvenc", "av1_nvenc"}
 _QSV_ENCODERS = {"h264_qsv", "hevc_qsv", "av1_qsv", "vp9_qsv"}
 _AMF_ENCODERS = {"h264_amf", "hevc_amf", "av1_amf"}
+
+
+def usable_videotoolbox_encoders(ffmpeg_path: str, encoders: set[str]) -> set[str]:
+    """Probe real hardware sessions; an encoder listed by FFmpeg may be unusable.
+
+    In particular the original M1 has no ProRes media engine. Never silently
+    count Apple's software encoder as hardware acceleration.
+    """
+    usable = set(encoders) - _VIDEOTOOLBOX_ENCODERS
+    if sys.platform != "darwin":
+        return usable
+    for encoder in sorted(encoders & _VIDEOTOOLBOX_ENCODERS):
+        pixel_format = "ayuv64le" if encoder == "prores_videotoolbox" else "yuv420p"
+        try:
+            result = subprocess.run(
+                [ffmpeg_path, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                 "color=size=64x64:rate=1", "-frames:v", "1", "-an", "-c:v", encoder,
+                 "-pix_fmt", pixel_format, "-allow_sw", "0", "-f", "null", "-"],
+                capture_output=True, timeout=10,
+            )
+            if result.returncode == 0:
+                usable.add(encoder)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+    return usable
 
 
 class HardwareService:
@@ -111,7 +136,9 @@ class HardwareService:
                 name = parts[1]
                 if parts[0].startswith("V") or name in (_VIDEOTOOLBOX_ENCODERS | _NVIDIA_ENCODERS | _QSV_ENCODERS | _AMF_ENCODERS):
                     encoders.add(name)
-        return encoders
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or "FFmpeg encoder detection failed")
+        return usable_videotoolbox_encoders(self.ffmpeg_path, encoders)
 
     def invalidate_cache(self) -> None:
         self._cache = None

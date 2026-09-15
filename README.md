@@ -36,6 +36,90 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 - JSON-based localization for Ukrainian, English, Polish, and German.
 - CLI mode for automation without starting the GUI.
 
+## Apple Silicon VideoToolbox and Whisper models
+
+### Hardware video encoding on macOS M1–M4
+
+Select **Apple (VideoToolbox)** under the video hardware encoder setting, or leave
+it on **auto**. H.264, HEVC and ProRes use the corresponding FFmpeg VideoToolbox
+encoder when a hardware session can be created. The encoder summary shows the
+codecs that passed this check. Install a native macOS FFmpeg build with
+VideoToolbox support and select its executable in the app's FFmpeg settings.
+
+- H.264 and HEVC use hardware quality control; HEVC MOV/MP4 files use the `hvc1`
+  tag for Apple playback compatibility.
+- Select **MOV** or **MKV** for ProRes. Both hardware and CPU paths use ProRes 422
+  HQ. Target file size and software two-pass encoding do not apply to ProRes.
+- Availability depends on the chip, macOS and FFmpeg build. In particular, the
+  original M1 does not have the ProRes media engine found in M1 Pro/Max and later
+  supported chips. Detection probes each codec with software fallback disabled.
+- If a hardware encoder is missing or fails, the existing automatic GPU fallback
+  uses the equivalent CPU codec (`libx264`, `libx265`, `prores_ks`).
+- Stream-copy/remux operations bypass encoding. Disable fast copy when you want
+  to re-encode the video.
+
+### Visual Whisper model manager
+
+Open **Advanced settings → Audio / subtitles → Manage models…**. The manager is
+available even before a transcription runtime is installed. It lists Tiny, Base,
+Small, Medium, Large-v3 and Large-v3-turbo, with download state, disk usage and an
+approximate memory requirement. **Select** sets the subtitle model immediately.
+Model, engine and compute device are saved with the conversion settings/presets.
+
+Choose the engine and compute device before downloading:
+
+| Engine | Devices | Model format |
+| --- | --- | --- |
+| `whisper` (openai-whisper) | MPS, CUDA, CPU | OpenAI `.pt` checkpoint |
+| `faster-whisper` | CUDA, CPU | CTranslate2 model directory |
+
+**Auto** prefers openai-whisper when installed, otherwise faster-whisper, and
+selects an available CUDA/MPS device before CPU. Only devices detected by the
+selected runtime are offered. A saved unavailable device is retained with a
+message so you can select another one. An explicitly selected device does not
+silently switch to CPU after an inference error.
+
+Install one optional runtime in the same environment that launches the app:
+
+```bash
+# Apple Silicon MPS, or PyTorch CUDA/CPU
+python -m pip install -r requirements-whisper.txt
+
+# Alternative for CPU/NVIDIA CUDA
+python -m pip install faster-whisper
+```
+
+MPS requires an MPS-enabled PyTorch build and compatible macOS. Segment subtitle
+transcription uses float32 on MPS/CPU and float16 on PyTorch CUDA. The MPS loader
+converts Whisper's sparse alignment buffer before moving the model to the GPU;
+word-level timestamps are not enabled. The transcription worker uses the FFmpeg
+executable selected in the app to decode audio. faster-whisper uses int8 on CPU and
+float16 on CUDA. CUDA also requires the runtime libraries documented by the
+selected engine. Models run locally; audio is not sent to a transcription API.
+
+Downloads run in a background thread, report transfer progress, support
+**Cancel**, and keep errors visible for retry. Closing the manager keeps the
+transfer running; exiting the application cancels it (network reads have a
+15-second timeout). Cancelled transfers are cleaned up and retries restart the
+transfer. Files are published only after a complete download; OpenAI checkpoint
+SHA-256 checksums and Hugging Face LFS checksums are checked. A partial cache
+folder is not shown as an installed model. **Delete** removes the displayed
+engine's cached model after confirmation; deletion is disabled during conversion
+or a model download.
+
+Caches are shared with transcription:
+
+- OpenAI checkpoints: `$XDG_CACHE_HOME/whisper` (default `~/.cache/whisper`).
+- Managed faster-whisper downloads: `$XDG_CACHE_HOME/media-converter/faster-whisper`.
+- Existing complete Hugging Face snapshots are also recognized, respecting
+  `HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`, and `HF_HOME`. The two model formats are
+  tracked separately. Download sizes are approximate and depend on the format.
+
+Implementation references: [FFmpeg VideoToolbox encoders](https://ffmpeg.org/doxygen/trunk/videotoolboxenc_8c_source.html),
+[Whisper checkpoints and loader](https://github.com/openai/whisper/blob/main/whisper/__init__.py),
+[PyTorch MPS](https://docs.pytorch.org/docs/stable/notes/mps.html), and
+[faster-whisper requirements](https://github.com/SYSTRAN/faster-whisper#requirements).
+
 ## Appearance
 
 Open the palette button in the top bar to customize the interface. The default **Black & white** theme uses neutral dark surfaces and white/gray controls. Other presets include Light, Obsidian, OLED, Midnight, High contrast, and System.

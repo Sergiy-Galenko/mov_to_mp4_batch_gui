@@ -11,6 +11,7 @@ from typing import Any
 
 from app.constants import HW_ENCODER_MAP, PORTRAIT_PRESETS, POSITION_MAP, VIDEO_CODEC_MAP
 from app.models import ConversionSettings, MediaChapter, MediaInfo
+from services.hardware_service import usable_videotoolbox_encoders
 from utils.formatting import build_atempo_chain
 
 
@@ -193,7 +194,7 @@ class FfmpegService:
             parts = line.split()
             if len(parts) >= 2:
                 encoders.add(parts[1])
-        return encoders
+        return usable_videotoolbox_encoders(self.ffmpeg_path, encoders)
 
     def probe_duration_ms(self, path: Path) -> float | None:
         if not self.ffprobe_path:
@@ -355,6 +356,8 @@ class FfmpegService:
         out_ext = out_ext.lower()
         if out_ext == ".gif":
             return "gif"
+        if choice == "prores" and out_ext not in {".mov", ".mkv"}:
+            raise ValueError("ProRes requires a MOV or MKV output container.")
         if choice == "auto":
             if out_ext == ".webm":
                 return "vp9"
@@ -395,7 +398,7 @@ class FfmpegService:
             "amd": {"h264": "h264_amf", "h265": "hevc_amf", "av1": "av1_amf"},
         }
 
-        if hw_pref == "cpu" or codec == "mpeg2" or (codec == "prores" and hw_pref != "apple"):
+        if hw_pref == "cpu" or codec == "mpeg2":
             encoder = cpu_map[codec]
             if self.encoder_caps and encoder not in self.encoder_caps:
                 if log_cb:
@@ -437,7 +440,7 @@ class FfmpegService:
         if encoder == "prores_ks":
             return ["-profile:v", "3"]
         if encoder == "prores_videotoolbox":
-            return ["-profile:v", "standard"]
+            return ["-profile:v", "hq"]
         if encoder == "mpeg2video":
             qscale = max(2, min(31, round(2 + (max(0, min(51, int(crf))) / 51.0) * 29)))
             return ["-q:v", str(qscale)]
@@ -747,11 +750,14 @@ class FfmpegService:
             "h264_nvenc", "hevc_nvenc", "av1_nvenc",
             "h264_qsv", "hevc_qsv", "av1_qsv", "vp9_qsv",
             "h264_amf", "hevc_amf", "av1_amf",
+            "h264_videotoolbox", "hevc_videotoolbox", "prores_videotoolbox",
         }
 
     @staticmethod
     def get_cpu_fallback_encoder(encoder: str) -> str:
         normalized = str(encoder or "").strip().lower()
+        if "prores" in normalized:
+            return "prores_ks"
         if "hevc" in normalized or "h265" in normalized:
             return "libx265"
         if "av1" in normalized:
@@ -1176,10 +1182,14 @@ class FfmpegService:
         codec = self.resolve_codec(out_ext, settings.video_codec, log_cb=log_cb)
         encoder, is_hw = self.select_encoder(codec, HW_ENCODER_MAP.get(settings.hw_encoder, "auto"), log_cb=log_cb)
         cmd += ["-c:v", encoder]
+        if encoder.endswith("_videotoolbox"):
+            cmd += ["-allow_sw", "0"]
+        if encoder == "hevc_videotoolbox" and out_ext in {".mp4", ".mov", ".m4v"}:
+            cmd += ["-tag:v", "hvc1"]
         if not is_hw and encoder in {"libx264", "libx265"}:
             cmd += ["-preset", (settings.preset or "medium").strip()]
         target_video_kbps = self.target_video_bitrate_kbps(settings, info)
-        if target_video_kbps:
+        if target_video_kbps and codec != "prores":
             cmd += ["-b:v", f"{target_video_kbps}k", "-maxrate", f"{int(target_video_kbps * 1.35)}k", "-bufsize", f"{int(target_video_kbps * 2)}k"]
         else:
             cmd += self.encoder_quality_args(encoder, settings.crf)
@@ -1192,10 +1202,14 @@ class FfmpegService:
             "hevc_qsv",
             "h264_amf",
             "hevc_amf",
+            "h264_videotoolbox",
+            "hevc_videotoolbox",
         }:
             cmd += ["-pix_fmt", "yuv420p"]
         elif encoder == "prores_ks":
             cmd += ["-pix_fmt", "yuv422p10le"]
+        elif encoder == "prores_videotoolbox":
+            cmd += ["-pix_fmt", "ayuv64le"]
 
         cmd += self.video_profile_args(encoder, settings)
         cmd += self.video_audio_codec_args(settings, out_ext)
@@ -1462,6 +1476,10 @@ class FfmpegService:
         codec = self.resolve_codec(out_ext, settings.video_codec, log_cb=log_cb)
         encoder, is_hw = self.select_encoder(codec, HW_ENCODER_MAP.get(settings.hw_encoder, "auto"), log_cb=log_cb)
         cmd += ["-c:v", encoder]
+        if encoder.endswith("_videotoolbox"):
+            cmd += ["-allow_sw", "0"]
+        if encoder == "hevc_videotoolbox" and out_ext in {".mp4", ".mov", ".m4v"}:
+            cmd += ["-tag:v", "hvc1"]
         if not is_hw and encoder in {"libx264", "libx265"}:
             cmd += ["-preset", (settings.preset or "medium").strip()]
         cmd += self.encoder_quality_args(encoder, settings.crf)
@@ -1474,10 +1492,14 @@ class FfmpegService:
             "hevc_qsv",
             "h264_amf",
             "hevc_amf",
+            "h264_videotoolbox",
+            "hevc_videotoolbox",
         }:
             cmd += ["-pix_fmt", "yuv420p"]
         elif encoder == "prores_ks":
             cmd += ["-pix_fmt", "yuv422p10le"]
+        elif encoder == "prores_videotoolbox":
+            cmd += ["-pix_fmt", "ayuv64le"]
 
         cmd += self.video_profile_args(encoder, settings)
         cmd += self.video_audio_codec_args(settings, out_ext)

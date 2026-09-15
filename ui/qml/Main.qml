@@ -172,7 +172,7 @@ ApplicationWindow {
     property var smartContentTypes: ["auto", "live_action", "animation", "screencast"]
     property var smartQualityTargets: ["small", "balanced", "quality"]
     property var smartQualityMetrics: ["none", "ssim", "vmaf"]
-    property var hwOptions: ["auto", "cpu", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"]
+    property var hwOptions: ["auto", "cpu", "Apple (VideoToolbox)", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"]
     property var performanceProfiles: ["Quality", "Balanced", "Fast", "Small file"]
     property var deviceProfiles: ["None", "iPhone 14/15/16", "iPad Pro", "Apple TV 4K HDR", "Android H.264 baseline", "Samsung TV", "PlayStation 5", "Xbox Series X", "Chromecast / Fire TV", "GoPro import", "DJI Drone import", "Steam Deck", "DVD compatible", "Blu-ray compatible"]
     property var rotateCanonicalOptions: ["0", "90° вправо", "90° вліво", "180°"]
@@ -1699,6 +1699,27 @@ ApplicationWindow {
     component SettingsPanel: ColumnLayout {
         id: settingsRoot
         spacing: 12
+        property string subtitleDevice: "auto"
+
+        WhisperModelManagerModal {
+            id: whisperModal
+            selectedModel: subtitleModelCombo.currentText
+            selectedDevice: settingsRoot.subtitleDevice
+            selectedEngine: subtitleEngineCombo.currentText
+            onModelChosen: function(name) {
+                root.setComboText(subtitleModelCombo, name)
+                root.scheduleSettingsSync()
+            }
+            onDeviceChosen: function(device) {
+                settingsRoot.subtitleDevice = device
+                root.scheduleSettingsSync()
+            }
+            onEngineChosen: function(engine) {
+                settingsRoot.subtitleDevice = "auto"
+                root.setComboText(subtitleEngineCombo, engine)
+                root.scheduleSettingsSync()
+            }
+        }
 
         function applyPreset(preset) {
             if (!preset)
@@ -1756,6 +1777,7 @@ ApplicationWindow {
             subtitleLanguageField.text = preset.subtitle_language || "auto"
             root.setComboText(subtitleModelCombo, preset.subtitle_model || "base")
             root.setComboText(subtitleEngineCombo, preset.subtitle_engine || "auto")
+            settingsRoot.subtitleDevice = preset.subtitle_device || "auto"
             thumbnailTimeField.text = preset.thumbnail_time || ""
             if (preset.sheet_cols !== undefined) sheetColsSpin.value = Number(preset.sheet_cols)
             if (preset.sheet_rows !== undefined) sheetRowsSpin.value = Number(preset.sheet_rows)
@@ -1895,6 +1917,7 @@ ApplicationWindow {
                 subtitle_language: subtitleLanguageField.text,
                 subtitle_model: subtitleModelCombo.currentText,
                 subtitle_engine: subtitleEngineCombo.currentText,
+                subtitle_device: settingsRoot.subtitleDevice,
                 thumbnail_time: thumbnailTimeField.text,
                 sheet_cols: sheetColsSpin.value,
                 sheet_rows: sheetRowsSpin.value,
@@ -2311,7 +2334,7 @@ ApplicationWindow {
                 AppSpinBox { id: subtitleStreamSpin; from: 0; to: 32; value: 0; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("language_field") }
                 AppTextField { id: subtitleLanguageField; text: "auto"; onEditingFinished: scheduleSettingsSync() }
-                FieldLabel { text: I18n.t("model"); visible: backend ? backend.isWhisperAvailable : true }
+                FieldLabel { text: I18n.t("model") }
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
@@ -2320,19 +2343,17 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         model: ["tiny", "base", "small", "medium", "large", "large-v3", "large-v3-turbo"]
                         currentIndex: 1
-                        visible: backend ? backend.isWhisperAvailable : true
-                        enabled: visible
                         onActivated: scheduleSettingsSync()
                     }
                     SecondaryButton {
-                        text: "Керування..."
+                        text: I18n.t("whisper.manage")
+                        objectName: "openWhisperManager"
                         implicitHeight: 32
-                        visible: backend ? backend.isWhisperAvailable : true
                         onClicked: whisperModal.open()
                     }
                 }
                 FieldLabel { text: I18n.t("engine"); visible: backend ? backend.isWhisperAvailable : true }
-                AppComboBox { id: subtitleEngineCombo; model: ["auto", "whisper"]; currentIndex: 0; visible: backend ? backend.isWhisperAvailable : true; enabled: visible; onActivated: scheduleSettingsSync() }
+                AppComboBox { id: subtitleEngineCombo; model: ["auto", "whisper", "faster-whisper"]; currentIndex: 0; visible: backend ? backend.isWhisperAvailable : true; enabled: visible; onActivated: scheduleSettingsSync() }
                 Label {
                     Layout.columnSpan: 2
                     Layout.fillWidth: true
@@ -2865,9 +2886,6 @@ ApplicationWindow {
         id: shortcutCheatSheet
     }
 
-    WhisperModelManagerModal {
-        id: whisperModal
-    }
 
     function shortcutAllowed(action) {
         var editing = root.activeFocusItem && (root.activeFocusItem.selectByMouse !== undefined || root.activeFocusItem.inputMethodHints !== undefined)

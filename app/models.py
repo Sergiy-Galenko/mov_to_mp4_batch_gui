@@ -173,6 +173,7 @@ class ConversionSettings:
     subtitle_language: str = "auto"
     subtitle_model: str = "base"
     subtitle_engine: str = "auto"
+    subtitle_device: str = "auto"
     subtitle_sync_ms: int = 0
     subtitle_style_enabled: bool = False
     subtitle_font_name: str = ""

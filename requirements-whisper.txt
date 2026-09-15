@@ -1,0 +1,7 @@
+# Optional local transcription runtime for MPS (Apple Silicon), CUDA and CPU.
+# Install into the same Python environment used to run Media Converter.
+openai-whisper>=20250625
+
+# For CPU/CUDA with CTranslate2 instead, install faster-whisper separately:
+# python -m pip install faster-whisper
+# Then select the faster-whisper engine in the model manager.

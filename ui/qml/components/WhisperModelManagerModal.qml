@@ -5,13 +5,61 @@ import App 1.0
 
 Dialog {
     id: root
-    title: "Керування моделями Whisper (Субтитри)"
+    objectName: "whisperModelManager"
+    parent: Overlay.overlay
+    title: I18n.t("whisper.title")
     modal: true
     Overlay.modal: Rectangle { color: Theme.modalScrim }
-    width: 620
-    height: 520
-    x: Math.round((parent.width - width) / 2)
-    y: Math.round((parent.height - height) / 2)
+    width: Math.min(780, parent ? parent.width - 32 : 780)
+    height: Math.min(680, parent ? parent.height - 32 : 680)
+    x: parent ? Math.round((parent.width - width) / 2) : 0
+    y: parent ? Math.round((parent.height - height) / 2) : 0
+
+    property string selectedModel: "base"
+    property string selectedDevice: "auto"
+    property string selectedEngine: "auto"
+    property var modelsList: []
+    property var devices: ["auto", "cpu"]
+    property string effectiveEngine: ""
+    property string activeDownloadingModel: ""
+    property real downloadProgress: 0
+    property string downloadFile: ""
+    readonly property bool downloading: activeDownloadingModel.length > 0
+    signal modelChosen(string name)
+    signal deviceChosen(string device)
+    signal engineChosen(string engine)
+
+    function refreshModels() {
+        if (!backend) return
+        effectiveEngine = backend.getWhisperEngine(selectedDevice, selectedEngine)
+        modelsList = backend.getWhisperModels(selectedDevice, selectedEngine)
+        devices = backend.getWhisperDevices(selectedEngine)
+        var active = ""
+        for (var i = 0; i < modelsList.length; i++) {
+            if (modelsList[i].state === "downloading") {
+                active = modelsList[i].name
+                downloadProgress = modelsList[i].progress
+            }
+        }
+        activeDownloadingModel = active
+    }
+
+    function chooseModel(name) { root.modelChosen(name) }
+    function chooseDevice(device) { root.deviceChosen(device) }
+    onOpened: refreshModels()
+    onSelectedDeviceChanged: if (visible) refreshModels()
+    onSelectedEngineChanged: if (visible) refreshModels()
+
+    Connections {
+        target: backend
+        function onWhisperModelsChanged() { root.refreshModels() }
+        function onWhisperDownloadProgress(name, pct, message) {
+            if (name === root.activeDownloadingModel) {
+                root.downloadProgress = pct
+                root.downloadFile = message
+            }
+        }
+    }
 
     background: Rectangle {
         color: Theme.panelBackground
@@ -20,201 +68,209 @@ Dialog {
         border.color: Theme.borderMuted
     }
 
-    property var modelsList: []
-    property string activeDownloadingModel: ""
-    property real downloadProgress: 0.0
-    property string downloadStatusText: ""
-
-    function refreshModels() {
-        if (backend && backend.getWhisperModels) {
-            root.modelsList = backend.getWhisperModels()
-        }
-    }
-
-    onOpened: refreshModels()
-
-    Connections {
-        target: backend
-        function onWhisperModelsChanged() { root.refreshModels() }
-        function onWhisperDownloadProgress(name, pct, msg) {
-            root.activeDownloadingModel = pct < 1.0 && pct > 0.0 ? name : ""
-            root.downloadProgress = pct
-            root.downloadStatusText = msg
-            if (pct >= 1.0) root.refreshModels()
-        }
-    }
-
     contentItem: ColumnLayout {
         spacing: 12
-
-        // Header description and device selector
+        Label {
+            Layout.fillWidth: true
+            text: I18n.t("whisper.description")
+            color: Theme.textSecondary
+            wrapMode: Text.WordWrap
+            font.pixelSize: Theme.fontSizeSm
+        }
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            FieldLabel { text: I18n.t("engine") }
+            AppComboBox {
+                objectName: "whisperEngineCombo"
+                model: ["auto", "whisper", "faster-whisper"]
+                currentIndex: Math.max(0, model.indexOf(root.selectedEngine))
+                enabled: !root.downloading
+                onActivated: root.engineChosen(currentText)
+            }
+            FieldLabel { text: I18n.t("whisper.device") }
+            AppComboBox {
+                objectName: "whisperDeviceCombo"
+                model: root.devices.indexOf(root.selectedDevice) >= 0 ? root.devices : root.devices.concat([root.selectedDevice])
+                currentIndex: Math.max(0, model.indexOf(root.selectedDevice))
+                enabled: !root.downloading
+                onActivated: root.chooseDevice(currentText)
+            }
+        }
+        Label {
+            Layout.fillWidth: true
+            text: I18n.t("whisper.device_hint")
+            color: Theme.textSecondary
+            wrapMode: Text.WordWrap
+            font.pixelSize: Theme.fontMeta
+        }
+        Label {
+            Layout.fillWidth: true
+            visible: root.devices.indexOf(root.selectedDevice) < 0 || root.effectiveEngine.length === 0
+            text: I18n.t("whisper.device_unavailable")
+            color: Theme.accentWarn
+            wrapMode: Text.WordWrap
+        }
+        Label {
+            Layout.fillWidth: true
+            visible: backend ? !backend.whisperEngineInstalled(root.effectiveEngine) : false
+            text: I18n.t("whisper.install_hint")
+            color: Theme.accentWarn
+            wrapMode: Text.WordWrap
+            font.pixelSize: Theme.fontMeta
+        }
         RowLayout {
             Layout.fillWidth: true
             Label {
                 Layout.fillWidth: true
-                text: "Моделі Whisper для автоматичної генерації субтитрів та транскрипції."
+                text: I18n.t("whisper.cache") + ": " + root.effectiveEngine
                 color: Theme.textSecondary
-                font.pixelSize: Theme.fontSizeSm
-                wrapMode: Text.WordWrap
+                font.pixelSize: Theme.fontMeta
             }
-            AppIconButton {
-                iconName: "refresh"
-                accessibleLabel: "Оновити"
+            SecondaryButton {
+                Layout.fillWidth: false
+                text: I18n.t("whisper.refresh")
                 onClicked: root.refreshModels()
             }
         }
-
-        // Hardware Acceleration selector
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            Label {
-                text: "Прискорювач обчислень:"
-                color: Theme.textMuted
-                font.pixelSize: Theme.fontSizeSm
-            }
-            AppComboBox {
-                id: deviceCombo
-                Layout.preferredWidth: 180
-                model: backend && backend.getWhisperDevices ? backend.getWhisperDevices() : ["auto", "cpu"]
-            }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: Theme.borderMuted
-        }
-
-        // Download progress bar if downloading
         ColumnLayout {
-            visible: root.activeDownloadingModel.length > 0
+            visible: root.downloading
             Layout.fillWidth: true
-            spacing: 4
-
             RowLayout {
                 Layout.fillWidth: true
                 Label {
-                    text: root.downloadStatusText
-                    color: Theme.accentPrimary
-                    font.pixelSize: Theme.fontMeta
-                    font.weight: Font.DemiBold
-                }
-                Item { Layout.fillWidth: true }
-                Label {
-                    text: Math.round(root.downloadProgress * 100) + "%"
+                    Layout.fillWidth: true
+                    text: root.activeDownloadingModel + " · " + root.downloadFile
                     color: Theme.textPrimary
-                    font.pixelSize: Theme.fontMeta
-                    font.family: Theme.monoFont
+                    elide: Text.ElideMiddle
+                }
+                Label {
+                    text: root.downloadProgress >= 0 ? Math.round(root.downloadProgress * 100) + "%" : ""
+                    color: Theme.textSecondary
+                }
+                SecondaryButton {
+                    Layout.fillWidth: false
+                    objectName: "whisperCancelDownload"
+                    text: I18n.t("cancel")
+                    onClicked: backend.cancelWhisperDownload()
                 }
             }
-
             ProgressBar {
+                objectName: "whisperDownloadProgress"
                 Layout.fillWidth: true
+                from: 0; to: 1
                 value: root.downloadProgress
-                from: 0.0
-                to: 1.0
+                indeterminate: root.downloadProgress < 0
             }
         }
-
-        // Models List
         ListView {
-            id: modelsListView
+            id: modelsView
+            objectName: "whisperModelsList"
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
             spacing: 8
             model: root.modelsList
-
+            ScrollBar.vertical: ScrollBar {}
             delegate: Rectangle {
-                width: modelsListView.width
-                height: 64
+                required property var modelData
+                width: modelsView.width
+                height: cardContent.implicitHeight + 24
                 radius: Theme.radiusMd
                 color: Theme.panelSecondary
                 border.width: 1
-                border.color: modelData.downloaded ? Theme.accentPrimary : Theme.borderMuted
-
-                RowLayout {
-                    anchors.fill: parent
+                border.color: root.selectedModel === modelData.name ? Theme.accentPrimary : Theme.borderMuted
+                ColumnLayout {
+                    id: cardContent
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
                     anchors.margins: 12
-                    spacing: 12
-
-                    ColumnLayout {
+                    spacing: 6
+                    RowLayout {
                         Layout.fillWidth: true
-                        spacing: 2
-
-                        RowLayout {
-                            spacing: 8
-                            Label {
-                                text: modelData.name.toUpperCase()
-                                color: Theme.textPrimary
-                                font.pixelSize: Theme.fontSizeSm
-                                font.weight: Font.Bold
-                            }
-                            Rectangle {
-                                radius: 3
-                                height: 16
-                                width: statusText.implicitWidth + 8
-                                color: modelData.downloaded ? Theme.successSoft : Theme.subtleFill
-                                border.width: 1
-                                border.color: modelData.downloaded ? Theme.statusSuccess : Theme.borderDefault
-                                Text {
-                                    id: statusText
-                                    anchors.centerIn: parent
-                                    text: modelData.downloaded ? "Завантажено (" + modelData.disk_size_mb + " MB)" : "Не завантажено"
-                                    color: modelData.downloaded ? Theme.statusSuccess : Theme.textMuted
-                                    font.pixelSize: 10
-                                    font.weight: Font.Medium
-                                }
-                            }
-                        }
-
                         Label {
-                            text: "Розмір: ~" + modelData.size_mb + " MB  ·  Швидкість: " + modelData.speed + "  ·  VRAM: ~" + modelData.vram_mb + " MB"
-                            color: Theme.textMuted
+                            text: modelData.name.toUpperCase()
+                            color: Theme.textPrimary
+                            font.weight: Font.Bold
+                            font.pixelSize: Theme.fontSizeSm
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: I18n.t("whisper.state." + modelData.state)
+                            color: modelData.downloaded ? Theme.statusSuccess : Theme.textSecondary
+                            elide: Text.ElideRight
                             font.pixelSize: Theme.fontMeta
                         }
-                    }
-
-                    // Action buttons
-                    RowLayout {
-                        spacing: 6
-
                         PrimaryButton {
+                            Layout.fillWidth: false
+                            objectName: "whisperDownload_" + modelData.name
                             visible: !modelData.downloaded
-                            text: "Завантажити"
-                            enabled: root.activeDownloadingModel.length === 0
-                            implicitHeight: 30
+                            text: I18n.t("whisper.download")
+                            enabled: !root.downloading && root.effectiveEngine.length > 0
+                            onClicked: backend.downloadWhisperModel(modelData.name, root.selectedDevice, root.selectedEngine)
+                        }
+                        SecondaryButton {
+                            Layout.fillWidth: false
+                            visible: modelData.disk_bytes > 0
+                            text: I18n.t("whisper.delete")
+                            enabled: !root.downloading && !(backend && backend.isRunning)
                             onClicked: {
-                                if (backend && backend.downloadWhisperModel) {
-                                    backend.downloadWhisperModel(modelData.name)
-                                }
+                                deleteDialog.modelName = modelData.name
+                                deleteDialog.open()
                             }
                         }
-
                         SecondaryButton {
-                            visible: modelData.downloaded
-                            text: "Видалити"
-                            implicitHeight: 30
-                            onClicked: {
-                                if (backend && backend.deleteWhisperModel) {
-                                    backend.deleteWhisperModel(modelData.name)
-                                }
-                            }
+                            Layout.fillWidth: false
+                            objectName: "whisperSelect_" + modelData.name
+                            text: root.selectedModel === modelData.name ? I18n.t("whisper.selected") : I18n.t("whisper.select")
+                            enabled: root.selectedModel !== modelData.name
+                            onClicked: root.chooseModel(modelData.name)
                         }
                     }
+                    Label {
+                        Layout.fillWidth: true
+                        text: "~" + modelData.size_mb + " MB · " + I18n.t("whisper.memory") + ": ~" + modelData.vram_mb + " MB · " + I18n.t("whisper.disk") + ": " + modelData.disk_size_mb + " MB"
+                        wrapMode: Text.WordWrap
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.fontMeta
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        visible: modelData.error.length > 0
+                        text: modelData.error
+                        wrapMode: Text.WrapAnywhere
+                        color: Theme.accentError
+                        font.pixelSize: Theme.fontMeta
+                    }
+
                 }
             }
         }
-
-        // Dialog buttons
         RowLayout {
             Layout.fillWidth: true
             Item { Layout.fillWidth: true }
             SecondaryButton {
-                text: "Закрити"
+                Layout.fillWidth: false
+                text: I18n.t("whisper.close")
                 onClicked: root.close()
             }
+        }
+    }
+    Dialog {
+        id: deleteDialog
+        property string modelName: ""
+        implicitHeight: 240
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(420, parent ? parent.width - 48 : 420)
+        title: I18n.t("whisper.delete") + " " + modelName + "?"
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: backend.deleteWhisperModel(modelName, root.selectedDevice, root.selectedEngine)
+        contentItem: Label {
+            text: I18n.t("whisper.delete_hint")
+            wrapMode: Text.WordWrap
         }
     }
 }

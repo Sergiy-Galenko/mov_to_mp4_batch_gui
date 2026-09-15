@@ -93,6 +93,9 @@ BODY = r'''    @QtCore.Slot()
         self.ffmpeg_service.ffprobe_path = ffprobe_path
         self.ffmpeg_service.encoder_caps = set(caps)
         summary = []
+        apple = sorted(caps & {"h264_videotoolbox", "hevc_videotoolbox", "prores_videotoolbox"})
+        if apple:
+            summary.append("VideoToolbox (" + ", ".join(name.split("_")[0].upper() for name in apple) + ")")
         if {"h264_nvenc", "hevc_nvenc", "av1_nvenc"} & caps:
             summary.append("NVENC")
         if {"h264_qsv", "hevc_qsv", "av1_qsv"} & caps:
