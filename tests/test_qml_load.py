@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from PySide6.QtCore import QMetaObject, QObject, QPointF, QSettings, Qt, QUrl
+from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QPointF, QSettings, Qt, QUrl
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtQuick import QQuickItem
@@ -58,6 +58,57 @@ class QmlLoadTest(unittest.TestCase):
         )
         backend.settings_manager.save = Mock()
         backend.shutdown()
+
+    def test_whisper_manager_selection_progress_errors_and_reopening(self):
+        from services.whisper_model_manager import WhisperModelManager
+
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        with tempfile.TemporaryDirectory() as temporary:
+            backend = Backend()
+            backend.settings_manager.save = Mock()
+            backend.whisper_model_manager.shutdown()
+            backend.whisper_model_manager = WhisperModelManager(Path(temporary))
+            engine = QQmlApplicationEngine()
+            engine.addImportPath(str(qml_dir))
+            engine.rootContext().setContextProperty("backend", backend)
+            warnings = []
+            engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
+            try:
+                engine.load(QUrl.fromLocalFile(str(qml_dir / "Main.qml")))
+                self.assertTrue(engine.rootObjects())
+                root = engine.rootObjects()[0]
+                manager = root.findChild(QObject, "whisperModelManager")
+                self.assertIsNotNone(manager)
+                self.assertTrue(QMetaObject.invokeMethod(manager, "open"))
+                QTest.qWait(80)
+                self.assertTrue(manager.property("visible"))
+                self.assertEqual(root.findChild(QObject, "whisperModelsList").property("count"), 6)
+                self.assertTrue(QMetaObject.invokeMethod(manager, "chooseModel", Q_ARG("QVariant", "tiny")))
+                self.assertTrue(QMetaObject.invokeMethod(manager, "chooseDevice", Q_ARG("QVariant", "cpu")))
+                for _ in range(20):
+                    QTest.qWait(50)
+                    if backend._last_settings_map.get("subtitle_device") == "cpu":
+                        break
+                self.assertEqual(manager.property("selectedModel"), "tiny")
+                self.assertEqual(manager.property("selectedDevice"), "cpu")
+                self.assertEqual(backend._last_settings_map["subtitle_model"], "tiny")
+                self.assertEqual(backend._last_settings_map["subtitle_device"], "cpu")
+                # A zero-percent event is still an active transfer, not completion.
+                manager.setProperty("activeDownloadingModel", "tiny")
+                backend.whisperDownloadProgress.emit("tiny", 0.0, "tiny.pt")
+                QTest.qWait(20)
+                self.assertTrue(manager.property("downloading"))
+                QMetaObject.invokeMethod(manager, "close")
+                backend.whisper_model_manager._states[("tiny", "whisper")] = {
+                    "state": "error", "error": "Checksum mismatch", "progress": 0.0,
+                }
+                QMetaObject.invokeMethod(manager, "open")
+                QTest.qWait(80)
+                self.assertFalse(manager.property("downloading"))
+                self.assertEqual(manager.property("selectedDevice"), "cpu")
+                self.assertFalse([warning for warning in warnings if "WhisperModelManagerModal.qml" in warning], warnings)
+            finally:
+                backend.shutdown()
 
     def test_queue_views_search_and_status_filter_remain_in_sync(self):
         qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
@@ -259,13 +310,31 @@ ApplicationWindow {
         qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
         engine = QQmlApplicationEngine()
         engine.addImportPath(str(qml_dir))
-        for name in ("ABCompareSlider", "TimelineTrimSlider", "CropOverlay"):
+        for name in ("ABCompareSlider", "TimelineTrimSlider", "CropOverlay", "InOutMarker", "Timeline"):
             with self.subTest(component=name):
                 component = QQmlComponent(engine, QUrl.fromLocalFile(str(qml_dir / "components" / f"{name}.qml")))
                 self.assertFalse(component.isError(), "\n".join(error.toString() for error in component.errors()))
                 item = component.create()
                 self.assertIsNotNone(item)
                 item.deleteLater()
+
+    def test_montage_editor_dialog_loads(self):
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        backend = Backend()
+        backend.settings_manager.save = Mock()
+        try:
+            engine = QQmlApplicationEngine()
+            engine.addImportPath(str(qml_dir))
+            engine.rootContext().setContextProperty("backend", backend)
+            component = QQmlComponent(engine, QUrl.fromLocalFile(str(qml_dir / "components" / "MontageEditorDialog.qml")))
+            self.assertFalse(component.isError(), "\n".join(error.toString() for error in component.errors()))
+            dialog = component.create()
+            self.assertIsNotNone(dialog)
+            self.assertEqual(dialog.property("duration"), 0.0)
+            self.assertFalse(dialog.property("cropEnabled"))
+            dialog.deleteLater()
+        finally:
+            backend.shutdown()
 
 
 if __name__ == "__main__":

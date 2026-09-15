@@ -131,6 +131,8 @@ def _apply_hw_encoder(settings: ConversionSettings, value: Any) -> None:
         hw = "auto"
     elif hw in HW_ENCODER_MAP and HW_ENCODER_MAP[hw] == "cpu":
         hw = "cpu"
+    elif HW_ENCODER_MAP.get(hw) == "apple":
+        hw = "Apple (VideoToolbox)"
     if hw in HW_ENCODER_OPTIONS:
         settings.hw_encoder = str(hw)
 
@@ -268,6 +270,8 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.subtitle_language = str(settings_map.get("subtitle_language") or settings.subtitle_language).strip() or "auto"
     settings.subtitle_model = str(settings_map.get("subtitle_model") or settings.subtitle_model).strip() or "base"
     settings.subtitle_engine = str(settings_map.get("subtitle_engine") or settings.subtitle_engine).strip() or "auto"
+    device = str(settings_map.get("subtitle_device") or settings.subtitle_device).strip().lower()
+    settings.subtitle_device = device if device in {"auto", "mps", "cuda", "cpu"} else "auto"
     settings.subtitle_sync_ms = _coerce_int(settings_map.get("subtitle_sync_ms"), settings.subtitle_sync_ms, minimum=-600000, maximum=600000)
     settings.subtitle_style_enabled = _coerce_bool(settings_map.get("subtitle_style_enabled"), settings.subtitle_style_enabled)
     settings.subtitle_font_name = str(settings_map.get("subtitle_font_name") or settings.subtitle_font_name).strip()

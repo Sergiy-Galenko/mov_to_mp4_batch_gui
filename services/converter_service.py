@@ -133,7 +133,7 @@ class ConverterService:
 
     def _has_gpu_encoder(self) -> bool:
         caps = getattr(self.ffmpeg, "encoder_caps", set()) or set()
-        return bool({"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_qsv", "hevc_qsv", "av1_qsv", "h264_amf", "hevc_amf", "av1_amf"} & caps)
+        return any(FfmpegService.is_gpu_encoder(encoder) for encoder in caps)
 
     def conversion_worker_limit(self, settings: ConversionSettings | None = None) -> int:
         if settings and getattr(settings, "concurrency_limit", 0) > 0:
@@ -321,7 +321,8 @@ class ConverterService:
         if "-b:v" not in cmd or "-c:v" not in cmd:
             return False
         unsupported = {"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_qsv", "hevc_qsv", "av1_qsv", "h264_amf", "hevc_amf", "av1_amf", "prores_ks"}
-        return not any(encoder in joined for encoder in unsupported)
+        encoder = cmd[cmd.index("-c:v") + 1]
+        return not FfmpegService.is_gpu_encoder(encoder) and not any(encoder in joined for encoder in unsupported)
 
     def _cleanup_passlog(self, passlog: Path) -> None:
         for candidate in passlog.parent.glob(passlog.name + "*"):
@@ -346,7 +347,7 @@ class ConverterService:
             if skip_next:
                 skip_next = False
                 continue
-            if arg in {"-gpu", "-hwaccel", "-hwaccel_output_format", "-rc", "-rc:v", "-cq", "-qp_i", "-qp_p", "-qp_b", "-global_quality"}:
+            if arg in {"-gpu", "-hwaccel", "-hwaccel_output_format", "-rc", "-rc:v", "-cq", "-qp_i", "-qp_p", "-qp_b", "-global_quality", "-allow_sw", "-require_sw", "-realtime"}:
                 skip_next = True
                 continue
             cleaned.append(arg)
@@ -354,7 +355,17 @@ class ConverterService:
         if "-b:v" in cleaned and cleaned[cleaned.index("-b:v") + 1] == "0":
             pos = cleaned.index("-b:v")
             del cleaned[pos:pos + 2]
-        if "-b:v" not in cleaned:
+        if current_enc.endswith("_videotoolbox") and "-q:v" in cleaned:
+            pos = cleaned.index("-q:v")
+            quality = str(round(51 - float(cleaned[pos + 1]) * 51 / 100))
+            del cleaned[pos:pos + 2]
+        if cpu_enc == "prores_ks":
+            if "-profile:v" in cleaned:
+                pos = cleaned.index("-profile:v")
+                cleaned[pos + 1] = "3"
+            if "-pix_fmt" in cleaned:
+                cleaned[cleaned.index("-pix_fmt") + 1] = "yuv422p10le"
+        elif "-b:v" not in cleaned:
             cleaned[-1:-1] = ["-crf", quality]
         return cleaned
 
@@ -1243,7 +1254,7 @@ class ConverterService:
                         temporary = outp.with_name(f".{outp.stem}.{uuid.uuid4().hex}.partial{outp.suffix}")
                         try:
                             if isinstance(self.transcriber, TranscriptionService):
-                                rc = self.transcriber.generate_managed(task.path, temporary, settings_for_task, self._run_command)
+                                rc = self.transcriber.generate_managed(task.path, temporary, settings_for_task, self._run_command, self.ffmpeg.ffmpeg_path)
                             else:
                                 rc = self.transcriber.generate(task.path, temporary, settings_for_task, log_cb=self._log)
                             self._checkpoint()

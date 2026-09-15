@@ -37,6 +37,7 @@ from services.folder_scanner import FolderScanner
 from services.history_store import HistoryStore
 from services.license_service import LicenseInfo, LicenseService
 from services.media_preview_service import MediaPreviewService
+from services.montage_service import MontageService, MontageSessionStore
 from services.notification_service import NotificationService
 from services.paid_update_service import PaidUpdateInfo, PaidUpdateService
 from services.preset_manager import PresetManager
@@ -90,6 +91,8 @@ __all__ = [
     "LogModel",
     "MediaInfo",
     "MediaPreviewService",
+    "MontageService",
+    "MontageSessionStore",
     "NotificationService",
     "Optional",
     "PaidUpdateInfo",

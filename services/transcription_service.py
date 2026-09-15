@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -7,34 +8,29 @@ from dataclasses import asdict
 from pathlib import Path
 
 from app.models import ConversionSettings
-
-
-def _try_import_whisper() -> bool:
-    try:
-        import faster_whisper  # noqa: F401
-        return True
-    except Exception:
-        pass
-    try:
-        import whisper  # noqa: F401
-        return True
-    except Exception:
-        return False
+from services.whisper_model_manager import WhisperModelManager, normalize_model
+from services.whisper_runtime import cache_root, engine_for, package_available, resolve_device
 
 
 def is_whisper_available() -> bool:
-    return shutil.which("whisper") is not None or _try_import_whisper()
+    return shutil.which("whisper") is not None or package_available("whisper") or package_available("faster_whisper")
 
 
 class TranscriptionService:
-    def generate_managed(self, inp: Path, outp: Path, settings: ConversionSettings, run) -> int:
+    def generate_managed(self, inp: Path, outp: Path, settings: ConversionSettings, run, ffmpeg_path: str | None = None) -> int:
         """Keep model loading and transcription in a cancellable child process."""
         with tempfile.TemporaryDirectory() as tmp:
             config = Path(tmp) / "settings.json"
             config.write_text(json.dumps(asdict(settings)), encoding="utf-8")
             entry = [] if getattr(sys, "frozen", False) else [str(Path(__file__).resolve().parents[1] / "main.py")]
             cmd = [sys.executable, *entry, "--transcribe-worker", str(inp), str(outp), str(config)]
-            result = run(cmd)
+            if ffmpeg_path:
+                worker_env = dict(os.environ)
+                worker_env["MEDIA_CONVERTER_FFMPEG"] = str(ffmpeg_path)
+                worker_env["PATH"] = str(Path(ffmpeg_path).parent) + os.pathsep + worker_env.get("PATH", "")
+                result = run(cmd, env=worker_env)
+            else:
+                result = run(cmd)
             if result.returncode:
                 raise RuntimeError((result.stderr or result.stdout or "Transcription failed").strip()[-2000:])
             return result.returncode
@@ -57,11 +53,19 @@ class TranscriptionService:
         except Exception:
             return False
 
-        model_name = settings.subtitle_model.strip() or "base"
+        model_name = normalize_model(settings.subtitle_model.strip() or "base")
         language = settings.subtitle_language.strip() or "auto"
         lang_arg = None if language == "auto" else language
         try:
-            model = WhisperModel(model_name, device="auto", compute_type="default")
+            device = resolve_device(settings.subtitle_device, "faster-whisper")
+            manager = WhisperModelManager()
+            try:
+                cached = manager.model_path(model_name, "faster-whisper")
+                model = WhisperModel(str(cached) if cached else model_name, device=device,
+                                     compute_type="float16" if device == "cuda" else "int8",
+                                     download_root=str(manager.hub_dir))
+            finally:
+                manager.shutdown()
             segments, _info = model.transcribe(str(inp), language=lang_arg, beam_size=5)
             out_format = self._resolve_format(settings, outp)
             outp.parent.mkdir(parents=True, exist_ok=True)
@@ -85,23 +89,50 @@ class TranscriptionService:
                         f.write(f"{int(start_h):02d}:{int(start_m):02d}:{int(start_s):02d},{int((start_s % 1) * 1000):03d} --> {int(end_h):02d}:{int(end_m):02d}:{int(end_s):02d},{int((end_s % 1) * 1000):03d}\n")
                         f.write(f"{seg.text.strip()}\n\n")
             return outp.exists()
-        except Exception:
-            return False
+        except Exception as exc:
+            raise RuntimeError(f"faster-whisper ({settings.subtitle_device}): {exc}") from exc
+
+    def _whisper_audio(self, inp: Path):
+        from app.paths import find_ffmpeg
+
+        ffmpeg = find_ffmpeg()
+        if not ffmpeg:
+            return str(inp)
+        import numpy as np
+
+        # Use the app's selected executable, including binaries not named ffmpeg
+        # or installed on PATH. Match Whisper's 16 kHz mono float32 input.
+        result = subprocess.run(
+            [ffmpeg, "-nostdin", "-v", "error", "-i", str(inp), "-vn", "-f", "s16le",
+             "-ac", "1", "-ar", "16000", "-"], capture_output=True,
+        )
+        if result.returncode:
+            raise RuntimeError(result.stderr.decode("utf-8", errors="replace").strip() or "Audio decoding failed")
+        return np.frombuffer(result.stdout, np.int16).astype(np.float32) / 32768.0
 
     def _generate_with_python(self, inp: Path, outp: Path, settings: ConversionSettings) -> bool:
-        if self._generate_with_faster_whisper(inp, outp, settings):
-            return True
+        engine = engine_for(settings.subtitle_device, settings.subtitle_engine)
+        if engine == "faster-whisper":
+            return self._generate_with_faster_whisper(inp, outp, settings)
         try:
             import whisper  # type: ignore
             from whisper.utils import get_writer  # type: ignore
         except Exception:
             return False
 
-        model_name = settings.subtitle_model.strip() or "base"
+        model_name = normalize_model(settings.subtitle_model.strip() or "base")
         language = settings.subtitle_language.strip() or "auto"
         try:
-            model = whisper.load_model(model_name)
-            result = model.transcribe(str(inp), language=None if language == "auto" else language, verbose=False)
+            device = resolve_device(settings.subtitle_device, "whisper")
+            # Whisper registers a sparse alignment buffer, unsupported by MPS.
+            # Segment subtitles do not use word alignment, so move a dense buffer.
+            model = whisper.load_model(model_name, device="cpu" if device == "mps" else device,
+                                       download_root=str(cache_root() / "whisper"))
+            if device == "mps":
+                model.register_buffer("alignment_heads", model.alignment_heads.to_dense(), persistent=False)
+                model = model.to("mps")
+            result = model.transcribe(self._whisper_audio(inp), language=None if language == "auto" else language,
+                                      verbose=False, fp16=device == "cuda", word_timestamps=False)
             out_format = self._resolve_format(settings, outp)
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_dir = Path(tmpdir)
@@ -113,8 +144,8 @@ class TranscriptionService:
                 outp.parent.mkdir(parents=True, exist_ok=True)
                 outp.write_text(generated.read_text(encoding="utf-8"), encoding="utf-8")
             return outp.exists()
-        except Exception:
-            return False
+        except Exception as exc:
+            raise RuntimeError(f"Whisper ({settings.subtitle_device}): {exc}") from exc
 
     def generate(self, inp: Path, outp: Path, settings: ConversionSettings, log_cb=None) -> int:
         if outp.suffix.lower() == ".ass":
@@ -133,6 +164,11 @@ class TranscriptionService:
         if self._generate_with_python(inp, outp, settings):
             return 0
 
+        engine = engine_for(settings.subtitle_device, settings.subtitle_engine)
+        if engine == "faster-whisper":
+            raise RuntimeError("Install faster-whisper to use the selected transcription engine.")
+        if settings.subtitle_device == "mps":
+            raise RuntimeError("MPS transcription requires openai-whisper and an MPS-enabled PyTorch in this Python environment.")
         whisper_cli = self._resolve_cli(settings)
         if not whisper_cli:
             raise RuntimeError("Whisper не знайдено. Встанови openai-whisper або CLI whisper.")
@@ -146,7 +182,9 @@ class TranscriptionService:
                 "--task",
                 "transcribe",
                 "--model",
-                settings.subtitle_model.strip() or "base",
+                normalize_model(settings.subtitle_model.strip() or "base"),
+                "--model_dir",
+                str(cache_root() / "whisper"),
                 "--output_format",
                 out_format,
                 "--output_dir",
@@ -154,6 +192,11 @@ class TranscriptionService:
                 "--verbose",
                 "False",
             ]
+            device = settings.subtitle_device
+            if device == "auto" and package_available("torch"):
+                device = resolve_device("auto", "whisper")
+            if device != "auto":
+                cmd += ["--device", device, "--fp16", "True" if device == "cuda" else "False"]
             language = settings.subtitle_language.strip() or "auto"
             if language != "auto":
                 cmd += ["--language", language]

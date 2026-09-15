@@ -68,6 +68,7 @@ Rectangle {
                 MenuItem { text: I18n.t("nav_queue"); onTriggered: appRoot && appRoot.openTopMode("convert") }
                 MenuItem { text: I18n.t("workspace_photo"); onTriggered: appRoot && appRoot.openTopMode("photo") }
                 MenuItem { text: I18n.t("workspace_video"); onTriggered: appRoot && appRoot.openTopMode("video") }
+                MenuItem { text: "🎬 " + I18n.t("nav_montage"); onTriggered: appRoot && appRoot.openTopMode("montage") }
                 MenuItem { text: I18n.t("workspace_text"); onTriggered: appRoot && appRoot.openTopMode("text") }
                 MenuSeparator {}
                 MenuItem { text: I18n.t("nav_downloads"); onTriggered: appRoot && appRoot.openTopMode("downloads") }

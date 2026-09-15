@@ -140,6 +140,7 @@ ApplicationWindow {
     property bool advancedSettingsExpanded: false
     property var navigationItems: [
         { title: "nav_queue", icon: "queue", page: 0, target: "", group: "nav_workspace" },
+        { title: "nav_montage", icon: "film", page: 0, target: "montage", group: "nav_workspace" },
         { title: "nav_downloads", icon: "download", page: 4, target: "", group: "nav_workspace" },
         { title: "nav_presets", icon: "sliders", page: 2, target: "", group: "nav_workspace" },
         { title: "nav_analytics", icon: "chart", page: 1, target: "", group: "nav_workspace" },
@@ -172,7 +173,7 @@ ApplicationWindow {
     property var smartContentTypes: ["auto", "live_action", "animation", "screencast"]
     property var smartQualityTargets: ["small", "balanced", "quality"]
     property var smartQualityMetrics: ["none", "ssim", "vmaf"]
-    property var hwOptions: ["auto", "cpu", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"]
+    property var hwOptions: ["auto", "cpu", "Apple (VideoToolbox)", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"]
     property var performanceProfiles: ["Quality", "Balanced", "Fast", "Small file"]
     property var deviceProfiles: ["None", "iPhone 14/15/16", "iPad Pro", "Apple TV 4K HDR", "Android H.264 baseline", "Samsung TV", "PlayStation 5", "Xbox Series X", "Chromecast / Fire TV", "GoPro import", "DJI Drone import", "Steam Deck", "DVD compatible", "Blu-ray compatible"]
     property var rotateCanonicalOptions: ["0", "90° вправо", "90° вліво", "180°"]
@@ -513,6 +514,10 @@ ApplicationWindow {
     }
 
     function openSidebarSection(pageIndex, target, navIndex) {
+        if (target === "montage") {
+            openMontageEditor("")
+            return
+        }
         root.activeSection = pageIndex
         var resolvedNav = navIndex >= 0 ? navIndex : navIndexFor(pageIndex, target)
         if (resolvedNav >= 0)
@@ -540,12 +545,13 @@ ApplicationWindow {
         } else if (mode === "convert") {
             root.activeWorkspaceMode = "all"
             openSidebarSection(0, "", 0)
-        } else if (mode === "montage")
-            openSidebarSection(5, "video_editor", navIndexFor(5, "video_editor"))
-        else if (mode === "downloads")
+        } else if (mode === "montage") {
+            openMontageEditor("")
+        } else if (mode === "downloads") {
             openSidebarSection(4, "", navIndexFor(4, ""))
-        else if (mode === "analytics")
+        } else if (mode === "analytics") {
             openSidebarSection(1, "", navIndexFor(1, ""))
+        }
     }
 
     function topModeActive(mode) {
@@ -559,6 +565,7 @@ ApplicationWindow {
             return activeSection === 0 && root.activeWorkspaceMode === "all"
         if (mode === "montage")
             return activeSection === 5 && pendingSettingsTarget === "video_editor"
+            return montageEditorDialog.visible
         if (mode === "downloads")
             return activeSection === 4
         if (mode === "analytics")
@@ -1699,6 +1706,27 @@ ApplicationWindow {
     component SettingsPanel: ColumnLayout {
         id: settingsRoot
         spacing: 12
+        property string subtitleDevice: "auto"
+
+        WhisperModelManagerModal {
+            id: whisperModal
+            selectedModel: subtitleModelCombo.currentText
+            selectedDevice: settingsRoot.subtitleDevice
+            selectedEngine: subtitleEngineCombo.currentText
+            onModelChosen: function(name) {
+                root.setComboText(subtitleModelCombo, name)
+                root.scheduleSettingsSync()
+            }
+            onDeviceChosen: function(device) {
+                settingsRoot.subtitleDevice = device
+                root.scheduleSettingsSync()
+            }
+            onEngineChosen: function(engine) {
+                settingsRoot.subtitleDevice = "auto"
+                root.setComboText(subtitleEngineCombo, engine)
+                root.scheduleSettingsSync()
+            }
+        }
 
         function applyPreset(preset) {
             if (!preset)
@@ -1756,6 +1784,7 @@ ApplicationWindow {
             subtitleLanguageField.text = preset.subtitle_language || "auto"
             root.setComboText(subtitleModelCombo, preset.subtitle_model || "base")
             root.setComboText(subtitleEngineCombo, preset.subtitle_engine || "auto")
+            settingsRoot.subtitleDevice = preset.subtitle_device || "auto"
             thumbnailTimeField.text = preset.thumbnail_time || ""
             if (preset.sheet_cols !== undefined) sheetColsSpin.value = Number(preset.sheet_cols)
             if (preset.sheet_rows !== undefined) sheetRowsSpin.value = Number(preset.sheet_rows)
@@ -1895,6 +1924,7 @@ ApplicationWindow {
                 subtitle_language: subtitleLanguageField.text,
                 subtitle_model: subtitleModelCombo.currentText,
                 subtitle_engine: subtitleEngineCombo.currentText,
+                subtitle_device: settingsRoot.subtitleDevice,
                 thumbnail_time: thumbnailTimeField.text,
                 sheet_cols: sheetColsSpin.value,
                 sheet_rows: sheetRowsSpin.value,
@@ -2252,6 +2282,12 @@ ApplicationWindow {
         Panel {
             id: videoEditorPanel
             title: I18n.t("video_editor")
+            PrimaryButton {
+                Layout.fillWidth: true
+                text: "🎬 " + I18n.t("montage_editor") + " (Timeline + Crop)"
+                iconName: "film"
+                onClicked: root.openMontageEditor(root.selectedPath)
+            }
             RowLayout {
                 Layout.fillWidth: true
                 AppCheckBox { id: editorDeinterlaceCheck; text: I18n.t("editor_deinterlace"); onToggled: scheduleSettingsSync() }
@@ -2311,7 +2347,7 @@ ApplicationWindow {
                 AppSpinBox { id: subtitleStreamSpin; from: 0; to: 32; value: 0; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("language_field") }
                 AppTextField { id: subtitleLanguageField; text: "auto"; onEditingFinished: scheduleSettingsSync() }
-                FieldLabel { text: I18n.t("model"); visible: backend ? backend.isWhisperAvailable : true }
+                FieldLabel { text: I18n.t("model") }
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
@@ -2320,19 +2356,17 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         model: ["tiny", "base", "small", "medium", "large", "large-v3", "large-v3-turbo"]
                         currentIndex: 1
-                        visible: backend ? backend.isWhisperAvailable : true
-                        enabled: visible
                         onActivated: scheduleSettingsSync()
                     }
                     SecondaryButton {
-                        text: "Керування..."
+                        text: I18n.t("whisper.manage")
+                        objectName: "openWhisperManager"
                         implicitHeight: 32
-                        visible: backend ? backend.isWhisperAvailable : true
                         onClicked: whisperModal.open()
                     }
                 }
                 FieldLabel { text: I18n.t("engine"); visible: backend ? backend.isWhisperAvailable : true }
-                AppComboBox { id: subtitleEngineCombo; model: ["auto", "whisper"]; currentIndex: 0; visible: backend ? backend.isWhisperAvailable : true; enabled: visible; onActivated: scheduleSettingsSync() }
+                AppComboBox { id: subtitleEngineCombo; model: ["auto", "whisper", "faster-whisper"]; currentIndex: 0; visible: backend ? backend.isWhisperAvailable : true; enabled: visible; onActivated: scheduleSettingsSync() }
                 Label {
                     Layout.columnSpan: 2
                     Layout.fillWidth: true
@@ -2865,9 +2899,37 @@ ApplicationWindow {
         id: shortcutCheatSheet
     }
 
-    WhisperModelManagerModal {
-        id: whisperModal
+    MontageEditorDialog {
+        id: montageEditorDialog
+        objectName: "montageEditorDialog"
+        transientParent: root
     }
+
+    function openMontageEditor(path) {
+        var target = path || ""
+        if (!target && root.selectedPath && root.selectedMediaType === "video") {
+            target = root.selectedPath
+        }
+        if (!target && root.selectedPath) {
+            target = root.selectedPath
+        }
+        if (!target && backend && backend.visibleQueuePaths && backend.visibleQueuePaths.length > 0) {
+            for (var i = 0; i < backend.visibleQueuePaths.length; ++i) {
+                var candidate = String(backend.visibleQueuePaths[i])
+                var ext = candidate.slice(candidate.lastIndexOf(".")).toLowerCase()
+                if ([".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".flv", ".wmv", ".ts", ".m2ts"].indexOf(ext) >= 0) {
+                    target = candidate
+                    break
+                }
+            }
+            if (!target) target = String(backend.visibleQueuePaths[0])
+        }
+        if (!target && backend) {
+            target = backend.pickVideoFile()
+        }
+        montageEditorDialog.openForFile(target || "")
+    }
+
 
     function shortcutAllowed(action) {
         var editing = root.activeFocusItem && (root.activeFocusItem.selectByMouse !== undefined || root.activeFocusItem.inputMethodHints !== undefined)

@@ -57,6 +57,8 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
     outputTemplateChanged = QtCore.Signal()
     whisperModelsChanged = QtCore.Signal()
     whisperDownloadProgress = QtCore.Signal(str, float, str)
+    montageWaveformReady = QtCore.Signal(str, str)
+    montageSessionUpdated = QtCore.Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -64,6 +66,7 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
         self.event_queue: "queue.Queue[tuple]" = UiEventQueue()
         self.ffmpeg_service = FfmpegService(find_ffmpeg(), None)
         self.ffmpeg_service.ffprobe_path = find_ffprobe(self.ffmpeg_service.ffmpeg_path)
+        self.montage_service = MontageService(self.ffmpeg_service.ffmpeg_path, self.ffmpeg_service.ffprobe_path)
         self._converter_service = None
         self._runner = None
         self._media_analysis = None

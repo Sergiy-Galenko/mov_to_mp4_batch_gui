@@ -173,6 +173,7 @@ class ConversionSettings:
     subtitle_language: str = "auto"
     subtitle_model: str = "base"
     subtitle_engine: str = "auto"
+    subtitle_device: str = "auto"
     subtitle_sync_ms: int = 0
     subtitle_style_enabled: bool = False
     subtitle_font_name: str = ""
@@ -208,6 +209,7 @@ class ConversionSettings:
     replace_audio_path: str = ""
     normalize_audio: str = "none"
     audio_peak_limit_db: float | None = None
+    remove_audio: bool = False
     trim_silence: bool = False
     silence_threshold_db: int = -50
     silence_duration: float = 0.3

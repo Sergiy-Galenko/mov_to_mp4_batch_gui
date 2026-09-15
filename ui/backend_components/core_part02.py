@@ -103,6 +103,7 @@ BODY = r'''        self._youtube_history = self.settings_manager.youtube_history
         if self._youtube_cancel_event is not None:
             self._youtube_cancel_event.set()
         self.watch_service.stop()
+        self.whisper_model_manager.shutdown()
         self._probe_executor.shutdown(wait=False, cancel_futures=True)
         self._thumbnail_executor.shutdown(wait=False, cancel_futures=True)
 
@@ -146,26 +147,64 @@ BODY = r'''        self._youtube_history = self.settings_manager.youtube_history
             self._validation = ValidationService(self.ffmpeg_service)
         return self._validation
 
-    @QtCore.Slot(result=list)
-    def getWhisperModels(self) -> list:
-        return self.whisper_model_manager.list_models()
+    @QtCore.Slot(str, str, result=list)
+    def getWhisperModels(self, device: str = "auto", engine: str = "auto") -> list:
+        from services.whisper_runtime import engine_for
+        try:
+            return self.whisper_model_manager.list_models(engine_for(device, engine))
+        except Exception as exc:
+            self.toastRequested.emit(str(exc))
+            return []
 
-    @QtCore.Slot(result=list)
-    def getWhisperDevices(self) -> list:
-        return self.whisper_model_manager.detect_available_devices()
-
-    @QtCore.Slot(str)
-    def downloadWhisperModel(self, model_name: str) -> None:
-        def on_progress(pct: float, msg: str) -> None:
-            self.whisperDownloadProgress.emit(model_name, pct, msg)
-            if pct >= 1.0 or pct <= 0.0:
-                self.whisperModelsChanged.emit()
-
-        self.whisper_model_manager.download_model(model_name, on_progress)
+    @QtCore.Slot(str, result=list)
+    def getWhisperDevices(self, engine: str = "auto") -> list:
+        return self.whisper_model_manager.detect_available_devices(engine)
 
     @QtCore.Slot(str, result=bool)
-    def deleteWhisperModel(self, model_name: str) -> bool:
-        res = self.whisper_model_manager.delete_model(model_name)
-        self.whisperModelsChanged.emit()
-        return res
+    def whisperEngineInstalled(self, engine: str) -> bool:
+        from services.whisper_runtime import package_available
+        return package_available("faster_whisper" if engine == "faster-whisper" else "whisper")
+
+    @QtCore.Slot(str, str, result=str)
+    def getWhisperEngine(self, device: str, engine: str) -> str:
+        from services.whisper_runtime import engine_for
+        try:
+            return engine_for(device, engine)
+        except ValueError:
+            return ""
+
+    @QtCore.Slot(str, str, str, result=bool)
+    def downloadWhisperModel(self, model_name: str, device: str, engine: str) -> bool:
+        from services.whisper_runtime import engine_for
+        def on_progress(pct: float, msg: str) -> None:
+            self.whisperDownloadProgress.emit(model_name, pct, msg)
+        try:
+            future = self.whisper_model_manager.download_model(model_name, on_progress, engine_for(device, engine))
+            def finished(_future):
+                if not self.whisper_model_manager.closed:
+                    self.whisperModelsChanged.emit()
+            future.add_done_callback(finished)
+            self.whisperModelsChanged.emit()
+            return True
+        except Exception as exc:
+            self.toastRequested.emit(str(exc))
+            return False
+
+    @QtCore.Slot()
+    def cancelWhisperDownload(self) -> None:
+        self.whisper_model_manager.cancel_download()
+
+    @QtCore.Slot(str, str, str, result=bool)
+    def deleteWhisperModel(self, model_name: str, device: str, engine: str) -> bool:
+        from services.whisper_runtime import engine_for
+        if self.isRunning:
+            self.toastRequested.emit(self._tr("whisper.busy"))
+            return False
+        try:
+            result = self.whisper_model_manager.delete_model(model_name, engine_for(device, engine))
+            self.whisperModelsChanged.emit()
+            return result
+        except Exception as exc:
+            self.toastRequested.emit(str(exc))
+            return False
 '''

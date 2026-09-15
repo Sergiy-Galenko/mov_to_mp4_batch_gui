@@ -90,7 +90,11 @@ QtObject {
         "whats_new_merge_loudnorm_title": "Media Merge & EBU R128 Loudness",
         "whats_new_merge_loudnorm_body": "Fast concatenation for audio/video files and two-pass EBU R128 loudness normalization.",
         "whats_new_apple_whisper_title": "Apple Silicon & Whisper Model Manager",
-        "whats_new_apple_whisper_body": "VideoToolbox hardware acceleration on macOS M1-M4 and modal manager for Whisper AI models."
+        "whats_new_apple_whisper_body": "VideoToolbox hardware acceleration on macOS M1-M4 and modal manager for Whisper AI models.",
+        "montage_editor": "Montage Editor",
+        "waveform_loading": "Loading waveform…",
+        "crop": "Crop",
+        "nav_montage": "Video montage"
     })
 
     Component.onCompleted: syncFromBackend()
