@@ -246,6 +246,18 @@ Rectangle {
                     }
                 }
 
+                PrimaryButton {
+                    Layout.fillWidth: true
+                    visible: !root.batchSelection && appRoot && (appRoot.selectedMediaType === "video" || appRoot.selectedMediaType === "audio")
+                    text: "🎬 " + I18n.t("montage_editor")
+                    implicitHeight: 34
+                    onClicked: {
+                        if (appRoot && appRoot.selectedPath) {
+                            appRoot.openMontageEditor(appRoot.selectedPath)
+                        }
+                    }
+                }
+
                 // Interactive Timeline Trim Slider
                 TimelineTrimSlider {
                     id: timelineTrim

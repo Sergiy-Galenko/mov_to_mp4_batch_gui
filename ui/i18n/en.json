@@ -14,6 +14,7 @@
   "drop_start": "Drop files here to start converting",
   "drop_choose": "or choose files from your computer",
   "nav_queue": "Conversion queue",
+  "nav_montage": "Video montage",
   "nav_downloads": "Downloads from URLs",
   "nav_presets": "Saved presets",
   "nav_analytics": "Conversion statistics",
@@ -605,5 +606,8 @@
   "whisper.state.missing": "Not downloaded",
   "whisper.state.downloading": "Downloading",
   "whisper.state.cancelled": "Cancelled — ready to retry",
-  "whisper.state.error": "Download failed — retry"
+  "whisper.state.error": "Download failed — retry",
+  "montage_editor": "Montage Editor",
+  "waveform_loading": "Loading waveform…",
+  "crop": "Crop"
 }

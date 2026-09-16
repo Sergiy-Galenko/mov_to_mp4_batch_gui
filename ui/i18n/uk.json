@@ -14,6 +14,7 @@
   "drop_start": "Перетягніть файли, щоб почати конвертацію",
   "drop_choose": "або виберіть файли на комп’ютері",
   "nav_queue": "Черга конвертації",
+  "nav_montage": "Відео монтаж",
   "nav_downloads": "Завантаження за посиланням",
   "nav_presets": "Збережені пресети",
   "nav_analytics": "Статистика конвертацій",
@@ -605,5 +606,8 @@
   "whisper.state.missing": "Не завантажено",
   "whisper.state.downloading": "Завантаження",
   "whisper.state.cancelled": "Скасовано — можна повторити",
-  "whisper.state.error": "Помилка — повторіть завантаження"
+  "whisper.state.error": "Помилка — повторіть завантаження",
+  "montage_editor": "Редактор монтажу",
+  "waveform_loading": "Завантаження форми хвилі…",
+  "crop": "Кадрування"
 }

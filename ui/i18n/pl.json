@@ -14,6 +14,7 @@
   "drop_start": "Upuść pliki, aby rozpocząć konwersję",
   "drop_choose": "lub wybierz pliki z komputera",
   "nav_queue": "Kolejka konwersji",
+  "nav_montage": "Montaż wideo",
   "nav_downloads": "Pobieranie z adresów URL",
   "nav_presets": "Zapisane ustawienia",
   "nav_analytics": "Statystyki konwersji",
@@ -605,5 +606,8 @@
   "whisper.state.missing": "Nie pobrano",
   "whisper.state.downloading": "Pobieranie",
   "whisper.state.cancelled": "Anulowano — można ponowić",
-  "whisper.state.error": "Błąd pobierania — ponów"
+  "whisper.state.error": "Błąd pobierania — ponów",
+  "montage_editor": "Edytor montażu",
+  "waveform_loading": "Ładowanie fali dźwiękowej…",
+  "crop": "Kadrowanie"
 }

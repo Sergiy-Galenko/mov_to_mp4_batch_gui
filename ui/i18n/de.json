@@ -14,6 +14,7 @@
   "drop_start": "Dateien hier ablegen, um die Konvertierung zu starten",
   "drop_choose": "oder Dateien vom Computer auswählen",
   "nav_queue": "Konvertierungswarteschlange",
+  "nav_montage": "Videomontage",
   "nav_downloads": "Downloads von URLs",
   "nav_presets": "Gespeicherte Vorlagen",
   "nav_analytics": "Konvertierungsstatistik",
@@ -605,5 +606,8 @@
   "whisper.state.missing": "Nicht heruntergeladen",
   "whisper.state.downloading": "Download läuft",
   "whisper.state.cancelled": "Abgebrochen — erneut versuchen",
-  "whisper.state.error": "Download fehlgeschlagen — erneut versuchen"
+  "whisper.state.error": "Download fehlgeschlagen — erneut versuchen",
+  "montage_editor": "Montage-Editor",
+  "waveform_loading": "Wellenform wird geladen…",
+  "crop": "Zuschneiden"
 }

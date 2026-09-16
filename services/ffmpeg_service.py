@@ -1138,7 +1138,10 @@ class FfmpegService:
             track_index = max(0, int(settings.audio_track_index))
             cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
             cmd += trim_args
-            cmd += ["-map", "0:v:0?", "-map", f"0:a:{track_index}?", "-map", "0:s?"]
+            if settings.remove_audio:
+                cmd += ["-map", "0:v:0?", "-an", "-map", "0:s?"]
+            else:
+                cmd += ["-map", "0:v:0?", "-map", f"0:a:{track_index}?", "-map", "0:s?"]
             cmd += ["-c", "copy"]
             cmd += self.metadata_args(settings)
             if out_ext in {".mp4", ".mov", ".m4v"}:
@@ -1163,7 +1166,7 @@ class FfmpegService:
         else:
             cmd += ["-map", "0:v:0?"]
 
-        if out_ext != ".gif":
+        if out_ext != ".gif" and not settings.remove_audio:
             if replace_audio is not None:
                 cmd += ["-map", f"{audio_input_index}:a:0?"]
             else:

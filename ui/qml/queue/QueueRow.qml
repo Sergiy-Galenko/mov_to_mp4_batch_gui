@@ -206,6 +206,15 @@ Rectangle {
         padding: 4
         background: Rectangle { color: Theme.panelBackground; border.width: 1; border.color: Theme.borderDefault; radius: Theme.radiusMd }
         MenuItem { text: I18n.t("quick_convert"); onTriggered: root.quickConvertRequested(root.filePath, root.fileName, root.mediaType, root.itemIndex) }
+        MenuItem {
+            text: "🎬 " + I18n.t("montage_editor")
+            visible: root.mediaType === "video" || root.mediaType === "audio"
+            onTriggered: {
+                if (typeof appRoot !== "undefined" && appRoot && appRoot.openMontageEditor) {
+                    appRoot.openMontageEditor(root.filePath)
+                }
+            }
+        }
         MenuItem { text: I18n.t("retry"); enabled: root.status === "failed" || root.status === "cancelled"; onTriggered: root.retryRequested(root.filePath) }
         MenuItem { text: I18n.t("skip"); enabled: root.status === "running"; onTriggered: root.skipRequested(root.filePath) }
         MenuItem { text: I18n.t("open_output"); enabled: root.outputPath.length > 0; onTriggered: root.openOutputRequested(root.filePath) }

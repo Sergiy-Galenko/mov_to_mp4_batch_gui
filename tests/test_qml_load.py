@@ -310,13 +310,31 @@ ApplicationWindow {
         qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
         engine = QQmlApplicationEngine()
         engine.addImportPath(str(qml_dir))
-        for name in ("ABCompareSlider", "TimelineTrimSlider", "CropOverlay"):
+        for name in ("ABCompareSlider", "TimelineTrimSlider", "CropOverlay", "InOutMarker", "Timeline"):
             with self.subTest(component=name):
                 component = QQmlComponent(engine, QUrl.fromLocalFile(str(qml_dir / "components" / f"{name}.qml")))
                 self.assertFalse(component.isError(), "\n".join(error.toString() for error in component.errors()))
                 item = component.create()
                 self.assertIsNotNone(item)
                 item.deleteLater()
+
+    def test_montage_editor_dialog_loads(self):
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        backend = Backend()
+        backend.settings_manager.save = Mock()
+        try:
+            engine = QQmlApplicationEngine()
+            engine.addImportPath(str(qml_dir))
+            engine.rootContext().setContextProperty("backend", backend)
+            component = QQmlComponent(engine, QUrl.fromLocalFile(str(qml_dir / "components" / "MontageEditorDialog.qml")))
+            self.assertFalse(component.isError(), "\n".join(error.toString() for error in component.errors()))
+            dialog = component.create()
+            self.assertIsNotNone(dialog)
+            self.assertEqual(dialog.property("duration"), 0.0)
+            self.assertFalse(dialog.property("cropEnabled"))
+            dialog.deleteLater()
+        finally:
+            backend.shutdown()
 
 
 if __name__ == "__main__":

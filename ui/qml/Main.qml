@@ -140,6 +140,7 @@ ApplicationWindow {
     property bool advancedSettingsExpanded: false
     property var navigationItems: [
         { title: "nav_queue", icon: "queue", page: 0, target: "", group: "nav_workspace" },
+        { title: "nav_montage", icon: "film", page: 0, target: "montage", group: "nav_workspace" },
         { title: "nav_downloads", icon: "download", page: 4, target: "", group: "nav_workspace" },
         { title: "nav_presets", icon: "sliders", page: 2, target: "", group: "nav_workspace" },
         { title: "nav_analytics", icon: "chart", page: 1, target: "", group: "nav_workspace" },
@@ -513,6 +514,10 @@ ApplicationWindow {
     }
 
     function openSidebarSection(pageIndex, target, navIndex) {
+        if (target === "montage") {
+            openMontageEditor("")
+            return
+        }
         root.activeSection = pageIndex
         var resolvedNav = navIndex >= 0 ? navIndex : navIndexFor(pageIndex, target)
         if (resolvedNav >= 0)
@@ -540,12 +545,13 @@ ApplicationWindow {
         } else if (mode === "convert") {
             root.activeWorkspaceMode = "all"
             openSidebarSection(0, "", 0)
-        } else if (mode === "montage")
-            openSidebarSection(5, "video_editor", navIndexFor(5, "video_editor"))
-        else if (mode === "downloads")
+        } else if (mode === "montage") {
+            openMontageEditor("")
+        } else if (mode === "downloads") {
             openSidebarSection(4, "", navIndexFor(4, ""))
-        else if (mode === "analytics")
+        } else if (mode === "analytics") {
             openSidebarSection(1, "", navIndexFor(1, ""))
+        }
     }
 
     function topModeActive(mode) {
@@ -559,6 +565,7 @@ ApplicationWindow {
             return activeSection === 0 && root.activeWorkspaceMode === "all"
         if (mode === "montage")
             return activeSection === 5 && pendingSettingsTarget === "video_editor"
+            return montageEditorDialog.visible
         if (mode === "downloads")
             return activeSection === 4
         if (mode === "analytics")
@@ -2275,6 +2282,12 @@ ApplicationWindow {
         Panel {
             id: videoEditorPanel
             title: I18n.t("video_editor")
+            PrimaryButton {
+                Layout.fillWidth: true
+                text: "🎬 " + I18n.t("montage_editor") + " (Timeline + Crop)"
+                iconName: "film"
+                onClicked: root.openMontageEditor(root.selectedPath)
+            }
             RowLayout {
                 Layout.fillWidth: true
                 AppCheckBox { id: editorDeinterlaceCheck; text: I18n.t("editor_deinterlace"); onToggled: scheduleSettingsSync() }
@@ -2884,6 +2897,37 @@ ApplicationWindow {
 
     ShortcutCheatSheetModal {
         id: shortcutCheatSheet
+    }
+
+    MontageEditorDialog {
+        id: montageEditorDialog
+        objectName: "montageEditorDialog"
+        transientParent: root
+    }
+
+    function openMontageEditor(path) {
+        var target = path || ""
+        if (!target && root.selectedPath && root.selectedMediaType === "video") {
+            target = root.selectedPath
+        }
+        if (!target && root.selectedPath) {
+            target = root.selectedPath
+        }
+        if (!target && backend && backend.visibleQueuePaths && backend.visibleQueuePaths.length > 0) {
+            for (var i = 0; i < backend.visibleQueuePaths.length; ++i) {
+                var candidate = String(backend.visibleQueuePaths[i])
+                var ext = candidate.slice(candidate.lastIndexOf(".")).toLowerCase()
+                if ([".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".flv", ".wmv", ".ts", ".m2ts"].indexOf(ext) >= 0) {
+                    target = candidate
+                    break
+                }
+            }
+            if (!target) target = String(backend.visibleQueuePaths[0])
+        }
+        if (!target && backend) {
+            target = backend.pickVideoFile()
+        }
+        montageEditorDialog.openForFile(target || "")
     }
 
 

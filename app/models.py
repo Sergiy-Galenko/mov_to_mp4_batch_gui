@@ -209,6 +209,7 @@ class ConversionSettings:
     replace_audio_path: str = ""
     normalize_audio: str = "none"
     audio_peak_limit_db: float | None = None
+    remove_audio: bool = False
     trim_silence: bool = False
     silence_threshold_db: int = -50
     silence_duration: float = 0.3

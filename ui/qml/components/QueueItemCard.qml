@@ -244,6 +244,15 @@ Rectangle {
     Menu {
         id: cardMenu
         MenuItem { text: I18n.t("quick_convert"); onTriggered: root.quickConvertRequested(root.filePath, root.fileName, root.mediaType, root.itemIndex) }
+        MenuItem {
+            text: "🎬 " + I18n.t("montage_editor")
+            visible: root.mediaType === "video" || root.mediaType === "audio"
+            onTriggered: {
+                if (typeof appRoot !== "undefined" && appRoot && appRoot.openMontageEditor) {
+                    appRoot.openMontageEditor(root.filePath)
+                }
+            }
+        }
         MenuItem { text: I18n.t("convert_this_file"); onTriggered: root.quickConvertRequested(root.filePath, root.fileName, root.mediaType, root.itemIndex) }
         MenuItem { text: I18n.t("open_output"); enabled: root.status === "success" && root.outputPath.length > 0; onTriggered: root.openOutputRequested(root.filePath) }
         MenuItem { text: I18n.t("retry"); visible: root.status === "failed"; onTriggered: root.retryRequested(root.filePath) }
