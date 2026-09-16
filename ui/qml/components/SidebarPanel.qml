@@ -5,136 +5,176 @@ import App 1.0
 
 Rectangle {
     id: root
+    objectName: "appSidebar"
+    property var appRoot
     property bool collapsed: false
     property int activeIndex: 0
     property var navigationItems: []
+    property alias searchField: navigationSearch
     signal sectionRequested(int pageIndex, string target, int navIndex)
     signal addFilesRequested()
     signal addFolderRequested()
     signal dedupeRequested()
 
-    Layout.preferredWidth: collapsed ? 58 : Theme.sidebarWidth
-    Layout.minimumWidth: collapsed ? 58 : 196
+    Layout.preferredWidth: collapsed ? 62 : Theme.sidebarWidth
+    Layout.minimumWidth: collapsed ? 62 : 220
     color: Theme.sidebarBackground
-    border.width: 0
     clip: true
 
-    Behavior on Layout.preferredWidth {
-        NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+    onCollapsedChanged: if (appRoot && appRoot.sidebarCollapsed !== collapsed) appRoot.sidebarCollapsed = collapsed
+
+    onActiveIndexChanged: revealActiveTimer.restart()
+    onHeightChanged: revealActiveTimer.restart()
+    Component.onCompleted: revealActiveTimer.restart()
+    Timer { id: revealActiveTimer; interval: 50; onTriggered: root.ensureActiveVisible() }
+    function ensureActiveVisible() {
+        var item = navigationRepeater.itemAt(activeIndex)
+        var viewport = scroll.contentItem
+        if (!item || !viewport) return
+        var top = item.y
+        var bottom = top + item.height
+        if (top < viewport.contentY) viewport.contentY = top
+        else if (bottom > viewport.contentY + viewport.height)
+            viewport.contentY = Math.min(bottom - viewport.height, Math.max(0, viewport.contentHeight - viewport.height))
     }
 
     function groupVisible(index) {
-        if (root.collapsed || index < 0 || index >= root.navigationItems.length)
-            return false
-        var current = root.navigationItems[index]
-        var previous = index > 0 ? root.navigationItems[index - 1] : null
-        return current.group && (!previous || previous.group !== current.group)
+        if (root.collapsed || index < 0 || index >= root.navigationItems.length) return false
+        return index === 0 || root.navigationItems[index - 1].group !== root.navigationItems[index].group
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.topMargin: Theme.space3
+        anchors.topMargin: Theme.space2
         anchors.bottomMargin: Theme.space3
         spacing: Theme.space2
 
-        RowLayout {
+        AppTextField {
+            id: navigationSearch
+            objectName: "sidebarSearchField"
+            visible: !root.collapsed
+            Layout.leftMargin: 12; Layout.rightMargin: 12
             Layout.fillWidth: true
-            Layout.leftMargin: root.collapsed ? Theme.space2 : Theme.space3
-            Layout.rightMargin: Theme.space2
-            Layout.preferredHeight: 30
-            spacing: Theme.space2
-
-            Label {
-                visible: !root.collapsed
-                Layout.fillWidth: true
-                text: I18n.t("app.title")
-                color: Theme.textPrimary
-                font.family: Theme.displayFont
-                font.pixelSize: Theme.fontSizeSm
-                font.bold: true
-                elide: Text.ElideRight
+            search: true
+            placeholderText: I18n.t("global_search")
+            text: appRoot ? appRoot.globalSearchText : ""
+            onTextChanged: if (appRoot) appRoot.runGlobalSearch(text)
+            Keys.onReturnPressed: {
+                if (appRoot && appRoot.globalSearchResults.length) appRoot.activateSearchResult(appRoot.globalSearchResults[0])
             }
+            Keys.onEscapePressed: clear()
+        }
 
-            AppIconButton {
-                Layout.alignment: Qt.AlignRight
-                iconName: root.collapsed ? "chevron" : "chevron"
-                rotation: root.collapsed ? 0 : 180
-                accessibleLabel: root.collapsed ? I18n.t("expand") : I18n.t("collapse")
-                onClicked: root.collapsed = !root.collapsed
+        RowLayout {
+            visible: !root.collapsed
+            Layout.fillWidth: true
+            Layout.leftMargin: 16; Layout.rightMargin: 12
+            Layout.topMargin: 8; Layout.bottomMargin: 10
+            spacing: 10
+            Rectangle {
+                width: 42; height: 42
+                radius: Theme.isMac ? 21 : 8
+                color: Theme.panelSecondary
+                BrandMark { anchors.centerIn: parent; width: 30; height: 30; source: appRoot ? appRoot.appLogoSource : "" }
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+                Label {
+                    Layout.fillWidth: true
+                    text: I18n.t("app.title")
+                    color: Theme.textPrimary
+                    font.pixelSize: Theme.fontSizeMd
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
+                Label {
+                    text: I18n.t("design.workspace")
+                    color: Theme.textSecondary
+                    font.pixelSize: Theme.fontMeta
+                }
             }
         }
 
         ScrollView {
             id: scroll
+            objectName: "navigationScroll"
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
             Column {
                 width: scroll.availableWidth
                 spacing: 2
-
                 Repeater {
+                    id: navigationRepeater
                     model: root.navigationItems
-
                     delegate: Item {
+                        required property int index
+                        required property var modelData
                         width: parent.width
-                        height: (root.groupVisible(index) ? 26 : 0) + 36
-
+                        height: (root.groupVisible(index) ? 27 : 0) + Theme.navigationHeight
                         Label {
                             visible: root.groupVisible(index)
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.leftMargin: Theme.space3
-                            anchors.rightMargin: Theme.space2
-                            height: 26
+                            anchors.left: parent.left; anchors.right: parent.right
+                            anchors.leftMargin: 19; anchors.rightMargin: 12
+                            height: 27
                             verticalAlignment: Text.AlignVCenter
-                            text: I18n.t(modelData.group).toUpperCase()
-                            color: Theme.textMuted
-                            font.pixelSize: 10
+                            text: I18n.t(modelData.group)
+                            color: Theme.textDisabled
+                            font.pixelSize: 11
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
                         }
-
                         Button {
                             id: navButton
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.leftMargin: root.collapsed ? Theme.space2 : Theme.space2
-                            anchors.rightMargin: Theme.space2
+                            objectName: "nav_" + (modelData.target || modelData.title)
+                            anchors.left: parent.left; anchors.right: parent.right
+                            anchors.margins: 8
                             anchors.top: parent.top
-                            anchors.topMargin: root.groupVisible(index) ? 26 : 0
-                            height: 34
+                            anchors.topMargin: root.groupVisible(index) ? 27 : 0
+                            height: Theme.navigationHeight
+                            padding: 0
                             hoverEnabled: true
                             focusPolicy: Qt.StrongFocus
                             highlighted: root.activeIndex === index
                             Accessible.name: I18n.t(modelData.title)
-                            ToolTip.visible: root.collapsed && hovered
+                            Accessible.role: Accessible.PageTab
+                            Accessible.selected: highlighted
+                            ToolTip.visible: hovered && (root.collapsed || navigationLabel.truncated)
                             ToolTip.delay: 550
                             ToolTip.text: I18n.t(modelData.title)
                             onClicked: root.sectionRequested(modelData.page, modelData.target || "", index)
-
-                            background: ButtonSurface { control: navButton; variant: "ghost" }
-
-                            contentItem: RowLayout {
-                                spacing: root.collapsed ? 0 : Theme.space2
-
-                                AppIcon {
-                                    Layout.preferredWidth: 18
-                                    Layout.preferredHeight: 18
-                                    Layout.leftMargin: root.collapsed ? 8 : 10
-                                    name: modelData.icon || "dot"
-                                    iconColor: root.activeIndex === index ? Theme.accentPrimary : Theme.textSecondary
+                            background: Rectangle {
+                                radius: Theme.isMac ? 7 : 4
+                                color: navButton.highlighted ? Theme.navigationSelection : navButton.hovered ? Theme.overlayHover : "transparent"
+                                border.width: navButton.visualFocus ? 2 : 0
+                                border.color: Theme.focusRing
+                                Rectangle {
+                                    visible: !Theme.isMac && navButton.highlighted
+                                    width: 3; height: 18; radius: 2
+                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                    color: Theme.accent
                                 }
-
+                            }
+                            contentItem: RowLayout {
+                                spacing: 9
+                                NavigationIcon {
+                                    Layout.leftMargin: root.collapsed ? 8 : 9
+                                    Layout.preferredWidth: 26; Layout.preferredHeight: 26
+                                    glyphSize: 17
+                                    name: modelData.icon || "settings"
+                                    tint: modelData.tint || Theme.accent
+                                }
                                 Label {
+                                    id: navigationLabel
                                     visible: !root.collapsed
                                     Layout.fillWidth: true
+                                    Layout.rightMargin: 8
                                     text: I18n.t(modelData.title)
-                                    color: root.activeIndex === index ? Theme.textPrimary : Theme.textSecondary
+                                    color: navButton.highlighted ? Theme.navigationText : Theme.textPrimary
                                     font.pixelSize: Theme.fontSizeSm
-                                    font.weight: root.activeIndex === index ? Font.DemiBold : Font.Normal
+                                    font.weight: navButton.highlighted ? Font.DemiBold : Font.Normal
                                     elide: Text.ElideRight
                                 }
                             }
@@ -143,53 +183,28 @@ Rectangle {
                 }
             }
         }
-
         Rectangle {
             Layout.fillWidth: true
-            Layout.leftMargin: Theme.space2
-            Layout.rightMargin: Theme.space2
+            Layout.leftMargin: 16; Layout.rightMargin: 16
             Layout.preferredHeight: 1
             color: Theme.borderMuted
         }
-
-        ColumnLayout {
+        RowLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: Theme.space2
-            Layout.rightMargin: Theme.space2
-            spacing: 2
-
-            Button {
-                id: addFilesButton
+            Layout.leftMargin: 12; Layout.rightMargin: 12
+            spacing: 6
+            AppButton {
                 Layout.fillWidth: true
-                implicitHeight: 34
-                hoverEnabled: true
+                text: root.collapsed ? "" : I18n.t("add_files")
+                iconName: "plus"
                 Accessible.name: I18n.t("add_files")
-                ToolTip.visible: root.collapsed && hovered
-                ToolTip.text: I18n.t("add_files")
                 onClicked: root.addFilesRequested()
-                background: ButtonSurface { control: addFilesButton; variant: "ghost" }
-                contentItem: RowLayout {
-                    spacing: Theme.space2
-                    AppIcon { Layout.preferredWidth: 18; Layout.preferredHeight: 18; Layout.leftMargin: root.collapsed ? 8 : 10; name: "plus"; iconColor: Theme.textSecondary }
-                    Label { visible: !root.collapsed; Layout.fillWidth: true; text: I18n.t("add_files"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeSm; elide: Text.ElideRight }
-                }
             }
-
-            Button {
-                id: addFolderButton
-                Layout.fillWidth: true
-                implicitHeight: 34
-                hoverEnabled: true
-                Accessible.name: I18n.t("add_folder")
-                ToolTip.visible: root.collapsed && hovered
-                ToolTip.text: I18n.t("add_folder")
+            AppIconButton {
+                visible: !root.collapsed
+                iconName: "folder"
+                accessibleLabel: I18n.t("add_folder")
                 onClicked: root.addFolderRequested()
-                background: ButtonSurface { control: addFolderButton; variant: "ghost" }
-                contentItem: RowLayout {
-                    spacing: Theme.space2
-                    AppIcon { Layout.preferredWidth: 18; Layout.preferredHeight: 18; Layout.leftMargin: root.collapsed ? 8 : 10; name: "folder"; iconColor: Theme.textSecondary }
-                    Label { visible: !root.collapsed; Layout.fillWidth: true; text: I18n.t("add_folder"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeSm; elide: Text.ElideRight }
-                }
             }
         }
     }

@@ -328,7 +328,6 @@
   "backend.no_tasks": "Немає задач для запуску.",
   "backend.output_dir_error": "Не вдалося створити папку виводу:\n{error}",
   "backend.output_dir_required": "Перед стартом обери папку результатів.",
-
   "theme": "Тема",
   "switch_to_dark_theme": "Увімкнути темну тему",
   "switch_to_light_theme": "Увімкнути світлу тему",
@@ -346,26 +345,22 @@
   "import_theme": "Імпортувати тему",
   "export_theme": "Експортувати тему",
   "detect_theme": "Визначити тему ОС",
-
   "shortcuts": "Гарячі клавіші",
   "shortcut_action": "Дія",
   "shortcut_key": "Клавіша",
   "reset_shortcut": "Скинути",
   "reset_all_shortcuts": "Скинути всі",
   "shortcut_conflict": "Конфлікт гарячих клавіш",
-
   "system_tray": "Системний трей",
   "enable_tray": "Увімкнути трей",
   "minimize_to_tray": "Згортати до трею",
   "tray_notifications": "Сповіщення",
   "push_notifications": "Push-сповіщення",
-
   "folder_filter": "Фільтр типу",
   "folder_exclude": "Виключити паттерни",
   "add_folder_filtered": "Додати папку (з фільтрами)",
   "scan_stats": "Статистика сканування",
   "all_types": "Усі типи",
-
   "paste_clipboard": "Вставити з буферу",
   "save_queue": "Зберегти чергу",
   "load_queue": "Завантажити чергу",
@@ -521,13 +516,13 @@
   "appearance.name": "Назва вашої схеми",
   "appearance.saved_themes": "Збережені схеми",
   "appearance.reset_colors": "Скинути кольори",
-  "appearance.recovery_shortcut": "Ctrl+Alt+0 повертає чорно-білу тему в будь-який момент.",
+  "appearance.recovery_shortcut": "Ctrl+Alt+0 відновлює стандартні кольори вашої платформи в будь-який момент.",
   "appearance.hex_hint": "Введіть #RGB, #RRGGBB або #AARRGGBB (прозорість на початку).",
   "appearance.saved": "Кольорову схему збережено.",
   "appearance.imported": "Кольорову схему імпортовано.",
   "appearance.exported": "Кольорову схему експортовано.",
   "appearance.invalid_file": "Не вдалося імпортувати тему",
-  "appearance.mode.dark": "Чорно-біла",
+  "appearance.mode.dark": "Темна",
   "appearance.mode.light": "Світла",
   "appearance.mode.obsidian": "Обсидіан",
   "appearance.mode.oled": "Чорна OLED",
@@ -609,5 +604,10 @@
   "whisper.state.error": "Помилка — повторіть завантаження",
   "montage_editor": "Редактор монтажу",
   "waveform_loading": "Завантаження форми хвилі…",
-  "crop": "Кадрування"
+  "crop": "Кадрування",
+  "design.workspace": "Ваш медіапростір",
+  "design.back": "Назад",
+  "design.forward": "Уперед",
+  "design.app_menu": "Меню застосунку",
+  "design.deduplicate": "Видалити дублікати файлів"
 }

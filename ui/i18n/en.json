@@ -328,7 +328,6 @@
   "backend.no_tasks": "No tasks to run.",
   "backend.output_dir_error": "Could not create output folder:\n{error}",
   "backend.output_dir_required": "Choose an output folder before starting.",
-
   "theme": "Theme",
   "switch_to_dark_theme": "Switch to dark theme",
   "switch_to_light_theme": "Switch to light theme",
@@ -346,26 +345,22 @@
   "import_theme": "Import theme",
   "export_theme": "Export theme",
   "detect_theme": "Detect OS theme",
-
   "shortcuts": "Shortcuts",
   "shortcut_action": "Action",
   "shortcut_key": "Key",
   "reset_shortcut": "Reset",
   "reset_all_shortcuts": "Reset all",
   "shortcut_conflict": "Shortcut conflict",
-
   "system_tray": "System tray",
   "enable_tray": "Enable tray",
   "minimize_to_tray": "Minimize to tray",
   "tray_notifications": "Notifications",
   "push_notifications": "Push notifications",
-
   "folder_filter": "Type filter",
   "folder_exclude": "Exclude patterns",
   "add_folder_filtered": "Add folder (with filters)",
   "scan_stats": "Scan statistics",
   "all_types": "All types",
-
   "paste_clipboard": "Paste from clipboard",
   "save_queue": "Save queue",
   "load_queue": "Load queue",
@@ -521,13 +516,13 @@
   "appearance.name": "Name your scheme",
   "appearance.saved_themes": "Saved schemes",
   "appearance.reset_colors": "Reset colors",
-  "appearance.recovery_shortcut": "Ctrl+Alt+0 restores the black-and-white theme at any time.",
+  "appearance.recovery_shortcut": "Ctrl+Alt+0 restores the default platform colors at any time.",
   "appearance.hex_hint": "Use #RGB, #RRGGBB or #AARRGGBB (alpha first).",
   "appearance.saved": "Color scheme saved.",
   "appearance.imported": "Color scheme imported.",
   "appearance.exported": "Color scheme exported.",
   "appearance.invalid_file": "Could not import this theme",
-  "appearance.mode.dark": "Black & white",
+  "appearance.mode.dark": "Dark",
   "appearance.mode.light": "Light",
   "appearance.mode.obsidian": "Obsidian",
   "appearance.mode.oled": "OLED black",
@@ -609,5 +604,10 @@
   "whisper.state.error": "Download failed — retry",
   "montage_editor": "Montage Editor",
   "waveform_loading": "Loading waveform…",
-  "crop": "Crop"
+  "crop": "Crop",
+  "design.workspace": "Your media workspace",
+  "design.back": "Back",
+  "design.forward": "Forward",
+  "design.app_menu": "Application menu",
+  "design.deduplicate": "Remove duplicate files"
 }

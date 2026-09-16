@@ -4,8 +4,8 @@ import QtQuick.Controls 2.15
 import App 1.0
 
 Label {
-    color: Theme.textDisabled
-    font.family: Theme.monoFont
-    font.pixelSize: Theme.fontMeta
+    color: Theme.textSecondary
+    font.family: Theme.bodyFont
+    font.pixelSize: Theme.fontSizeSm
     Layout.fillWidth: true
 }

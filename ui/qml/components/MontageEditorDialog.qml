@@ -8,7 +8,7 @@ import App 1.0
 Window {
     id: root
 
-    title: "Montage Editor" + (root.fileName ? (" — " + root.fileName) : "")
+    title: I18n.t("nav_montage") + (root.fileName ? (" — " + root.fileName) : "")
     width: 1120
     height: 740
     minimumWidth: 960
@@ -196,7 +196,7 @@ Window {
             }
 
             Label {
-                text: "Montage Editor"
+                text: I18n.t("nav_montage")
                 font.family: Theme.displayFont
                 font.pixelSize: Theme.fontSizeLg
                 font.bold: true
@@ -224,7 +224,8 @@ Window {
             }
 
             SecondaryButton {
-                text: "📂 " + (root.filePath ? "Змінити відео…" : "Вибрати відео…")
+                iconName: "folder"
+                text: (root.filePath ? "Змінити відео…" : "Вибрати відео…")
                 Layout.preferredHeight: 28
                 onClicked: {
                     if (backend) {
@@ -281,7 +282,7 @@ Window {
                         spacing: 12
 
                         Label {
-                            text: "🎬 " + I18n.t("nav_montage")
+                            text: I18n.t("nav_montage")
                             font.family: Theme.displayFont
                             font.pixelSize: Theme.fontSizeLg
                             font.bold: true
@@ -374,7 +375,8 @@ Window {
                         AppButton {
                             implicitWidth: 44
                             implicitHeight: 32
-                            text: player.playbackState === MediaPlayer.PlayingState ? "❚❚" : "▶"
+                            iconName: player.playbackState === MediaPlayer.PlayingState ? "pause" : "play"
+                            Accessible.name: player.playbackState === MediaPlayer.PlayingState ? I18n.t("pause") : I18n.t("start")
                             font.pixelSize: Theme.fontSizeMd
                             onClicked: {
                                 if (player.playbackState === MediaPlayer.PlayingState) {
@@ -565,7 +567,7 @@ Window {
                                 color: Theme.accentPrimary
                             }
                             Item { Layout.fillWidth: true }
-                            AppCheckBox {
+                            AppSwitch {
                                 checked: root.cropEnabled
                                 onToggled: {
                                     root.cropEnabled = checked
@@ -654,7 +656,7 @@ Window {
                             onActivated: function(index) { root.outputFormat = model[index] }
                         }
 
-                        AppCheckBox {
+                        AppSwitch {
                             Layout.fillWidth: true
                             text: "Зберегти аудіодоріжку"
                             checked: root.audioEnabled
@@ -662,7 +664,7 @@ Window {
                             onToggled: root.audioEnabled = checked
                         }
 
-                        AppCheckBox {
+                        AppSwitch {
                             Layout.fillWidth: true
                             text: "Fast copy (без перекодування)"
                             checked: root.fastCopy && !root.cropEnabled

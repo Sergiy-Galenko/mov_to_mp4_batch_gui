@@ -263,14 +263,14 @@ def test_backend_stats_never_reads_disk_and_event_processing_yields(qt_app):
         backend.shutdown()
 
 
-def test_default_theme_is_complete_monochrome_and_readable(tmp_path):
-    manager = ThemeManager(tmp_path / "theme.json")
+@pytest.mark.parametrize("platform_name", ["macos", "windows", "linux"])
+@pytest.mark.parametrize("mode", ["dark", "light"])
+def test_platform_theme_is_complete_and_readable(tmp_path, platform_name, mode):
+    manager = ThemeManager(tmp_path / "theme.json", platform_name=platform_name)
+    manager.set_theme_mode(mode)
     palette = manager.palette()
-    assert manager.theme_mode() == "dark"
+    assert manager.theme_mode() == mode
     assert palette.keys() == COLOR_KEYS
-    for value in palette.values():
-        rgb = value[-6:]
-        assert rgb[:2] == rgb[2:4] == rgb[4:]
     for text, background in (("textPrimary", "windowBackground"), ("textSecondary", "panelBackground"), ("textOnAccent", "accent")):
         assert contrast_ratio(palette[text], palette[background]) >= 4.5
 
@@ -374,3 +374,15 @@ def test_all_theme_colors_and_modes_have_translations():
         for prefix, values in (("color", COLOR_KEYS), ("mode", THEME_MODES), ("group", groups)):
             for value in values:
                 assert messages[f"appearance.{prefix}.{value}"], (locale, prefix, value)
+
+
+@pytest.mark.parametrize("system, expected", [("darwin", "macos"), ("win32", "windows"), ("linux", "linux")])
+def test_theme_detects_host_and_preserves_custom_colors(tmp_path, monkeypatch, system, expected):
+    monkeypatch.setattr("app.theme_palette.sys.platform", system)
+    manager = ThemeManager(tmp_path / "theme.json")
+    assert manager.platform_name == expected
+    manager.set_color("accent", "#9955BB", "dark")
+    restored = ThemeManager(tmp_path / "theme.json")
+    assert restored.palette("dark")["accent"] == "#9955BB"
+    restored.reset_colors("dark")
+    assert restored.palette("dark")["accent"] != "#9955BB"

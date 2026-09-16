@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from app.paths import APP_DATA_DIR
-from app.theme_palette import COLOR_GROUPS, COLOR_KEYS, THEME_MODES, normalize_color, resolve_palette
+from app.theme_palette import COLOR_GROUPS, COLOR_KEYS, THEME_MODES, detect_platform, normalize_color, resolve_palette
 from utils.state import load_json_state, save_json_state
 
 THEME_STATE_PATH = APP_DATA_DIR / "theme_config.json"
@@ -63,8 +63,9 @@ LAYOUT_MODES = {
 class ThemeManager:
     """Manages UI theming, layout, and window state persistence."""
 
-    def __init__(self, path: Path = THEME_STATE_PATH) -> None:
+    def __init__(self, path: Path = THEME_STATE_PATH, *, platform_name: str | None = None) -> None:
         self.path = path
+        self.platform_name = detect_platform(platform_name)
         self._state = load_json_state(path)
         self._palette_cache: dict[str, dict[str, str]] = {}
 
@@ -80,7 +81,7 @@ class ThemeManager:
             if legacy_accent and "accent" not in colors:
                 with contextlib.suppress(ValueError):
                     colors["accent"] = normalize_color(legacy_accent)
-            self._palette_cache[mode] = resolve_palette(mode, colors)
+            self._palette_cache[mode] = resolve_palette(mode, colors, self.platform_name)
         return dict(self._palette_cache[mode])
 
     def color_overrides(self, mode: str | None = None) -> dict[str, str]:

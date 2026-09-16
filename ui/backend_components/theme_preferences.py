@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Property("QVariantMap", notify=themeChanged)
+BODY = r'''    @QtCore.Property(str, notify=themeChanged)
+    def platformName(self) -> str:
+        return self.theme_manager.platform_name
+
+    @QtCore.Property("QVariantMap", notify=themeChanged)
     def themePalette(self) -> Dict[str, str]:
         return self.theme_manager.palette(self.effectiveThemeMode)
 
@@ -92,6 +96,13 @@ BODY = r'''    @QtCore.Property("QVariantMap", notify=themeChanged)
         application = QtWidgets.QApplication.instance()
         if application is None:
             return
+        hints = application.styleHints()
+        if self.themeMode == "auto":
+            hints.unsetColorScheme()
+        else:
+            scheme = QtCore.Qt.ColorScheme.Light if self.effectiveThemeMode == "light" else QtCore.Qt.ColorScheme.Dark
+            if hints.colorScheme() != scheme:
+                hints.setColorScheme(scheme)
         colors = self.themePalette
         palette = QtGui.QPalette()
         roles = {

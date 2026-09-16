@@ -1,6 +1,7 @@
 """Shared color tokens for QML, widget dialogs, and user theme files."""
 
 import re
+import sys
 
 COLOR_GROUPS = {
     "surfaces": ["windowBackground", "sidebarBackground", "panelBackground", "panelSecondary", "input", "inputHover", "panelHover", "subtleFill", "disabledBg"],
@@ -59,6 +60,53 @@ PRESET_BASES = {
 }
 
 
+# System Settings surfaces on macOS; Fluent-style surfaces on Windows.
+PLATFORM_BASES = {
+    "macos": {
+        "dark": {
+            "windowBackground": "#282827", "sidebarBackground": "#2D2C2B",
+            "panelBackground": "#323231", "panelSecondary": "#464645", "input": "#3C3C3B",
+            "borderDefault": "#686867", "borderMuted": "#414140",
+            "textPrimary": "#F2F2F2", "textSecondary": "#B8B8B7", "textDisabled": "#959594",
+            "accent": "#0070EA", "statusSuccess": "#32D74B", "statusWarning": "#FFD60A", "statusError": "#FF6961",
+            "mediaImage": "#30D158", "mediaVideo": "#BF5AF2", "mediaAudio": "#FF9F0A", "mediaSubtitle": "#64D2FF",
+        },
+        "light": {
+            "windowBackground": "#F5F5F5", "sidebarBackground": "#E9E8E7",
+            "panelBackground": "#FFFFFF", "panelSecondary": "#E4E4E4", "input": "#FFFFFF",
+            "borderDefault": "#B7B7B7", "borderMuted": "#DEDEDE",
+            "textPrimary": "#232323", "textSecondary": "#626262", "textDisabled": "#777777",
+            "accent": "#0069D9", "statusSuccess": "#22863A", "statusWarning": "#926000", "statusError": "#C42B27",
+        },
+    },
+    "windows": {
+        "dark": {
+            "windowBackground": "#202020", "sidebarBackground": "#202020",
+            "panelBackground": "#2B2B2B", "panelSecondary": "#373737", "input": "#323232",
+            "borderDefault": "#6B6B6B", "borderMuted": "#404040",
+            "textPrimary": "#F5F5F5", "textSecondary": "#C4C4C4", "textDisabled": "#A0A0A0",
+            "accent": "#60CDFF", "statusSuccess": "#6CCB5F", "statusWarning": "#FCE100", "statusError": "#FF99A4",
+            "mediaImage": "#6CCB5F", "mediaVideo": "#C7A0FF", "mediaAudio": "#FFB75E", "mediaSubtitle": "#60CDFF",
+        },
+        "light": {
+            "windowBackground": "#F3F3F3", "sidebarBackground": "#F3F3F3",
+            "panelBackground": "#FFFFFF", "panelSecondary": "#F9F9F9", "input": "#FFFFFF",
+            "borderDefault": "#A0A0A0", "borderMuted": "#E0E0E0",
+            "textPrimary": "#1A1A1A", "textSecondary": "#5D5D5D", "textDisabled": "#737373", "accent": "#0067C0",
+        },
+    },
+}
+
+
+def detect_platform(platform_name: str | None = None) -> str:
+    name = platform_name or sys.platform
+    if name in {"darwin", "osx", "macos"}:
+        return "macos"
+    if name in {"win32", "windows"}:
+        return "windows"
+    return "linux"
+
+
 def normalize_color(value: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})", value.strip()):
         raise ValueError("Use #RGB, #RRGGBB or #AARRGGBB")
@@ -82,9 +130,11 @@ def contrast_ratio(first: str, second: str) -> float:
     return (values[1] + 0.05) / (values[0] + 0.05)
 
 
-def resolve_palette(mode: str = "dark", overrides: dict[str, str] | None = None) -> dict[str, str]:
+def resolve_palette(mode: str = "dark", overrides: dict[str, str] | None = None, platform_name: str | None = None) -> dict[str, str]:
     custom = overrides or {}
-    base = {**PRESET_BASES.get(mode, DARK_BASE), **custom}
+    platform = detect_platform(platform_name)
+    platform_base = PLATFORM_BASES.get(platform, PLATFORM_BASES["windows"]).get(mode, {})
+    base = {**PRESET_BASES.get(mode, DARK_BASE), **platform_base, **custom}
     panel, accent, text = base["panelBackground"], base["accent"], base["textPrimary"]
     soft = mix(panel, accent, 0.18)
     derived = {

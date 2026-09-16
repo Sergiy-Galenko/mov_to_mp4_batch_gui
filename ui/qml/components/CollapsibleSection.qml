@@ -14,7 +14,7 @@ Rectangle {
     implicitHeight: header.implicitHeight + (expanded ? body.implicitHeight + Theme.space3 : 0) + Theme.space3
     radius: Theme.radiusMd
     color: Theme.bgSecondary
-    border.width: 1
+    border.width: Theme.panelBorderWidth
     border.color: Theme.borderSubtle
     clip: true
 

@@ -6,13 +6,13 @@ The new asset is used by the application window, top bar, welcome popup, and the
 
 ## Buttons
 
-`AppButton.qml` and `ButtonSurface.qml` provide the shared design for primary, secondary, quiet, icon, and navigation buttons. The controls use 10 px corners, 38 px default height, optical icon/text alignment, a subtle surface highlight, 90–120 ms press/hover transitions, and a separate keyboard focus ring. Colors derive from the selected theme. Rendering uses QML rectangles and gradients without blur effects or offscreen textures for buttons.
+`AppButton.qml` and `ButtonSurface.qml` provide the shared design for primary, secondary, quiet, icon, and navigation buttons. The controls adapt to the host platform: macOS uses compact 30 px buttons with 6 px corners and a subtle surface highlight; Windows uses 34 px buttons with 4 px corners. Both retain optical icon/text alignment, short press/hover transitions, and a separate keyboard focus ring. Colors derive from the selected theme. Rendering uses QML rectangles and gradients without blur effects or offscreen textures for buttons.
 
 `PrimaryButton`, `SecondaryButton`, and `GhostButton` preserve existing click handlers. Main actions use drawn icons with localizable text. Disabled controls keep readable labels and reject activation. Truncated button labels expose the complete text in a tooltip.
 
 ## Preview
 
-These screenshots show the implemented QML controls and the running application:
+Current previews are in [Platform design](platform-design.md). The images below document the earlier monochrome design:
 
 ![Button states](ui-buttons.png)
 

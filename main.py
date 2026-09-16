@@ -33,9 +33,10 @@ def main() -> None:
     from ui.backend import Backend
 
     QQuickStyle.setStyle("Basic")
-    QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_DontUseNativeDialogs)
     app = QtWidgets.QApplication(sys.argv)
-    app.setStyle("Fusion")
+    # QApplication selects the native widget style for the host OS. Keep that
+    # style for system dialogs; the QML controls use our platform theme.
+    app.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.GeneralFont))
     app.setOrganizationName("MediaConverter")
     app.setApplicationName("MediaConverter")
 

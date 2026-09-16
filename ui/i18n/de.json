@@ -328,7 +328,6 @@
   "backend.no_tasks": "Keine Aufgaben zum Starten.",
   "backend.output_dir_error": "Ausgabeordner konnte nicht erstellt werden:\n{error}",
   "backend.output_dir_required": "Wähle vor dem Start einen Ausgabeordner.",
-
   "theme": "Theme",
   "switch_to_dark_theme": "Dunkles Theme aktivieren",
   "switch_to_light_theme": "Helles Theme aktivieren",
@@ -346,26 +345,22 @@
   "import_theme": "Theme importieren",
   "export_theme": "Theme exportieren",
   "detect_theme": "OS-Theme erkennen",
-
   "shortcuts": "Shortcuts",
   "shortcut_action": "Aktion",
   "shortcut_key": "Taste",
   "reset_shortcut": "Zurücksetzen",
   "reset_all_shortcuts": "Alle zurücksetzen",
   "shortcut_conflict": "Shortcut-Konflikt",
-
   "system_tray": "System-Tray",
   "enable_tray": "Tray aktivieren",
   "minimize_to_tray": "In Tray minimieren",
   "tray_notifications": "Benachrichtigungen",
   "push_notifications": "Push-Benachrichtigungen",
-
   "folder_filter": "Typfilter",
   "folder_exclude": "Ausschlussmuster",
   "add_folder_filtered": "Ordner mit Filtern hinzufügen",
   "scan_stats": "Scan-Statistik",
   "all_types": "Alle Typen",
-
   "paste_clipboard": "Aus Zwischenablage einfügen",
   "save_queue": "Warteschlange speichern",
   "load_queue": "Warteschlange laden",
@@ -521,13 +516,13 @@
   "appearance.name": "Name des Farbschemas",
   "appearance.saved_themes": "Gespeicherte Farbschemas",
   "appearance.reset_colors": "Farben zurücksetzen",
-  "appearance.recovery_shortcut": "Ctrl+Alt+0 stellt jederzeit das Schwarz-Weiß-Design wieder her.",
+  "appearance.recovery_shortcut": "Ctrl+Alt+0 stellt jederzeit die Standardfarben der Plattform wieder her.",
   "appearance.hex_hint": "Verwenden Sie #RGB, #RRGGBB oder #AARRGGBB (Alpha zuerst).",
   "appearance.saved": "Farbschema gespeichert.",
   "appearance.imported": "Farbschema importiert.",
   "appearance.exported": "Farbschema exportiert.",
   "appearance.invalid_file": "Design konnte nicht importiert werden",
-  "appearance.mode.dark": "Schwarz-Weiß",
+  "appearance.mode.dark": "Dunkel",
   "appearance.mode.light": "Hell",
   "appearance.mode.obsidian": "Obsidian",
   "appearance.mode.oled": "OLED-Schwarz",
@@ -609,5 +604,10 @@
   "whisper.state.error": "Download fehlgeschlagen — erneut versuchen",
   "montage_editor": "Montage-Editor",
   "waveform_loading": "Wellenform wird geladen…",
-  "crop": "Zuschneiden"
+  "crop": "Zuschneiden",
+  "design.workspace": "Ihr Medienarbeitsplatz",
+  "design.back": "Zurück",
+  "design.forward": "Vorwärts",
+  "design.app_menu": "Anwendungsmenü",
+  "design.deduplicate": "Doppelte Dateien entfernen"
 }
