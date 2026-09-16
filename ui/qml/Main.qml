@@ -10,7 +10,18 @@ import "screens" as AppScreens
 ApplicationWindow {
     id: root
     visible: true
-    visibility: Window.Maximized
+    width: 1240
+    height: 840
+    visibility: Window.Windowed
+    // Keep the OS window controls, resizing, fullscreen and Windows Snap.
+    flags: Qt.platform.os === "osx"
+        ? Qt.Window | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint | Qt.WindowFullscreenButtonHint
+        : Qt.Window
+    topPadding: 0
+    bottomPadding: 0
+    leftPadding: 0
+    rightPadding: 0
+    font.family: Theme.bodyFont
     minimumWidth: 760
     minimumHeight: 700
     title: I18n.t("app.title")
@@ -136,30 +147,57 @@ ApplicationWindow {
     property string quickConvertMediaType: "video"
     property string quickConvertFormat: ""
     property int activeNavIndex: 0
-    property string pendingSettingsTarget: ""
-    property bool advancedSettingsExpanded: false
+    property string pendingSettingsTarget: "core"
+    property var navigationHistory: [{ page: 0, target: "", nav: 0 }]
+    property int navigationCursor: 0
+    readonly property bool canNavigateBack: navigationCursor > 0
+    readonly property bool canNavigateForward: navigationCursor < navigationHistory.length - 1
+
+    function currentSectionTitle() {
+        if (activeSection === 0) return workspaceTitle()
+        if (activeNavIndex >= 0 && activeNavIndex < navigationItems.length)
+            return I18n.t(navigationItems[activeNavIndex].title)
+        return I18n.t("settings")
+    }
+
+    function navigateHistory(direction) {
+        var next = navigationCursor + direction
+        if (next < 0 || next >= navigationHistory.length) return
+        navigationCursor = next
+        var item = navigationHistory[next]
+        showSection(item.page, item.target, item.nav)
+    }
+
+    function showSection(pageIndex, target, navIndex) {
+        activeSection = pageIndex
+        activeNavIndex = navIndex >= 0 ? navIndex : navIndexFor(pageIndex, target)
+        if (pageIndex === 5) {
+            pendingSettingsTarget = target || "core"
+            settingsScrollTargetTimer.restart()
+        }
+    }
     property var navigationItems: [
-        { title: "nav_queue", icon: "queue", page: 0, target: "", group: "nav_workspace" },
-        { title: "nav_montage", icon: "film", page: 0, target: "montage", group: "nav_workspace" },
-        { title: "nav_downloads", icon: "download", page: 4, target: "", group: "nav_workspace" },
-        { title: "nav_presets", icon: "sliders", page: 2, target: "", group: "nav_workspace" },
-        { title: "nav_analytics", icon: "chart", page: 1, target: "", group: "nav_workspace" },
-        { title: "nav_core", icon: "settings", page: 5, target: "core", group: "nav_conversion" },
-        { title: "nav_output", icon: "folder", page: 5, target: "output", group: "nav_conversion" },
-        { title: "nav_video", icon: "file", page: 5, target: "video", group: "nav_conversion" },
-        { title: "nav_audio_subtitles", icon: "file", page: 5, target: "audio_subtitles", group: "nav_conversion" },
-        { title: "nav_images_sheets", icon: "file", page: 5, target: "images_sheets", group: "nav_conversion" },
-        { title: "nav_watermark_text", icon: "file", page: 5, target: "watermark_text", group: "nav_conversion" },
-        { title: "nav_smart_convert", icon: "sliders", page: 5, target: "smart_convert", group: "nav_advanced" },
-        { title: "nav_device_profiles", icon: "file", page: 5, target: "device_profiles", group: "nav_advanced" },
-        { title: "nav_video_editor", icon: "file", page: 5, target: "video_editor", group: "nav_advanced" },
-        { title: "nav_subtitle_tools", icon: "file", page: 5, target: "subtitle_tools", group: "nav_advanced" },
-        { title: "nav_privacy_security", icon: "settings", page: 5, target: "privacy_security", group: "nav_advanced" },
-        { title: "nav_ffmpeg", icon: "settings", page: 3, target: "", group: "nav_automation" },
-        { title: "nav_ffmpeg_watch", icon: "settings", page: 5, target: "ffmpeg_watch", group: "nav_automation" },
-        { title: "nav_cloud_integration", icon: "download", page: 5, target: "cloud_integration", group: "nav_automation" },
-        { title: "nav_metadata_hooks", icon: "file", page: 5, target: "metadata_hooks", group: "nav_automation" },
-        { title: "nav_commercial_license", icon: "settings", page: 5, target: "commercial_license", group: "nav_application" }
+        { title: "nav_queue", icon: "queue", tint: "#007AFF", page: 0, target: "", group: "nav_workspace" },
+        { title: "nav_montage", icon: "film", tint: "#AF52DE", page: 0, target: "montage", group: "nav_workspace" },
+        { title: "nav_downloads", icon: "download", tint: "#34C759", page: 4, target: "", group: "nav_workspace" },
+        { title: "nav_presets", icon: "sliders", tint: "#AF52DE", page: 2, target: "", group: "nav_workspace" },
+        { title: "nav_analytics", icon: "chart", tint: "#FF9500", page: 1, target: "", group: "nav_workspace" },
+        { title: "nav_core", icon: "settings", tint: "#8E8E93", page: 5, target: "core", group: "nav_conversion" },
+        { title: "nav_output", icon: "folder", tint: "#007AFF", page: 5, target: "output", group: "nav_conversion" },
+        { title: "nav_video", icon: "video", tint: "#AF52DE", page: 5, target: "video", group: "nav_conversion" },
+        { title: "nav_audio_subtitles", icon: "audio", tint: "#FF2D55", page: 5, target: "audio_subtitles", group: "nav_conversion" },
+        { title: "nav_images_sheets", icon: "image", tint: "#34C759", page: 5, target: "images_sheets", group: "nav_conversion" },
+        { title: "nav_watermark_text", icon: "text", tint: "#32ADE6", page: 5, target: "watermark_text", group: "nav_conversion" },
+        { title: "nav_smart_convert", icon: "sparkles", tint: "#AF52DE", page: 5, target: "smart_convert", group: "nav_advanced" },
+        { title: "nav_device_profiles", icon: "devices", tint: "#5856D6", page: 5, target: "device_profiles", group: "nav_advanced" },
+        { title: "nav_video_editor", icon: "crop", tint: "#FF9500", page: 5, target: "video_editor", group: "nav_advanced" },
+        { title: "nav_subtitle_tools", icon: "subtitle", tint: "#007AFF", page: 5, target: "subtitle_tools", group: "nav_advanced" },
+        { title: "nav_privacy_security", icon: "lock", tint: "#007AFF", page: 5, target: "privacy_security", group: "nav_advanced" },
+        { title: "nav_ffmpeg", icon: "settings", tint: "#8E8E93", page: 3, target: "", group: "nav_automation" },
+        { title: "nav_ffmpeg_watch", icon: "clock", tint: "#5856D6", page: 5, target: "ffmpeg_watch", group: "nav_automation" },
+        { title: "nav_cloud_integration", icon: "cloud", tint: "#32ADE6", page: 5, target: "cloud_integration", group: "nav_automation" },
+        { title: "nav_metadata_hooks", icon: "file", tint: "#8E8E93", page: 5, target: "metadata_hooks", group: "nav_automation" },
+        { title: "nav_commercial_license", icon: "key", tint: "#FF9500", page: 5, target: "commercial_license", group: "nav_application" }
     ]
 
     property var operationOptions: ["convert", "audio_only", "auto_subtitle", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet"]
@@ -518,15 +556,16 @@ ApplicationWindow {
             openMontageEditor("")
             return
         }
-        root.activeSection = pageIndex
         var resolvedNav = navIndex >= 0 ? navIndex : navIndexFor(pageIndex, target)
-        if (resolvedNav >= 0)
-            root.activeNavIndex = resolvedNav
-        if (pageIndex === 5) {
-            root.pendingSettingsTarget = target || "run"
-            root.advancedSettingsExpanded = ["run", "core", "output", ""].indexOf(root.pendingSettingsTarget) < 0
-            settingsScrollTargetTimer.restart()
+        var current = navigationHistory[navigationCursor]
+        if (!current || current.page !== pageIndex || current.target !== target) {
+            var history = navigationHistory.slice(0, navigationCursor + 1)
+            history.push({ page: pageIndex, target: target, nav: resolvedNav })
+            if (history.length > 50) history.shift()
+            navigationHistory = history
+            navigationCursor = history.length - 1
         }
+        showSection(pageIndex, target, resolvedNav)
     }
 
     function openTopMode(mode) {
@@ -610,7 +649,13 @@ ApplicationWindow {
 
     function runGlobalSearch(text) {
         globalSearchText = String(text || "")
-        globalSearchResults = backend ? backend.globalSearch(globalSearchText) : []
+        var needle = globalSearchText.trim().toLowerCase()
+        var sections = needle.length < 2 ? [] : navigationItems.filter(function(item) {
+            return (I18n.t(item.title) + " " + (item.target || "")).toLowerCase().indexOf(needle) >= 0
+        }).map(function(item) {
+            return { kind: I18n.t(item.group), title: I18n.t(item.title), detail: I18n.t(item.group), page: item.page, target: item.target }
+        })
+        globalSearchResults = sections.concat(backend ? backend.globalSearch(globalSearchText) : [])
         if (globalSearchText.length >= 2)
             globalSearchPopup.open()
         else
@@ -681,7 +726,7 @@ ApplicationWindow {
         repeat: false
         onTriggered: {
             if (settingsPanel && settingsScroll && root.activeSection === 5)
-                settingsScroll.contentItem.contentY = settingsPanel.sectionY(root.pendingSettingsTarget)
+                settingsScroll.contentItem.contentY = 0
         }
     }
 
@@ -750,6 +795,8 @@ ApplicationWindow {
             spacing: 0
 
             SidebarPanel {
+                id: appSidebar
+                appRoot: root
                 Layout.fillHeight: true
                 collapsed: root.sidebarCollapsed
                 activeIndex: root.activeNavIndex
@@ -779,19 +826,19 @@ ApplicationWindow {
 
                     ColumnLayout {
                         width: settingsScroll.availableWidth
-                        anchors.margins: Theme.space4
-                        spacing: Theme.space3
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Label { Layout.fillWidth: true; text: I18n.t("settings"); color: Theme.textPrimary; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
-                            Label { text: I18n.t("settings_panel_hint"); color: Theme.textMuted; font.pixelSize: Theme.fontMeta; elide: Text.ElideRight }
-                        }
-
+                        spacing: Theme.space5
+                        Item { Layout.preferredHeight: Theme.space2 }
                         SettingsPanel {
                             id: settingsPanel
+                            objectName: "settingsPages"
                             Layout.fillWidth: true
+                            Layout.maximumWidth: 1000
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.leftMargin: Theme.space5
+                            Layout.rightMargin: Theme.space5
                         }
+                        Item { Layout.preferredHeight: Theme.space5 }
+
                     }
                 }
             }
@@ -834,11 +881,11 @@ ApplicationWindow {
         id: globalSearchPopup
         z: 1100
         modal: false
-        focus: true
-        width: 520
-        height: Math.min(420, searchResultsList.contentHeight + 24)
-        x: Math.max(12, Math.min(root.width - width - 12, appHeader.searchField.mapToItem(appHeader.parent, 0, 0).x))
-        y: appHeader.searchField.mapToItem(appHeader.parent, 0, appHeader.searchField.height + 8).y
+        focus: false
+        width: Math.min(520, root.width - 24)
+        height: Math.min(420, root.height - Theme.titlebarHeight - 100, searchResultsList.contentHeight + 24)
+        x: Math.max(12, Math.min(root.width - width - 12, appSidebar.searchField.mapToItem(root.contentItem, 0, 0).x))
+        y: appSidebar.searchField.mapToItem(root.contentItem, 0, appSidebar.searchField.height + 8).y
         padding: 8
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
@@ -1118,9 +1165,9 @@ ApplicationWindow {
                 AppComboBox { id: presetScreenCombo; model: backend ? backend.presetsModel : null }
                 RowLayout {
                     Layout.fillWidth: true
-                    SecondaryButton { text: I18n.t("load"); onClicked: { root.selectedPreset = presetScreenCombo.currentText; backend && backend.loadPreset(presetScreenCombo.currentText) } }
-                    SecondaryButton { text: I18n.t("save"); onClicked: backend && backend.savePreset(presetScreenCombo.currentText || "Custom", collectSettings()) }
-                    SecondaryButton { text: I18n.t("delete"); onClicked: backend && backend.deletePreset(presetScreenCombo.currentText) }
+                    SecondaryButton { iconName: "folder"; text: I18n.t("load"); onClicked: { root.selectedPreset = presetScreenCombo.currentText; backend && backend.loadPreset(presetScreenCombo.currentText) } }
+                    SecondaryButton { iconName: "save"; text: I18n.t("save"); onClicked: backend && backend.savePreset(presetScreenCombo.currentText || "Custom", collectSettings()) }
+                    SecondaryButton { iconName: "trash"; text: I18n.t("delete"); onClicked: backend && backend.deletePreset(presetScreenCombo.currentText) }
                 }
             }
 
@@ -1145,21 +1192,21 @@ ApplicationWindow {
                 AppTextField { id: ffmpegScreenPathField; text: backend ? backend.ffmpegPath : ""; onEditingFinished: { if (backend) backend.ffmpegPath = text } }
                 RowLayout {
                     Layout.fillWidth: true
-                    SecondaryButton { text: I18n.t("choose"); onClicked: backend && backend.pickFfmpeg() }
-                    SecondaryButton { text: I18n.t("refresh"); onClicked: backend && backend.refreshEncoders() }
-                    SecondaryButton { text: I18n.t("update_ffmpeg"); onClicked: backend && backend.updateFfmpeg() }
+                    SecondaryButton { iconName: "folder"; text: I18n.t("choose"); onClicked: backend && backend.pickFfmpeg() }
+                    SecondaryButton { iconName: "refresh"; text: I18n.t("refresh"); onClicked: backend && backend.refreshEncoders() }
+                    SecondaryButton { iconName: "download"; text: I18n.t("update_ffmpeg"); onClicked: backend && backend.updateFfmpeg() }
                 }
                 Label { Layout.fillWidth: true; text: backend ? backend.encoderInfo : ""; color: Theme.textMuted; wrapMode: Text.WordWrap; font.pixelSize: Theme.fontMeta }
                 AppTextField { id: ffmpegScreenWatchField; text: backend ? backend.watchFolder : ""; placeholderText: I18n.t("watch_folder"); onEditingFinished: { if (backend) backend.watchFolder = text } }
                 RowLayout {
                     Layout.fillWidth: true
-                    SecondaryButton { text: I18n.t("choose"); onClicked: backend && backend.pickWatchFolder() }
+                    SecondaryButton { iconName: "folder"; text: I18n.t("choose"); onClicked: backend && backend.pickWatchFolder() }
                     SecondaryButton { text: backend && backend.watchRunning ? I18n.t("stop_watch") : I18n.t("start_watch"); onClicked: backend && (backend.watchRunning ? backend.stopWatching() : backend.startWatching()) }
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    SecondaryButton { text: I18n.t("import"); onClicked: backend && backend.importProject() }
-                    SecondaryButton { text: I18n.t("export"); onClicked: backend && backend.exportProject(collectSettings()) }
+                    SecondaryButton { iconName: "download"; text: I18n.t("import"); onClicked: backend && backend.importProject() }
+                    SecondaryButton { iconName: "share"; text: I18n.t("export"); onClicked: backend && backend.exportProject(collectSettings()) }
                 }
             }
 
@@ -1285,7 +1332,7 @@ ApplicationWindow {
                 onActivated: youtubeUrlField.text = currentText
             }
             SecondaryButton {
-                text: I18n.t("clear")
+                iconName: "trash"; text: I18n.t("clear")
                 enabled: backend ? backend.youtubeDownloadHistory.length > 0 : false
                 onClicked: backend && backend.clearYoutubeHistory()
             }
@@ -1705,7 +1752,8 @@ ApplicationWindow {
 
     component SettingsPanel: ColumnLayout {
         id: settingsRoot
-        spacing: 12
+        spacing: Theme.space5
+        readonly property string page: root.pendingSettingsTarget || "core"
         property string subtitleDevice: "auto"
 
         WhisperModelManagerModal {
@@ -2021,39 +2069,21 @@ ApplicationWindow {
             overrideAudioBitrateField.text = data.audio_bitrate || ""
         }
 
-        function sectionY(section) {
-            var target = String(section || "run")
-            var panel = runPanel
-            if (["smart_convert", "device_profiles", "video_editor", "subtitle_tools", "privacy_security", "cloud_integration", "commercial_license", "video", "audio_subtitles", "images_sheets", "watermark_text", "metadata_hooks", "selected_override", "ffmpeg_watch"].indexOf(target) >= 0)
-                advancedToolsSection.expanded = true
-            if (target === "smart_convert") panel = smartConvertPanel
-            else if (target === "device_profiles") panel = deviceProfilesPanel
-            else if (target === "video_editor") panel = videoEditorPanel
-            else if (target === "subtitle_tools") panel = subtitleToolsPanel
-            else if (target === "privacy_security") panel = privacySecurityPanel
-            else if (target === "cloud_integration") panel = cloudIntegrationPanel
-            else if (target === "commercial_license") panel = commercialLicensePanel
-            else if (target === "core") panel = corePanel
-            else if (target === "output") panel = outputPanel
-            else if (target === "video") panel = videoPanel
-            else if (target === "audio_subtitles") panel = audioSubtitlesPanel
-            else if (target === "images_sheets") panel = imagesSheetsPanel
-            else if (target === "watermark_text") panel = watermarkTextPanel
-            else if (target === "metadata_hooks") panel = metadataHooksPanel
-            else if (target === "selected_override") panel = selectedOverridePanel
-            else if (target === "ffmpeg_watch") panel = ffmpegWatchPanel
-            return Math.max(0, panel.mapToItem(settingsRoot, 0, 0).y - Theme.space3)
-        }
 
         Panel {
             id: runPanel
+            objectName: "settingsPage_run"
+            visible: settingsRoot.page === "run"
+            iconName: "play"
+            iconTint: "#34C759"
             title: I18n.t("run")
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 SecondaryButton { text: backend && backend.isRunning ? I18n.t("running") : I18n.t("start"); enabled: backend && !backend.isRunning && formValid; onClicked: startIfValid() }
                 SecondaryButton { text: backend && backend.isPaused ? I18n.t("resume") : I18n.t("pause"); enabled: backend && backend.isRunning; onClicked: backend.isPaused ? backend.resumeConversion() : backend.pauseConversion() }
-                SecondaryButton { text: I18n.t("skip"); enabled: backend && backend.isRunning; onClicked: backend.skipCurrentFile() }
-                SecondaryButton { text: I18n.t("stop"); enabled: backend && backend.isRunning; onClicked: backend.stopConversion() }
+                SecondaryButton { iconName: "skip"; text: I18n.t("skip"); enabled: backend && backend.isRunning; onClicked: backend.skipCurrentFile() }
+                SecondaryButton { iconName: "stop"; text: I18n.t("stop"); enabled: backend && backend.isRunning; onClicked: backend.stopConversion() }
             }
             Label {
                 Layout.fillWidth: true
@@ -2066,20 +2096,29 @@ ApplicationWindow {
 
         Panel {
             id: presetsSettingsPanel
+            objectName: "settingsPage_run_presets"
+            visible: settingsRoot.page === "run"
+            iconName: "sliders"
+            iconTint: "#AF52DE"
             title: I18n.t("presets")
             AppComboBox { id: savedPresetCombo; model: backend ? backend.presetsModel : null }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
-                SecondaryButton { text: I18n.t("load"); onClicked: { root.selectedPreset = savedPresetCombo.currentText; backend && backend.loadPreset(savedPresetCombo.currentText) } }
-                SecondaryButton { text: I18n.t("save"); onClicked: backend && backend.savePreset(savedPresetCombo.currentText || "Custom", collectSettings()) }
-                SecondaryButton { text: I18n.t("delete"); onClicked: backend && backend.deletePreset(savedPresetCombo.currentText) }
+                spacing: Theme.space2
+                SecondaryButton { iconName: "folder"; text: I18n.t("load"); onClicked: { root.selectedPreset = savedPresetCombo.currentText; backend && backend.loadPreset(savedPresetCombo.currentText) } }
+                SecondaryButton { iconName: "save"; text: I18n.t("save"); onClicked: backend && backend.savePreset(savedPresetCombo.currentText || "Custom", collectSettings()) }
+                SecondaryButton { iconName: "trash"; text: I18n.t("delete"); onClicked: backend && backend.deletePreset(savedPresetCombo.currentText) }
             }
         }
 
         Panel {
             id: smartConvertPanel
+            objectName: "settingsPage_smart_convert"
+            visible: settingsRoot.page === "smart_convert"
+            iconName: "sparkles"
+            iconTint: "#AF52DE"
             title: I18n.t("smart_convert")
-            AppCheckBox { id: smartConvertCheck; text: I18n.t("smart_convert_enabled"); onToggled: scheduleSettingsSync() }
+            AppSwitch { id: smartConvertCheck; objectName: "smartConvertSwitch"; text: I18n.t("smart_convert_enabled"); onToggled: scheduleSettingsSync() }
             GridLayout {
                 Layout.fillWidth: true
                 columns: 2
@@ -2096,13 +2135,15 @@ ApplicationWindow {
                 FieldLabel { text: I18n.t("smart_ab_duration") }
                 AppSpinBox { id: smartAbDurationSpin; from: 1; to: 120; value: 8; onValueChanged: scheduleSettingsSync() }
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 AppCheckBox { id: smartReencodeCheck; text: I18n.t("smart_reencode_detection"); checked: true; onToggled: scheduleSettingsSync() }
                 AppCheckBox { id: smartTwoPassCheck; text: I18n.t("smart_two_pass"); onToggled: scheduleSettingsSync() }
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 AppCheckBox { id: smartIntegrityCheck; text: I18n.t("smart_integrity_check"); onToggled: scheduleSettingsSync() }
                 AppCheckBox { id: smartAbTestCheck; text: I18n.t("smart_ab_test"); onToggled: scheduleSettingsSync() }
             }
@@ -2117,6 +2158,10 @@ ApplicationWindow {
 
         Panel {
             id: deviceProfilesPanel
+            objectName: "settingsPage_device_profiles"
+            visible: settingsRoot.page === "device_profiles"
+            iconName: "devices"
+            iconTint: "#5856D6"
             title: I18n.t("device_profiles")
             FieldLabel { text: I18n.t("device_profile") }
             AppComboBox { id: deviceProfileCombo; model: root.deviceProfiles; currentIndex: 0; onActivated: scheduleSettingsSync() }
@@ -2131,6 +2176,10 @@ ApplicationWindow {
 
         Panel {
             id: corePanel
+            objectName: "settingsPage_core"
+            visible: settingsRoot.page === "core"
+            iconName: "settings"
+            iconTint: "#8E8E93"
             title: I18n.t("core")
             FieldLabel { text: I18n.t("operation") }
             AppComboBox { id: operationCombo; model: root.operationOptions; onActivated: scheduleSettingsSync() }
@@ -2156,7 +2205,7 @@ ApplicationWindow {
                 FieldLabel { text: I18n.t("performance_profile") }
                 AppComboBox { id: performanceProfileCombo; model: root.performanceProfiles; currentIndex: 1; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("target_size_mb") }
-                AppTextField { id: targetSizeField; placeholderText: I18n.t("target_size_hint"); onEditingFinished: scheduleSettingsSync() }
+                AppTextField { id: targetSizeField; objectName: "targetSizeField"; placeholderText: I18n.t("target_size_hint"); onEditingFinished: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("cpu_load_limit") }
                 AppSpinBox { id: cpuLimitSpin; from: 1; to: 100; value: 95; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("gpu_load_limit") }
@@ -2168,8 +2217,9 @@ ApplicationWindow {
                 FieldLabel { text: I18n.t("preset") }
                 AppComboBox { id: presetCombo; model: ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"]; currentIndex: 5; onActivated: scheduleSettingsSync() }
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 AppCheckBox { id: overwriteCheck; text: I18n.t("overwrite"); onToggled: {
                     root.setComboText(collisionPolicyCombo, checked ? "overwrite" : "index")
                     skipExistingCheck.checked = false
@@ -2186,14 +2236,19 @@ ApplicationWindow {
 
         Panel {
             id: outputPanel
+            objectName: "settingsPage_output"
+            visible: settingsRoot.page === "output"
+            iconName: "folder"
+            iconTint: "#007AFF"
             title: I18n.t("output")
             AppTextField { id: outputDirField; text: backend ? backend.outputDir : ""; placeholderText: I18n.t("output_folder_required"); onEditingFinished: { if (backend) backend.outputDir = text; scheduleSettingsSync() } }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
-                SecondaryButton { text: I18n.t("choose"); onClicked: backend && backend.pickOutputDir() }
-                SecondaryButton { text: I18n.t("open"); onClicked: backend && backend.openOutputDir() }
-                SecondaryButton { text: I18n.t("preview"); onClicked: backend && backend.refreshOutputPreview(collectSettings()) }
-                SecondaryButton { text: I18n.t("copy_rename"); onClicked: backend && backend.copyRenamePreview(collectSettings()) }
+                spacing: Theme.space2
+                SecondaryButton { iconName: "folder"; text: I18n.t("choose"); onClicked: backend && backend.pickOutputDir() }
+                SecondaryButton { iconName: "folder"; text: I18n.t("open"); onClicked: backend && backend.openOutputDir() }
+                SecondaryButton { iconName: "play"; text: I18n.t("preview"); onClicked: backend && backend.refreshOutputPreview(collectSettings()) }
+                SecondaryButton { iconName: "copy"; text: I18n.t("copy_rename"); onClicked: backend && backend.copyRenamePreview(collectSettings()) }
                 SecondaryButton { text: "CSV"; onClicked: backend && backend.exportRenamePreviewCsv(collectSettings()) }
             }
             FieldLabel { text: I18n.t("template") }
@@ -2209,7 +2264,7 @@ ApplicationWindow {
                     scheduleSettingsSync()
                 }
             }
-            AppCheckBox {
+            AppSwitch {
                 id: commercialExportCheck
                 text: I18n.t("watermark_free_commercial_export")
                 onToggled: scheduleSettingsSync()
@@ -2235,14 +2290,18 @@ ApplicationWindow {
             }
         }
 
-        CollapsibleSection {
+        ColumnLayout {
             id: advancedToolsSection
-            title: I18n.t("advanced_settings")
-            subtitle: I18n.t("advanced_settings_hint")
-            expanded: root.advancedSettingsExpanded
+            Layout.fillWidth: true
+            spacing: Theme.space5
+            visible: ["core", "run", "output", "smart_convert", "device_profiles"].indexOf(settingsRoot.page) < 0
 
         Panel {
             id: videoPanel
+            objectName: "settingsPage_video"
+            visible: settingsRoot.page === "video"
+            iconName: "video"
+            iconTint: "#AF52DE"
             title: I18n.t("video")
             GridLayout {
                 Layout.fillWidth: true
@@ -2281,15 +2340,20 @@ ApplicationWindow {
 
         Panel {
             id: videoEditorPanel
+            objectName: "settingsPage_video_editor"
+            visible: settingsRoot.page === "video_editor"
+            iconName: "crop"
+            iconTint: "#FF9500"
             title: I18n.t("video_editor")
             PrimaryButton {
                 Layout.fillWidth: true
-                text: "🎬 " + I18n.t("montage_editor") + " (Timeline + Crop)"
+                text: I18n.t("nav_montage")
                 iconName: "film"
                 onClicked: root.openMontageEditor(root.selectedPath)
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 AppCheckBox { id: editorDeinterlaceCheck; text: I18n.t("editor_deinterlace"); onToggled: scheduleSettingsSync() }
                 AppCheckBox { id: editorStabilizeCheck; text: I18n.t("editor_stabilize"); onToggled: scheduleSettingsSync() }
             }
@@ -2315,6 +2379,10 @@ ApplicationWindow {
 
         Panel {
             id: audioSubtitlesPanel
+            objectName: "settingsPage_audio_subtitles"
+            visible: settingsRoot.page === "audio_subtitles"
+            iconName: "audio"
+            iconTint: "#FF2D55"
             title: I18n.t("audio_subtitles")
             GridLayout {
                 Layout.fillWidth: true
@@ -2377,8 +2445,9 @@ ApplicationWindow {
                     wrapMode: Text.WordWrap
                 }
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 AppCheckBox { id: trimSilenceCheck; text: I18n.t("trim_silence"); onToggled: scheduleSettingsSync() }
                 AppCheckBox { id: splitChaptersCheck; text: I18n.t("split_chapters"); onToggled: scheduleSettingsSync() }
             }
@@ -2396,6 +2465,10 @@ ApplicationWindow {
 
         Panel {
             id: subtitleToolsPanel
+            objectName: "settingsPage_subtitle_tools"
+            visible: settingsRoot.page === "subtitle_tools"
+            iconName: "subtitle"
+            iconTint: "#007AFF"
             title: I18n.t("subtitle_tools")
             GridLayout {
                 Layout.fillWidth: true
@@ -2417,11 +2490,15 @@ ApplicationWindow {
                 FieldLabel { text: I18n.t("subtitle_alignment") }
                 AppSpinBox { id: subtitleAlignmentSpin; from: 1; to: 9; value: 2; onValueChanged: scheduleSettingsSync() }
             }
-            AppCheckBox { id: subtitleStyleCheck; text: I18n.t("subtitle_style_enabled"); onToggled: scheduleSettingsSync() }
+            AppSwitch { id: subtitleStyleCheck; text: I18n.t("subtitle_style_enabled"); onToggled: scheduleSettingsSync() }
         }
 
         Panel {
             id: imagesSheetsPanel
+            objectName: "settingsPage_images_sheets"
+            visible: settingsRoot.page === "images_sheets"
+            iconName: "image"
+            iconTint: "#34C759"
             title: I18n.t("images_sheets")
             GridLayout {
                 Layout.fillWidth: true
@@ -2443,6 +2520,10 @@ ApplicationWindow {
 
         Panel {
             id: watermarkTextPanel
+            objectName: "settingsPage_watermark_text"
+            visible: settingsRoot.page === "watermark_text"
+            iconName: "text"
+            iconTint: "#5AC8FA"
             title: I18n.t("watermark_text")
             RowLayout {
                 Layout.fillWidth: true
@@ -2481,9 +2562,14 @@ ApplicationWindow {
 
         Panel {
             id: metadataHooksPanel
+            objectName: "settingsPage_metadata_hooks"
+            visible: settingsRoot.page === "metadata_hooks"
+            iconName: "file"
+            iconTint: "#8E8E93"
             title: I18n.t("metadata_hooks")
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 AppCheckBox { id: stripMetadataCheck; text: I18n.t("strip"); onToggled: scheduleSettingsSync() }
                 AppCheckBox { id: copyMetadataCheck; text: I18n.t("copy"); onToggled: scheduleSettingsSync() }
             }
@@ -2501,6 +2587,10 @@ ApplicationWindow {
 
         Panel {
             id: privacySecurityPanel
+            objectName: "settingsPage_privacy_security"
+            visible: settingsRoot.page === "privacy_security"
+            iconName: "lock"
+            iconTint: "#007AFF"
             title: I18n.t("privacy_security")
             FieldLabel { text: I18n.t("blur_regions") }
             AppTextField { id: privacyBlurRegionsField; placeholderText: "x:y:w:h; x:y:w:h"; onEditingFinished: scheduleSettingsSync() }
@@ -2517,8 +2607,9 @@ ApplicationWindow {
                 FieldLabel { text: I18n.t("checksum_algorithm") }
                 AppComboBox { id: checksumCombo; model: ["none", "md5", "sha256"]; currentIndex: 0; onActivated: scheduleSettingsSync() }
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 AppCheckBox { id: secureDeleteCheck; text: I18n.t("secure_delete_original"); onToggled: scheduleSettingsSync() }
                 AppCheckBox { text: I18n.t("sanitize_metadata"); checked: stripMetadataCheck.checked; onToggled: { stripMetadataCheck.checked = checked; scheduleSettingsSync() } }
             }
@@ -2533,8 +2624,12 @@ ApplicationWindow {
 
         Panel {
             id: cloudIntegrationPanel
+            objectName: "settingsPage_cloud_integration"
+            visible: settingsRoot.page === "cloud_integration"
+            iconName: "cloud"
+            iconTint: "#32ADE6"
             title: I18n.t("cloud_integration")
-            AppCheckBox { id: cloudUploadCheck; text: I18n.t("cloud_upload_enabled") + " (Pro)"; enabled: backend ? backend.proFeaturesEnabled : false; onToggled: scheduleSettingsSync() }
+            AppSwitch { id: cloudUploadCheck; text: I18n.t("cloud_upload_enabled") + " (Pro)"; enabled: backend ? backend.proFeaturesEnabled : false; onToggled: scheduleSettingsSync() }
             Label {
                 Layout.fillWidth: true
                 text: backend && backend.proFeaturesEnabled ? I18n.t("cloud_pro_enabled") : I18n.t("cloud_pro_required")
@@ -2565,6 +2660,10 @@ ApplicationWindow {
 
         Panel {
             id: commercialLicensePanel
+            objectName: "settingsPage_commercial_license"
+            visible: settingsRoot.page === "commercial_license"
+            iconName: "key"
+            iconTint: "#FF9500"
             title: I18n.t("commercial_license")
             Label {
                 Layout.fillWidth: true
@@ -2594,10 +2693,11 @@ ApplicationWindow {
                 placeholderText: I18n.t("license_key")
                 echoMode: TextInput.Password
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 SecondaryButton {
-                    text: I18n.t("activate_key")
+                    iconName: "key"; text: I18n.t("activate_key")
                     onClicked: backend && backend.activateLicenseKey(licenseKeyField.text)
                 }
                 SecondaryButton {
@@ -2605,12 +2705,12 @@ ApplicationWindow {
                     onClicked: backend && backend.loadOfflineLicenseFile()
                 }
                 SecondaryButton {
-                    text: I18n.t("start_trial")
+                    iconName: "sparkles"; text: I18n.t("start_trial")
                     enabled: backend ? !backend.licenseActive : false
                     onClicked: backend && backend.startTrial()
                 }
                 SecondaryButton {
-                    text: I18n.t("remove")
+                    iconName: "trash"; text: I18n.t("remove")
                     enabled: backend ? backend.licenseActive : false
                     onClicked: backend && backend.clearLicense()
                 }
@@ -2639,10 +2739,11 @@ ApplicationWindow {
                         backend.paidUpdateManifestUrl = text
                 }
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 SecondaryButton {
-                    text: I18n.t("check_update")
+                    iconName: "refresh"; text: I18n.t("check_update")
                     enabled: backend ? backend.commercialExportAllowed : false
                     onClicked: backend && backend.checkPaidUpdate()
                 }
@@ -2663,14 +2764,19 @@ ApplicationWindow {
 
         Panel {
             id: selectedOverridePanel
+            objectName: "settingsPage_selected_override"
+            visible: settingsRoot.page === "selected_override"
+            iconName: "sliders"
+            iconTint: "#AF52DE"
             title: I18n.t("selected_override")
             AppTextField { id: overrideOutputTemplateField; placeholderText: I18n.t("output_template_override") }
             AppSpinBox { id: overrideCrfSpin; from: 0; to: 51; value: 23 }
             AppTextField { id: overrideAudioBitrateField; placeholderText: I18n.t("audio_bitrate_override") }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 SecondaryButton {
-                    text: I18n.t("save")
+                    iconName: "save"; text: I18n.t("save")
                     enabled: root.selectedPath.length > 0
                     onClicked: backend && backend.saveTaskOverrideByPath(root.selectedPath, {
                         output_template: overrideOutputTemplateField.text,
@@ -2687,19 +2793,24 @@ ApplicationWindow {
                         audio_bitrate: overrideAudioBitrateField.text
                     })
                 }
-                SecondaryButton { text: I18n.t("clear"); enabled: root.selectedPath.length > 0; onClicked: backend && backend.clearTaskOverrideByPath(root.selectedPath) }
+                SecondaryButton { iconName: "trash"; text: I18n.t("clear"); enabled: root.selectedPath.length > 0; onClicked: backend && backend.clearTaskOverrideByPath(root.selectedPath) }
             }
         }
 
         Panel {
             id: ffmpegWatchPanel
+            objectName: "settingsPage_ffmpeg_watch"
+            visible: settingsRoot.page === "ffmpeg_watch"
+            iconName: "clock"
+            iconTint: "#5856D6"
             title: I18n.t("ffmpeg_watch")
             AppTextField { id: ffmpegPathField; text: backend ? backend.ffmpegPath : ""; onEditingFinished: { if (backend) backend.ffmpegPath = text } }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
-                SecondaryButton { text: I18n.t("choose"); onClicked: backend && backend.pickFfmpeg() }
-                SecondaryButton { text: I18n.t("refresh"); onClicked: backend && backend.refreshEncoders() }
-                SecondaryButton { text: I18n.t("update_ffmpeg"); onClicked: backend && backend.updateFfmpeg() }
+                spacing: Theme.space2
+                SecondaryButton { iconName: "folder"; text: I18n.t("choose"); onClicked: backend && backend.pickFfmpeg() }
+                SecondaryButton { iconName: "refresh"; text: I18n.t("refresh"); onClicked: backend && backend.refreshEncoders() }
+                SecondaryButton { iconName: "download"; text: I18n.t("update_ffmpeg"); onClicked: backend && backend.updateFfmpeg() }
             }
             Label { Layout.fillWidth: true; text: backend ? backend.encoderInfo : ""; color: Theme.textMuted; wrapMode: Text.WordWrap; font.pixelSize: Theme.fontMeta }
             AppTextField { id: watchFolderField; text: backend ? backend.watchFolder : ""; placeholderText: I18n.t("watch_folder"); onEditingFinished: { if (backend) backend.watchFolder = text } }
@@ -2722,8 +2833,9 @@ ApplicationWindow {
                         backend.watchRulesText = text
                 }
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 SecondaryButton {
                     text: I18n.t("apply_rules")
                     onClicked: {
@@ -2805,8 +2917,9 @@ ApplicationWindow {
                     }
                 }
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.space2
                 AppCheckBox {
                     id: trayEnabledCheck
                     text: I18n.t("enable_tray")
@@ -2873,15 +2986,17 @@ ApplicationWindow {
                     }
                 }
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
-                SecondaryButton { text: I18n.t("choose"); onClicked: backend && backend.pickWatchFolder() }
+                spacing: Theme.space2
+                SecondaryButton { iconName: "folder"; text: I18n.t("choose"); onClicked: backend && backend.pickWatchFolder() }
                 SecondaryButton { text: backend && backend.watchRunning ? I18n.t("stop_watch") : I18n.t("start_watch"); onClicked: backend && (backend.watchRunning ? backend.stopWatching() : backend.startWatching()) }
             }
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
-                SecondaryButton { text: I18n.t("import"); onClicked: backend && backend.importProject() }
-                SecondaryButton { text: I18n.t("export"); onClicked: backend && backend.exportProject(collectSettings()) }
+                spacing: Theme.space2
+                SecondaryButton { iconName: "download"; text: I18n.t("import"); onClicked: backend && backend.importProject() }
+                SecondaryButton { iconName: "share"; text: I18n.t("export"); onClicked: backend && backend.exportProject(collectSettings()) }
             }
         }
         }
@@ -2890,7 +3005,7 @@ ApplicationWindow {
     WhatsNewPopup {
         id: whatsNewPopup
     }
-    
+
     TutorialPopup {
         id: tutorialPopup
     }
@@ -2954,7 +3069,7 @@ ApplicationWindow {
         else if (action === "deduplicate") backend.deduplicateQueueByHash()
         else if (action === "move_up") backend.moveSelectedPathsUp(root.selectedPaths)
         else if (action === "move_down") backend.moveSelectedPathsDown(root.selectedPaths)
-        else if (action === "queue_search") { root.activeSection = 0; queueScreen.focusSearch() }
+        else if (action === "queue_search") { root.openSidebarSection(0, "", 0); queueScreen.focusSearch() }
         else if (action === "toggle_sidebar") root.sidebarCollapsed = !root.sidebarCollapsed
         else if (action === "save_preset") backend.savePreset(root.selectedPreset || "Custom", collectSettings())
         else if (action === "export_project") backend.exportProject(collectSettings())

@@ -209,7 +209,7 @@ QueueItemCard {
                 editor = root.findChild(QObject, "themeEditorDialog")
                 self.assertIsNotNone(editor)
                 self.assertTrue(editor.property("visible"))
-                self.assertEqual(root.property("color").name(), "#0c0c0c")
+                self.assertEqual(root.property("color").name(), backend.themePalette["windowBackground"].lower())
 
                 def find_visual(item, name):
                     if item.objectName() == name:
@@ -252,7 +252,7 @@ QueueItemCard {
                 QTest.qWait(30)
                 QTest.keyClick(root, Qt.Key_0, Qt.ControlModifier | Qt.AltModifier)
                 QTest.qWait(30)
-                self.assertEqual(root.property("color").name(), "#0c0c0c")
+                self.assertEqual(root.property("color").name(), backend.themePalette["windowBackground"].lower())
                 self.assertEqual(backend.themeColorOverrides, {})
             finally:
                 backend.shutdown()
@@ -266,11 +266,12 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import "components"
 ApplicationWindow {
-    visible: true; width: 640; height: 160
+    visible: true; width: 640; height: 200
     property int activationCount: 0
     PrimaryButton { objectName: "primaryAction"; x: 20; y: 50; text: "Convert"; iconName: "play"; onClicked: activationCount++ }
     SecondaryButton { objectName: "disabledAction"; x: 220; y: 50; text: "Unavailable"; enabled: false; onClicked: activationCount++ }
     GhostButton { objectName: "toggleAction"; x: 420; y: 50; text: "Preview"; checkable: true }
+    AppSwitch { objectName: "featureSwitch"; x: 20; y: 120; width: 260; text: "Enable feature" }
 }
 ''', QUrl.fromLocalFile(str(qml_dir / "ButtonInteractionTest.qml")))
         self.assertTrue(engine.rootObjects())
@@ -303,8 +304,94 @@ ApplicationWindow {
             primary.setProperty("enabled", False)
             QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, center(primary))
             self.assertEqual(window.property("activationCount"), 2)
+            feature_switch = window.findChild(QQuickItem, "featureSwitch")
+            QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, center(feature_switch))
+            self.assertTrue(feature_switch.property("checked"))
+            feature_switch.forceActiveFocus()
+            QTest.keyClick(window, Qt.Key_Space)
+            self.assertFalse(feature_switch.property("checked"))
+            feature_switch.setProperty("enabled", False)
+            QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, center(feature_switch))
+            self.assertFalse(feature_switch.property("checked"))
         finally:
             window.close()
+
+    def test_settings_navigation_preserves_values_and_history(self):
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        with tempfile.TemporaryDirectory() as temporary:
+            backend = Backend()
+            backend.settings_manager.save = Mock()
+            backend.theme_manager = ThemeManager(Path(temporary) / "theme.json")
+            engine = QQmlApplicationEngine()
+            engine.addImportPath(str(qml_dir))
+            engine.rootContext().setContextProperty("backend", backend)
+            warnings = []
+            engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
+            try:
+                engine.load(QUrl.fromLocalFile(str(qml_dir / "Main.qml")))
+                self.assertTrue(engine.rootObjects(), warnings)
+                window = engine.rootObjects()[0]
+                window.setProperty("visibility", 2)
+                window.setWidth(1240)
+                window.setHeight(840)
+                QMetaObject.invokeMethod(window.findChild(QObject, "whatsNewPopup"), "close")
+
+                def open_page(target):
+                    self.assertTrue(QMetaObject.invokeMethod(window, "openSidebarSection",
+                        Q_ARG("QVariant", 5), Q_ARG("QVariant", target), Q_ARG("QVariant", -1)))
+                    QTest.qWait(70)
+
+                open_page("core")
+                field = window.findChild(QObject, "targetSizeField")
+                field.setProperty("text", "125")
+                open_page("smart_convert")
+                switch = window.findChild(QQuickItem, "smartConvertSwitch")
+                switch.setProperty("checked", True)
+                pages = ["output", "video", "video_editor", "audio_subtitles", "subtitle_tools",
+                         "images_sheets", "watermark_text", "metadata_hooks", "privacy_security",
+                         "cloud_integration", "device_profiles", "ffmpeg_watch", "commercial_license"]
+                for target in pages:
+                    with self.subTest(page=target):
+                        open_page(target)
+                        current = window.findChild(QQuickItem, "settingsPage_" + target)
+                        self.assertTrue(current.isVisible())
+                        self.assertGreater(current.width(), 0)
+                        for page in window.findChildren(QQuickItem):
+                            if page.objectName().startswith("settingsPage_") and page is not current:
+                                self.assertFalse(page.isVisible(), page.objectName())
+                viewport = window.findChild(QObject, "navigationScroll").property("contentItem")
+                self.assertGreater(viewport.property("contentY"), 0, "Last section must scroll into view")
+                open_page("smart_convert")
+                self.assertTrue(switch.property("checked"))
+                open_page("core")
+                self.assertEqual(field.property("text"), "125")
+                cursor = window.property("navigationCursor")
+                open_page("core")
+                self.assertEqual(window.property("navigationCursor"), cursor, "Reopening a page must not duplicate history")
+                self.assertTrue(QMetaObject.invokeMethod(window, "navigateHistory", Q_ARG("QVariant", -1)))
+                self.assertEqual(window.property("pendingSettingsTarget"), "smart_convert")
+                self.assertTrue(window.property("canNavigateForward"))
+                self.assertTrue(QMetaObject.invokeMethod(window, "navigateHistory", Q_ARG("QVariant", 1)))
+                self.assertEqual(window.property("pendingSettingsTarget"), "core")
+                QMetaObject.invokeMethod(window, "navigateHistory", Q_ARG("QVariant", -1))
+                open_page("output")
+                self.assertFalse(window.property("canNavigateForward"), "New page replaces the forward branch")
+                self.assertEqual(window.findChild(QObject, "languageMenu").property("count"), 4)
+                window.requestActivate()
+                search = window.findChild(QQuickItem, "sidebarSearchField")
+                search.forceActiveFocus()
+                search.setProperty("text", "audio")
+                QTest.qWait(60)
+                self.assertTrue(search.property("activeFocus"), "Search results must not steal typing focus")
+                QTest.keyClick(window, Qt.Key_Return)
+                self.assertEqual(window.property("pendingSettingsTarget"), "audio_subtitles")
+                search.setProperty("text", "")
+                window.setProperty("sidebarCollapsed", True)
+                QTest.qWait(60)
+                self.assertLess(window.findChild(QQuickItem, "appSidebar").width(), 100)
+                self.assertFalse(warnings, warnings)
+            finally:
+                backend.shutdown()
 
     def test_media_editing_components_load(self):
         qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"

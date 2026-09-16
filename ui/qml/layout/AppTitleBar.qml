@@ -1,164 +1,167 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQml.Models 2.15
 import App 1.0
 import "../components"
 
-Rectangle {
+Item {
     id: root
     property var appRoot
-    property alias searchField: globalSearchField
     property url logoSource: ""
+    readonly property int sidebarExtent: appRoot && appRoot.sidebarCollapsed ? 62 : Theme.sidebarWidth
     implicitHeight: Theme.titlebarHeight
-    color: Theme.panelBackground
-    border.width: 0
+    objectName: "appTitleBar"
 
-    RowLayout {
+    Rectangle { anchors.fill: parent; color: Theme.windowBackground }
+    Rectangle { width: root.sidebarExtent; height: parent.height; color: Theme.sidebarBackground }
+
+    // Native traffic lights remain above this area on macOS. Drag only on the
+    // empty toolbar; buttons keep their normal pointer and keyboard behavior.
+    MouseArea {
         anchors.fill: parent
-        anchors.leftMargin: Theme.space4
-        anchors.rightMargin: Theme.space3
-        spacing: Theme.space3
-
+        acceptedButtons: Qt.LeftButton
+        onPressed: if (root.appRoot) root.appRoot.startSystemMove()
+        onDoubleClicked: {
+            if (!root.appRoot) return
+            if (root.appRoot.visibility === Window.Maximized) root.appRoot.showNormal()
+            else root.appRoot.showMaximized()
+        }
+    }
+    RowLayout {
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        width: root.sidebarExtent
+        spacing: 8
+        Item { Layout.preferredWidth: Theme.isMac ? 86 : 8; visible: !appRoot || !appRoot.sidebarCollapsed }
         BrandMark {
+            visible: !Theme.isMac && (!appRoot || !appRoot.sidebarCollapsed)
             source: root.logoSource
-            Layout.preferredWidth: 36
-            Layout.preferredHeight: 36
+            Layout.preferredWidth: 25; Layout.preferredHeight: 25
         }
-
-        Label {
-            visible: root.width > 900
-            text: I18n.t("app.title")
-            color: Theme.textPrimary
-            font.family: Theme.displayFont
-            font.pixelSize: Theme.fontSizeLg
-            font.weight: Font.DemiBold
-        }
-
-        Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 22; color: Theme.borderMuted }
-
-        AppButton {
-            id: workspaceButton
-            Layout.preferredWidth: root.width > 900 ? 194 : 156
-            implicitHeight: 32
-            leftPadding: 8
-            rightPadding: 8
-            hoverEnabled: true
-            Accessible.name: I18n.t("mode")
-            text: appRoot ? appRoot.workspaceTitle() : I18n.t("nav_queue")
-            onClicked: workspaceMenu.open()
-            contentItem: RowLayout {
-                spacing: Theme.space2
-                Label {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Theme.space2
-                    text: workspaceButton.text
-                    color: Theme.textPrimary
-                    font.pixelSize: Theme.fontSizeSm
-                    elide: Text.ElideRight
-                }
-                AppIcon { Layout.preferredWidth: 16; Layout.preferredHeight: 16; name: "chevron"; iconColor: Theme.textSecondary; rotation: 90 }
-            }
-
-            Menu {
-                id: workspaceMenu
-                y: workspaceButton.height + 4
-                width: 188
-                padding: 4
-                background: Rectangle { color: Theme.panelBackground; border.width: 1; border.color: Theme.borderDefault; radius: Theme.radiusMd }
-                MenuItem { text: I18n.t("nav_queue"); onTriggered: appRoot && appRoot.openTopMode("convert") }
-                MenuItem { text: I18n.t("workspace_photo"); onTriggered: appRoot && appRoot.openTopMode("photo") }
-                MenuItem { text: I18n.t("workspace_video"); onTriggered: appRoot && appRoot.openTopMode("video") }
-                MenuItem { text: "🎬 " + I18n.t("nav_montage"); onTriggered: appRoot && appRoot.openTopMode("montage") }
-                MenuItem { text: I18n.t("workspace_text"); onTriggered: appRoot && appRoot.openTopMode("text") }
-                MenuSeparator {}
-                MenuItem { text: I18n.t("nav_downloads"); onTriggered: appRoot && appRoot.openTopMode("downloads") }
-            }
-        }
-
         Item { Layout.fillWidth: true }
-
-        AppTextField {
-            id: globalSearchField
-            Layout.preferredWidth: root.width > 1080 ? 236 : 168
-            placeholderText: I18n.t("global_search")
-            text: appRoot ? appRoot.globalSearchText : ""
-            onTextChanged: if (appRoot) appRoot.runGlobalSearch(text)
-            Keys.onReturnPressed: {
-                if (appRoot && appRoot.globalSearchResults.length > 0)
-                    appRoot.activateSearchResult(appRoot.globalSearchResults[0])
+        AppIconButton {
+            objectName: "sidebarToggleButton"
+            Layout.rightMargin: 12
+            // In collapsed macOS mode, native window controls occupy the top
+            // toolbar; keep the sidebar toggle below them in the content bar.
+            visible: !(Theme.isMac && appRoot && appRoot.sidebarCollapsed)
+            iconName: "sidebar"
+            accessibleLabel: appRoot && appRoot.sidebarCollapsed ? I18n.t("expand") : I18n.t("collapse")
+            onClicked: if (appRoot) appRoot.sidebarCollapsed = !appRoot.sidebarCollapsed
+        }
+    }
+    RowLayout {
+        anchors.left: parent.left
+        anchors.leftMargin: root.sidebarExtent + (Theme.isMac && appRoot && appRoot.sidebarCollapsed ? 36 : 20)
+        anchors.right: parent.right
+        anchors.rightMargin: 20
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 12
+        AppIconButton {
+            visible: Theme.isMac && appRoot && appRoot.sidebarCollapsed
+            iconName: "sidebar"
+            accessibleLabel: I18n.t("expand")
+            onClicked: appRoot.sidebarCollapsed = false
+        }
+        Rectangle {
+            Layout.preferredWidth: 68
+            Layout.preferredHeight: 30
+            radius: Theme.isMac ? 15 : Theme.radiusButton
+            color: Theme.panelSecondary
+            border.width: 1
+            border.color: Theme.borderMuted
+            Row {
+                anchors.fill: parent
+                AppIconButton {
+                    objectName: "navigationBack"
+                    width: 33; height: 30
+                    enabled: appRoot && appRoot.canNavigateBack
+                    iconName: "back"
+                    accessibleLabel: I18n.t("design.back")
+                    onClicked: appRoot.navigateHistory(-1)
+                }
+                Rectangle { width: 1; height: 16; y: 7; color: Theme.borderDefault }
+                AppIconButton {
+                    objectName: "navigationForward"
+                    width: 33; height: 30
+                    enabled: appRoot && appRoot.canNavigateForward
+                    iconName: "chevron"
+                    accessibleLabel: I18n.t("design.forward")
+                    onClicked: appRoot.navigateHistory(1)
+                }
             }
         }
-
+        Label {
+            objectName: "currentPageTitle"
+            Layout.fillWidth: true
+            Layout.minimumWidth: 60
+            text: appRoot ? appRoot.currentSectionTitle() : I18n.t("app.title")
+            font.family: Theme.bodyFont
+            font.pixelSize: Theme.fontHeading
+            font.weight: Font.DemiBold
+            color: Theme.textPrimary
+            elide: Text.ElideRight
+        }
         AppIconButton {
             iconName: "bell"
             accessibleLabel: I18n.t("notifications")
             prominent: appRoot && appRoot.toastHistory.length > 0
             onClicked: appRoot && appRoot.openNotifications()
         }
-
         AppIconButton {
+            visible: root.width > 960
             iconName: Theme.lightMode ? "moon" : "sun"
             accessibleLabel: Theme.lightMode ? I18n.t("switch_to_dark_theme") : I18n.t("switch_to_light_theme")
-            onClicked: {
-                if (!backend)
-                    return
-                backend.themeMode = Theme.lightMode ? "dark" : "light"
-            }
+            onClicked: if (backend) backend.themeMode = Theme.lightMode ? "dark" : "light"
         }
-
-        AppButton {
-            id: languageButton
-            variant: "ghost"
-            Layout.preferredWidth: 52
-            implicitHeight: 32
-            leftPadding: 4
-            rightPadding: 4
-            hoverEnabled: true
-            Accessible.name: I18n.t("language")
-            onClicked: languagePopup.open()
-            contentItem: RowLayout {
-                spacing: 3
-                AppIcon { Layout.preferredWidth: 16; Layout.preferredHeight: 16; Layout.leftMargin: 4; name: "language"; iconColor: Theme.textSecondary }
-                Label { text: appRoot ? appRoot.languageButtonLabel(appRoot._langVersion) : ""; color: Theme.textSecondary; font.pixelSize: 11; font.weight: Font.DemiBold }
-            }
-
-            Popup {
-                id: languagePopup
-                y: languageButton.height + 4
-                width: 190
-                padding: 6
-                focus: true
-                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-                background: Rectangle { color: Theme.panelBackground; border.width: 1; border.color: Theme.borderDefault; radius: Theme.radiusMd }
-                contentItem: ColumnLayout {
-                    spacing: 2
-                    Repeater {
-                        model: backend ? backend.availableLanguages : []
-                        delegate: Button {
-                            id: languageOption
-                            Layout.fillWidth: true
-                            implicitHeight: 32
-                            hoverEnabled: true
-                            onClicked: { if (appRoot) appRoot.setAppLanguage(modelData.code); languagePopup.close() }
-                            background: Rectangle { radius: Theme.radiusSm; color: appRoot && appRoot.languageActive(modelData.code) ? Theme.selectionBackground : languageOption.hovered ? Theme.overlayHover : Theme.transparent }
-                            contentItem: Label { leftPadding: 8; rightPadding: 8; text: modelData.label || ""; color: Theme.textPrimary; font.pixelSize: Theme.fontSizeSm; verticalAlignment: Text.AlignVCenter }
-                        }
-                    }
-                }
-            }
-        }
-
         AppIconButton {
             objectName: "appearanceButton"
             iconName: "palette"
             accessibleLabel: I18n.t("appearance.title")
             onClicked: appRoot && appRoot.openAppearance()
         }
-
         AppIconButton {
-            iconName: "settings"
-            accessibleLabel: I18n.t("settings")
-            onClicked: appRoot && appRoot.openSidebarSection(5, "core", appRoot.navIndexFor(5, "core"))
+            id: menuButton
+            iconName: "more"
+            accessibleLabel: I18n.t("design.app_menu")
+            onClicked: applicationMenu.open()
+            Menu {
+                id: applicationMenu
+                objectName: "applicationMenu"
+                y: menuButton.height + 4
+                width: 236
+                padding: 6
+                background: Rectangle { color: Theme.panelBackground; radius: Theme.radiusMd; border.width: 1; border.color: Theme.borderDefault }
+                MenuItem { text: I18n.t("nav_queue"); onTriggered: appRoot.openTopMode("convert") }
+                MenuItem { text: I18n.t("workspace_photo"); onTriggered: appRoot.openTopMode("photo") }
+                MenuItem { text: I18n.t("workspace_video"); onTriggered: appRoot.openTopMode("video") }
+                MenuItem { text: I18n.t("workspace_text"); onTriggered: appRoot.openTopMode("text") }
+                MenuItem { text: I18n.t("nav_montage"); onTriggered: appRoot.openTopMode("montage") }
+                MenuSeparator {}
+                Menu {
+                    id: languageMenu
+                    objectName: "languageMenu"
+                    title: I18n.t("language")
+                    Instantiator {
+                        model: backend ? backend.availableLanguages : []
+                        onObjectAdded: function(index, object) { languageMenu.insertItem(index, object) }
+                        onObjectRemoved: function(index, object) { languageMenu.removeItem(object) }
+                        delegate: MenuItem {
+                            required property var modelData
+                            text: modelData.label
+                            checkable: true
+                            checked: appRoot && appRoot.languageActive(modelData.code)
+                            onTriggered: appRoot.setAppLanguage(modelData.code)
+                        }
+                    }
+                }
+                MenuItem { text: I18n.t("switch_to_dark_theme"); onTriggered: if (backend) backend.themeMode = "dark" }
+                MenuItem { text: I18n.t("switch_to_light_theme"); onTriggered: if (backend) backend.themeMode = "light" }
+                MenuSeparator {}
+                MenuItem { text: I18n.t("design.deduplicate"); onTriggered: if (backend) backend.deduplicateQueueByHash() }
+                MenuItem { text: I18n.t("settings"); onTriggered: appRoot.openSidebarSection(5, "core", -1) }
+            }
         }
     }
 }

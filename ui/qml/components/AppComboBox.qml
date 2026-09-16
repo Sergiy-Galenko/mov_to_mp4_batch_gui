@@ -16,7 +16,7 @@ ComboBox {
 
     font.pixelSize: Theme.fontSizeSm
     implicitHeight: Theme.inputHeight
-    leftPadding: 13
+    leftPadding: 10
     rightPadding: 34
     Layout.fillWidth: true
     hoverEnabled: true
@@ -42,15 +42,16 @@ ComboBox {
 
         Text {
             anchors.centerIn: parent
-            text: "v"
+            text: Theme.isMac ? "⌃\n⌄" : "⌄"
             color: Theme.muted
-            font.pixelSize: Theme.fontSizeXs
+            font.pixelSize: Theme.isMac ? 9 : 14
+            lineHeight: 0.65
         }
     }
 
     background: Rectangle {
         radius: Theme.radiusInput
-        color: control.enabled ? (control.hovered ? Theme.inputHover : Theme.input) : Theme.disabledBg
+        color: control.enabled ? (control.hovered ? Theme.panelHover : Theme.panelSecondary) : Theme.disabledBg
         border.width: 1
         border.color: control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border
 
@@ -59,7 +60,7 @@ ComboBox {
 
     delegate: ItemDelegate {
         width: control.width
-        height: 38
+        height: Theme.buttonHeight + 2
 
         contentItem: Label {
             text: control.labelFor(modelData)

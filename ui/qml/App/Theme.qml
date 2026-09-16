@@ -2,6 +2,14 @@ pragma Singleton
 import QtQuick 2.15
 
 QtObject {
+    readonly property string platformName: (typeof backend !== "undefined" && backend) ? backend.platformName : (Qt.platform.os === "osx" ? "macos" : Qt.platform.os)
+    readonly property bool isMac: platformName === "macos"
+    readonly property bool isWindows: platformName === "windows"
+    readonly property color navigationSelection: isMac ? accent : selectionBackground
+    readonly property color navigationText: isMac ? textOnAccent : textPrimary
+    readonly property int navigationHeight: Math.round((isMac ? 36 : 40) * fontScale)
+    readonly property int panelBorderWidth: highContrastMode ? 2 : isMac ? 0 : 1
+
     readonly property string activeMode: (typeof backend !== "undefined" && backend) ? backend.effectiveThemeMode : "dark"
     readonly property bool lightMode: activeMode === "light"
     readonly property bool highContrastMode: activeMode === "high_contrast"
@@ -73,21 +81,21 @@ QtObject {
     readonly property int space5: Math.round(24 * spacingScale)
     readonly property int space6: Math.round(32 * spacingScale)
 
-    readonly property int radiusSm: 4
-    readonly property int radiusMd: 6
-    readonly property int radiusLg: 8
+    readonly property int radiusSm: isMac ? 5 : 4
+    readonly property int radiusMd: isMac ? 10 : 6
+    readonly property int radiusLg: isMac ? 14 : 8
 
-    readonly property string displayFont: Qt.application.font.family
-    readonly property string bodyFont: Qt.application.font.family
+    readonly property string displayFont: bodyFont
+    readonly property string bodyFont: isWindows ? "Segoe UI" : Qt.application.font.family
     readonly property string monoFont: Qt.platform.os === "osx" ? "Menlo" : Qt.platform.os === "windows" ? "Consolas" : "monospace"
 
-    readonly property int titlebarHeight: 52
-    readonly property int sidebarWidth: 236
+    readonly property int titlebarHeight: isMac ? 64 : 58
+    readonly property int sidebarWidth: Math.round((isMac ? 268 : 252) * spacingScale)
     readonly property int compactBreakpoint: 1120
     readonly property int maxWidth: 1480
-    readonly property int buttonHeight: Math.max(36, Math.round(38 * fontScale))
+    readonly property int buttonHeight: Math.max(28, Math.round((isMac ? 30 : 34) * fontScale))
     readonly property int inputHeight: buttonHeight
-    readonly property int checkboxSize: 18
+    readonly property int checkboxSize: isMac ? 16 : 18
     readonly property int cardPadding: space3
     readonly property int sectionPadding: space4
 
@@ -103,11 +111,11 @@ QtObject {
     readonly property int fontDisplay: Math.round(28 * fontScale)
 
     readonly property int space0: space1
-    readonly property int radiusButton: 10
-    readonly property int radiusInput: 8
-    readonly property int radiusPanel: radiusMd
-    readonly property int radiusCard: radiusMd
-    readonly property int radiusSection: radiusMd
+    readonly property int radiusButton: isMac ? 6 : 4
+    readonly property int radiusInput: isMac ? 6 : 4
+    readonly property int radiusPanel: isMac ? 12 : 8
+    readonly property int radiusCard: radiusPanel
+    readonly property int radiusSection: radiusPanel
     readonly property int radiusPill: 999
 
     readonly property color bgBase: bgPrimary

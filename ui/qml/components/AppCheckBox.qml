@@ -4,9 +4,11 @@ import App 1.0
 
 CheckBox {
     id: control
-    spacing: Theme.space1
+    spacing: Theme.space2
     hoverEnabled: true
     implicitHeight: Math.max(26, label.implicitHeight + 4)
+    opacity: enabled ? 1 : 0.55
+    focusPolicy: Qt.StrongFocus
     leftPadding: 0
     rightPadding: 0
     topPadding: 0
@@ -20,14 +22,14 @@ CheckBox {
         radius: Theme.radiusSm
         color: control.checked ? Theme.accent : control.hovered ? Theme.inputHover : Theme.input
         border.width: 1
-        border.color: control.checked ? Theme.accent2 : (control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border)
+        border.color: control.checked ? Theme.accent : (control.activeFocus ? Theme.focusRing : control.hovered ? Theme.borderStrong : Theme.border)
 
-        Rectangle {
-            width: 9
-            height: 9
-            radius: 2
+        AppIcon {
             anchors.centerIn: parent
-            color: Theme.textOnAccent
+            width: 12; height: 12
+            name: "check"
+            iconColor: Theme.textOnAccent
+            strokeWidth: 2.3
             visible: control.checked
         }
 

@@ -8,11 +8,17 @@ Rectangle {
     id: root
     property var appRoot
     readonly property int outputBlockWidth: width > 960 ? 264 : 176
-    implicitHeight: 76
+    implicitHeight: Theme.isMac ? 64 : 72
     color: Theme.panelBackground
-    border.width: 1
+    border.width: 0
     border.color: Theme.borderMuted
 
+    Rectangle {
+        width: root.appRoot && root.appRoot.sidebarCollapsed ? 62 : Theme.sidebarWidth
+        height: parent.height
+        color: Theme.sidebarBackground
+    }
+    Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.borderMuted }
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: Theme.space4
@@ -76,8 +82,8 @@ Rectangle {
             objectName: "convertAllButton"
             text: I18n.t("convert_all")
             iconName: "play"
-            Layout.preferredWidth: Math.max(178, implicitWidth)
-            Layout.minimumWidth: Math.max(178, implicitWidth)
+            Layout.preferredWidth: Math.max(150, implicitWidth)
+            Layout.minimumWidth: Math.max(150, implicitWidth)
             Layout.fillWidth: false
             enabled: backend ? backend.queueCount > 0 && !backend.isRunning && appRoot && appRoot.formValid : false
             hoverEnabled: true

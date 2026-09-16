@@ -10,7 +10,7 @@ Rectangle {
 
     radius: Theme.radiusCard
     color: Theme.panel
-    border.width: 1
+    border.width: Theme.panelBorderWidth
     border.color: Theme.border
     implicitWidth: contentLayout.implicitWidth + Theme.cardPadding * 2
     implicitHeight: contentLayout.implicitHeight + Theme.cardPadding * 2

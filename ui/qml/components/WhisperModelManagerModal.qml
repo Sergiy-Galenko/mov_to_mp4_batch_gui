@@ -9,6 +9,13 @@ Dialog {
     parent: Overlay.overlay
     title: I18n.t("whisper.title")
     modal: true
+    padding: 16
+    header: RowLayout {
+        height: 58
+        spacing: 10
+        NavigationIcon { Layout.leftMargin: 16; name: "subtitle"; tint: "#007AFF"; Layout.preferredWidth: 28; Layout.preferredHeight: 28 }
+        Label { Layout.fillWidth: true; Layout.rightMargin: 16; text: root.title; color: Theme.textPrimary; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold; elide: Text.ElideRight }
+    }
     Overlay.modal: Rectangle { color: Theme.modalScrim }
     width: Math.min(780, parent ? parent.width - 32 : 780)
     height: Math.min(680, parent ? parent.height - 32 : 680)
@@ -129,6 +136,7 @@ Dialog {
             }
             SecondaryButton {
                 Layout.fillWidth: false
+                iconName: "refresh"
                 text: I18n.t("whisper.refresh")
                 onClicked: root.refreshModels()
             }
@@ -206,6 +214,7 @@ Dialog {
                             Layout.fillWidth: false
                             objectName: "whisperDownload_" + modelData.name
                             visible: !modelData.downloaded
+                            iconName: "download"
                             text: I18n.t("whisper.download")
                             enabled: !root.downloading && root.effectiveEngine.length > 0
                             onClicked: backend.downloadWhisperModel(modelData.name, root.selectedDevice, root.selectedEngine)
@@ -213,6 +222,7 @@ Dialog {
                         SecondaryButton {
                             Layout.fillWidth: false
                             visible: modelData.disk_bytes > 0
+                            iconName: "trash"
                             text: I18n.t("whisper.delete")
                             enabled: !root.downloading && !(backend && backend.isRunning)
                             onClicked: {
@@ -223,6 +233,7 @@ Dialog {
                         SecondaryButton {
                             Layout.fillWidth: false
                             objectName: "whisperSelect_" + modelData.name
+                            iconName: "check"
                             text: root.selectedModel === modelData.name ? I18n.t("whisper.selected") : I18n.t("whisper.select")
                             enabled: root.selectedModel !== modelData.name
                             onClicked: root.chooseModel(modelData.name)

@@ -328,7 +328,6 @@
   "backend.no_tasks": "Brak zadań do uruchomienia.",
   "backend.output_dir_error": "Nie udało się utworzyć folderu wyjściowego:\n{error}",
   "backend.output_dir_required": "Przed startem wybierz folder wyjściowy.",
-
   "theme": "Motyw",
   "switch_to_dark_theme": "Włącz ciemny motyw",
   "switch_to_light_theme": "Włącz jasny motyw",
@@ -346,26 +345,22 @@
   "import_theme": "Importuj motyw",
   "export_theme": "Eksportuj motyw",
   "detect_theme": "Wykryj motyw OS",
-
   "shortcuts": "Skróty",
   "shortcut_action": "Akcja",
   "shortcut_key": "Klawisz",
   "reset_shortcut": "Reset",
   "reset_all_shortcuts": "Resetuj wszystko",
   "shortcut_conflict": "Konflikt skrótu",
-
   "system_tray": "Zasobnik systemowy",
   "enable_tray": "Włącz zasobnik",
   "minimize_to_tray": "Minimalizuj do zasobnika",
   "tray_notifications": "Powiadomienia",
   "push_notifications": "Powiadomienia push",
-
   "folder_filter": "Filtr typu",
   "folder_exclude": "Wzorce wykluczeń",
   "add_folder_filtered": "Dodaj folder z filtrami",
   "scan_stats": "Statystyki skanowania",
   "all_types": "Wszystkie typy",
-
   "paste_clipboard": "Wklej ze schowka",
   "save_queue": "Zapisz kolejkę",
   "load_queue": "Wczytaj kolejkę",
@@ -521,13 +516,13 @@
   "appearance.name": "Nazwa schematu",
   "appearance.saved_themes": "Zapisane schematy",
   "appearance.reset_colors": "Resetuj kolory",
-  "appearance.recovery_shortcut": "Ctrl+Alt+0 przywraca czarno-biały motyw w dowolnym momencie.",
+  "appearance.recovery_shortcut": "Ctrl+Alt+0 przywraca domyślne kolory platformy w dowolnym momencie.",
   "appearance.hex_hint": "Wpisz #RGB, #RRGGBB lub #AARRGGBB (alfa na początku).",
   "appearance.saved": "Schemat kolorów zapisany.",
   "appearance.imported": "Schemat kolorów zaimportowany.",
   "appearance.exported": "Schemat kolorów wyeksportowany.",
   "appearance.invalid_file": "Nie można zaimportować motywu",
-  "appearance.mode.dark": "Czarno-biały",
+  "appearance.mode.dark": "Ciemny",
   "appearance.mode.light": "Jasny",
   "appearance.mode.obsidian": "Obsydian",
   "appearance.mode.oled": "Czerń OLED",
@@ -609,5 +604,10 @@
   "whisper.state.error": "Błąd pobierania — ponów",
   "montage_editor": "Edytor montażu",
   "waveform_loading": "Ładowanie fali dźwiękowej…",
-  "crop": "Kadrowanie"
+  "crop": "Kadrowanie",
+  "design.workspace": "Twoje multimedia",
+  "design.back": "Wstecz",
+  "design.forward": "Dalej",
+  "design.app_menu": "Menu aplikacji",
+  "design.deduplicate": "Usuń zduplikowane pliki"
 }

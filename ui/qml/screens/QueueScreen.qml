@@ -31,7 +31,7 @@ Item {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 72
+                Layout.preferredHeight: 64
                 color: Theme.windowBackground
 
                 RowLayout {
@@ -130,6 +130,7 @@ Item {
 
                     AppTextField {
                         id: queueSearchField
+                        search: true
                         objectName: "queueSearchField"
                         Layout.fillWidth: true
                         Layout.preferredWidth: 320

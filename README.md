@@ -5,7 +5,7 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 ## Features
 
 - Black-and-white dark interface with customizable backgrounds, text, controls, status indicators, borders, and media icons.
-- A new monochrome app icon and rounded controls with keyboard focus, hover/press feedback, and theme-aware colors. See the [branding and button previews](docs/branding.md).
+- Automatic macOS/Windows styling: a System Settings-inspired sidebar and grouped pages on Mac, Fluent-style controls on Windows, and shared vector buttons throughout. See the [platform design previews](docs/platform-design.md).
 - **Progressive Disclosure**: Advanced settings and sidebar are hidden by default to keep the main conversion screen incredibly simple and focused.
 - Outline icons and labeled statuses keep navigation and progress readable in a monochrome palette.
 - **Modern Drag & Drop Zone**: A large, interactive glassmorphism drop zone for importing files directly from the desktop.
@@ -122,18 +122,22 @@ Implementation references: [FFmpeg VideoToolbox encoders](https://ffmpeg.org/dox
 
 ## Appearance
 
-Open the palette button in the top bar to customize the interface. The default **Black & white** theme uses neutral dark surfaces and white/gray controls. Other presets include Light, Obsidian, OLED, Midnight, High contrast, and System.
+The app detects its operating system automatically. On **macOS**, it uses a System Settings-inspired sidebar, colored section icons, grouped rounded cards, compact buttons, switches, and a unified toolbar with native window controls. On **Windows**, it uses Segoe UI, Fluent-style surfaces and controls, and the standard resizable window frame.
+
+Settings open as individual pages. Back/forward buttons retain navigation history, and switching pages preserves entered conversion settings. Search is in the sidebar; the toolbar menu contains workspace, language, and theme actions. Button groups wrap on narrow windows.
+
+Open the palette button in the top bar to customize the interface. **Dark** and **Light** use platform-specific defaults. Other presets include Obsidian, OLED, Midnight, High contrast, and System. Existing custom colors remain available. See the [design and button previews](docs/platform-design.md).
 
 Choose individual colors with the color picker or enter `#RGB`, `#RRGGBB`, or `#AARRGGBB` values. Changes apply immediately and are saved separately for each base theme. The editor also provides text scaling, interface density, named schemes, and JSON import/export. Media previews retain their original colors.
 
-Use **Reset colors** to restore the current preset, or **Ctrl+Alt+0** anywhere in the app to restore the default black-and-white colors. Invalid theme files leave the active theme unchanged.
+Use **Reset colors** to restore the current preset, or **Ctrl+Alt+0** anywhere in the app to restore the default platform colors. Invalid theme files leave the active theme unchanged.
 
 ## Requirements
 
 - Python `3.12+`
 - FFmpeg, required for video, photo, audio, subtitle, URL audio extraction, and media merge workflows
 - FFprobe, recommended for metadata, ETA, thumbnails, and analytics
-- PySide6
+- PySide6 `6.9+` (installed from `requirements.txt`)
 - yt-dlp, used for supported video-site downloads
 - Optional: `rclone`, used for Google Drive, OneDrive, Dropbox, S3/MinIO, FTP, and SFTP uploads
 
