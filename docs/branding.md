@@ -1,6 +1,7 @@
 # Media Converter identity
 
 The current logo is [`assets/app-logo-v2.png`](../assets/app-logo-v2.png): a 1254 × 1254 PNG with an alpha channel. It was generated with the built-in imagegen tool. The prior logo is retained as `assets/app-logo.png`.
+The current logo is [`assets/app-logo-v2.png`](../assets/app-logo-v2.png): a 1254 × 1254 PNG with an alpha channel. It was generated with the built-in imagegen tool.
 
 The new asset is used by the application window, top bar, welcome popup, and theme preview. `BrandMark.qml` shares a cached 256 px texture with mipmaps for small displays. The Windows build generates `app-logo-v2.ico` from the same PNG in 16, 24, 32, 48, 64, 128, and 256 px sizes; this derived file is ignored by Git.
 
