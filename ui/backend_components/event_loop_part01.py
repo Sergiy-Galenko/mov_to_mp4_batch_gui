@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    def _poll_events(self) -> None:
+BODY = r"""    def _poll_events(self) -> None:
         deadline = time.monotonic() + 0.008
         try:
             for _ in range(128):
@@ -124,4 +124,4 @@ BODY = r'''    def _poll_events(self) -> None:
                             }
                         )
                         self._speed_history = self._speed_history[-120:]
-'''
+"""

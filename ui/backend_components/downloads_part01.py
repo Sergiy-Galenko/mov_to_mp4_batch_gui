@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Slot()
+BODY = r"""    @QtCore.Slot()
     def addFiles(self) -> None:
         filt = (
             "Media Files (*.mp4 *.mov *.mkv *.webm *.avi *.m4v *.flv *.wmv *.mts *.m2ts "
@@ -322,4 +322,4 @@ BODY = r'''    @QtCore.Slot()
         cancel_event: threading.Event,
     ) -> None:
         def on_progress(progress: DownloadProgress) -> None:
-'''
+"""

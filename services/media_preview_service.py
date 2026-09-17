@@ -66,11 +66,16 @@ class MediaPreviewService:
             cmd = [
                 self.ffmpeg_path,
                 "-y",
-                "-ss", f"{timestamp:.2f}",
-                "-i", str(video_path),
-                "-vframes", "1",
-                "-vf", f"scale={thumb_width}:{thumb_height}:force_original_aspect_ratio=decrease,pad={thumb_width}:{thumb_height}:(ow-iw)/2:(oh-ih)/2:color=black",
-                "-q:v", "5",
+                "-ss",
+                f"{timestamp:.2f}",
+                "-i",
+                str(video_path),
+                "-vframes",
+                "1",
+                "-vf",
+                f"scale={thumb_width}:{thumb_height}:force_original_aspect_ratio=decrease,pad={thumb_width}:{thumb_height}:(ow-iw)/2:(oh-ih)/2:color=black",
+                "-q:v",
+                "5",
                 str(output_path),
             ]
             try:
@@ -112,10 +117,12 @@ class MediaPreviewService:
         cmd = [
             self.ffmpeg_path,
             "-y",
-            "-i", str(audio_path),
+            "-i",
+            str(audio_path),
             "-filter_complex",
             f"showwavespic=s={width}x{height}:colors={color}:split_channels=0",
-            "-frames:v", "1",
+            "-frames:v",
+            "1",
             str(output_path),
         ]
 
@@ -156,11 +163,16 @@ class MediaPreviewService:
         cmd = [
             self.ffmpeg_path,
             "-y",
-            "-ss", f"{timestamp:.3f}",
-            "-i", str(video_path),
-            "-vframes", "1",
-            "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease",
-            "-q:v", "3",
+            "-ss",
+            f"{timestamp:.3f}",
+            "-i",
+            str(video_path),
+            "-vframes",
+            "1",
+            "-vf",
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease",
+            "-q:v",
+            "3",
             str(output_path),
         ]
 
@@ -223,9 +235,12 @@ class MediaPreviewService:
             return 0.0
         cmd = [
             self.ffprobe_path,
-            "-v", "quiet",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
+            "-v",
+            "quiet",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
             str(path),
         ]
         try:

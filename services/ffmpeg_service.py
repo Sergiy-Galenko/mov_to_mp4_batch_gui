@@ -604,9 +604,7 @@ class FfmpegService:
             f"offset={measured.get('target_offset', '0.0')}:linear=true"
         )
 
-    def build_audio_filter(
-        self, settings: ConversionSettings, measured_loudnorm: dict[str, str] | None = None
-    ) -> str | None:
+    def build_audio_filter(self, settings: ConversionSettings, measured_loudnorm: dict[str, str] | None = None) -> str | None:
         filters: list[str] = []
 
         speed_filter = self.build_audio_speed_filter(settings)
@@ -747,10 +745,19 @@ class FfmpegService:
     def is_gpu_encoder(encoder: str) -> bool:
         normalized = str(encoder or "").strip().lower()
         return normalized in {
-            "h264_nvenc", "hevc_nvenc", "av1_nvenc",
-            "h264_qsv", "hevc_qsv", "av1_qsv", "vp9_qsv",
-            "h264_amf", "hevc_amf", "av1_amf",
-            "h264_videotoolbox", "hevc_videotoolbox", "prores_videotoolbox",
+            "h264_nvenc",
+            "hevc_nvenc",
+            "av1_nvenc",
+            "h264_qsv",
+            "hevc_qsv",
+            "av1_qsv",
+            "vp9_qsv",
+            "h264_amf",
+            "hevc_amf",
+            "av1_amf",
+            "h264_videotoolbox",
+            "hevc_videotoolbox",
+            "prores_videotoolbox",
         }
 
     @staticmethod
@@ -1074,20 +1081,27 @@ class FfmpegService:
     def build_quality_metric_command(self, source_path: Path, output_path: Path, metric: str) -> list[str]:
         normalized = str(metric or "").strip().lower()
         if normalized == "vmaf":
-            lavfi = (
-                "[0:v]scale=640:-2,setpts=PTS-STARTPTS[dist];"
-                "[1:v]scale=640:-2,setpts=PTS-STARTPTS[ref];"
-                "[dist][ref]libvmaf"
-            )
+            lavfi = "[0:v]scale=640:-2,setpts=PTS-STARTPTS[dist];[1:v]scale=640:-2,setpts=PTS-STARTPTS[ref];[dist][ref]libvmaf"
         else:
-            lavfi = (
-                "[0:v]scale=640:-2,setpts=PTS-STARTPTS[dist];"
-                "[1:v]scale=640:-2,setpts=PTS-STARTPTS[ref];"
-                "[dist][ref]ssim"
-            )
-        return [self.ffmpeg_path, "-v", "info", "-i", str(output_path), "-i", str(source_path), "-lavfi", lavfi, "-f", "null", _null_output()]
+            lavfi = "[0:v]scale=640:-2,setpts=PTS-STARTPTS[dist];[1:v]scale=640:-2,setpts=PTS-STARTPTS[ref];[dist][ref]ssim"
+        return [
+            self.ffmpeg_path,
+            "-v",
+            "info",
+            "-i",
+            str(output_path),
+            "-i",
+            str(source_path),
+            "-lavfi",
+            lavfi,
+            "-f",
+            "null",
+            _null_output(),
+        ]
 
-    def measure_quality(self, source_path: Path, output_path: Path, metric: str, timeout: int = 300, *, run=None) -> tuple[bool, float | None, str]:
+    def measure_quality(
+        self, source_path: Path, output_path: Path, metric: str, timeout: int = 300, *, run=None
+    ) -> tuple[bool, float | None, str]:
         normalized = str(metric or "none").strip().lower()
         if normalized not in {"ssim", "vmaf"}:
             return True, None, ""
@@ -1193,7 +1207,14 @@ class FfmpegService:
             cmd += ["-preset", (settings.preset or "medium").strip()]
         target_video_kbps = self.target_video_bitrate_kbps(settings, info)
         if target_video_kbps and codec != "prores":
-            cmd += ["-b:v", f"{target_video_kbps}k", "-maxrate", f"{int(target_video_kbps * 1.35)}k", "-bufsize", f"{int(target_video_kbps * 2)}k"]
+            cmd += [
+                "-b:v",
+                f"{target_video_kbps}k",
+                "-maxrate",
+                f"{int(target_video_kbps * 1.35)}k",
+                "-bufsize",
+                f"{int(target_video_kbps * 2)}k",
+            ]
         else:
             cmd += self.encoder_quality_args(encoder, settings.crf)
         if encoder in {
@@ -1434,9 +1455,7 @@ class FfmpegService:
         list_path = self._write_concat_list(inputs)
         out_ext = outp.suffix.lower()
         trim_args = self.build_trim_args(settings, log_cb=log_cb)
-        filter_arg, filter_val, map_label, extra_inputs, _ = self.build_video_filter_spec(
-            inputs[0], settings, out_ext, log_cb=log_cb
-        )
+        filter_arg, filter_val, map_label, extra_inputs, _ = self.build_video_filter_spec(inputs[0], settings, out_ext, log_cb=log_cb)
         audio_filter = self.build_audio_filter(settings)
 
         cmd = [self.ffmpeg_path, overwrite, "-f", "concat", "-safe", "0", "-i", list_path]

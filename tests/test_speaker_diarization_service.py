@@ -1,5 +1,6 @@
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 from services.speaker_diarization_service import (
     DiarizationResult,
     SpeakerDiarizationService,
@@ -58,4 +59,3 @@ def test_diarize_segments_fallback():
     assert result.detected_speakers_count == 2
     assert "SPEAKER_00" in result.speaker_aliases
     assert "SPEAKER_01" in result.speaker_aliases
-

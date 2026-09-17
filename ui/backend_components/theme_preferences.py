@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Property(str, notify=themeChanged)
+BODY = r"""    @QtCore.Property(str, notify=themeChanged)
     def platformName(self) -> str:
         return self.theme_manager.platform_name
 
@@ -123,4 +123,4 @@ BODY = r'''    @QtCore.Property(str, notify=themeChanged)
     def _on_system_theme_changed(self, *_args) -> None:
         if self.themeMode == "auto":
             self.themeChanged.emit()
-'''
+"""

@@ -48,9 +48,7 @@ def ensure_runtime_dependencies(requirements_path: Path, *, stdout=None, stderr=
     result = subprocess.run(cmd, stdout=stdout, stderr=stderr, text=True)
     if result.returncode != 0:
         raise DependencyBootstrapError(
-            "Failed to install missing Python libraries: "
-            + ", ".join(missing)
-            + f". Command failed: {' '.join(cmd)}"
+            "Failed to install missing Python libraries: " + ", ".join(missing) + f". Command failed: {' '.join(cmd)}"
         )
     still_missing = missing_runtime_dependencies(requirements_path)
     if still_missing:

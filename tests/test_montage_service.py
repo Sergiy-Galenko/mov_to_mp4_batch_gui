@@ -167,9 +167,7 @@ def test_backend_montage_integration():
 
         backend = Backend()
         backend.settings_manager.save = MagicMock()
-        backend.montage_service = MontageService(
-            ffmpeg_path="ffmpeg", ffprobe_path="ffprobe", store_path=store_file
-        )
+        backend.montage_service = MontageService(ffmpeg_path="ffmpeg", ffprobe_path="ffprobe", store_path=store_file)
         backend.montage_service.get_media_metadata = MagicMock(
             return_value={
                 "duration": 100.0,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    def _run_preflight(self, settings_map: Dict[str, Any], *, only_paths: Optional[set[Path]] = None) -> Dict[str, Any]:
+BODY = r"""    def _run_preflight(self, settings_map: Dict[str, Any], *, only_paths: Optional[set[Path]] = None) -> Dict[str, Any]:
         result = self.validation.validate(
             dict(settings_map),
             tasks=self.queue_model.items(),
@@ -145,4 +145,4 @@ BODY = r'''    def _run_preflight(self, settings_map: Dict[str, Any], *, only_pa
         )
         self.queue_model.set_items([item for _, item in ranked])
         self._refresh_queue_layout_state()
-'''
+"""

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Property("QVariantList", notify=youtubeDownloadChanged)
+BODY = r"""    @QtCore.Property("QVariantList", notify=youtubeDownloadChanged)
     def youtubeDownloadQueue(self) -> List[Dict[str, Any]]:
         return [dict(item) for item in self._youtube_download_queue]
 
@@ -48,4 +48,4 @@ BODY = r'''    @QtCore.Property("QVariantList", notify=youtubeDownloadChanged)
     @QtCore.Property("QVariantList", notify=preflightChanged)
     def preflightWarnings(self) -> List[str]:
         return [str(value) for value in self._preflight_result.get("warnings") or []]
-'''
+"""

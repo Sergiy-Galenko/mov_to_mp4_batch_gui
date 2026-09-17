@@ -99,7 +99,9 @@ class ConverterService:
                         safe_to_delete_original = False
                         self._log("WARN", f"Integrity check failed for {output_path.name}: {details or 'decode error'}")
             if task.media_type == "video" and settings.smart_quality_metric in {"ssim", "vmaf"}:
-                ok, score, details = self.ffmpeg.measure_quality(task.path, output_path, settings.smart_quality_metric, run=self._run_command)
+                ok, score, details = self.ffmpeg.measure_quality(
+                    task.path, output_path, settings.smart_quality_metric, run=self._run_command
+                )
                 label = settings.smart_quality_metric.upper()
                 if ok and score is not None:
                     self._log("OK", f"{label}: {score:.4f} для {output_path.name}")
@@ -188,6 +190,7 @@ class ConverterService:
         descendants = []
         with contextlib.suppress(Exception):
             import psutil  # type: ignore
+
             descendants = psutil.Process(proc.pid).children(recursive=True)
             for child in descendants:
                 with contextlib.suppress(Exception):
@@ -229,7 +232,9 @@ class ConverterService:
                 self._checkpoint()
                 stdout.seek(0)
                 stderr.seek(0)
-                return subprocess.CompletedProcess(cmd, proc.returncode, stdout.read().decode("utf-8", "replace"), stderr.read().decode("utf-8", "replace"))
+                return subprocess.CompletedProcess(
+                    cmd, proc.returncode, stdout.read().decode("utf-8", "replace"), stderr.read().decode("utf-8", "replace")
+                )
             finally:
                 self._terminate_process(proc)
                 self.current_proc = None
@@ -248,6 +253,7 @@ class ConverterService:
             return
         with contextlib.suppress(Exception):
             import psutil  # type: ignore
+
             for child in psutil.Process(proc.pid).children(recursive=True):
                 with contextlib.suppress(Exception):
                     child.suspend() if suspend else child.resume()
@@ -320,7 +326,18 @@ class ConverterService:
         joined = " ".join(cmd)
         if "-b:v" not in cmd or "-c:v" not in cmd:
             return False
-        unsupported = {"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_qsv", "hevc_qsv", "av1_qsv", "h264_amf", "hevc_amf", "av1_amf", "prores_ks"}
+        unsupported = {
+            "h264_nvenc",
+            "hevc_nvenc",
+            "av1_nvenc",
+            "h264_qsv",
+            "hevc_qsv",
+            "av1_qsv",
+            "h264_amf",
+            "hevc_amf",
+            "av1_amf",
+            "prores_ks",
+        }
         encoder = cmd[cmd.index("-c:v") + 1]
         return not FfmpegService.is_gpu_encoder(encoder) and not any(encoder in joined for encoder in unsupported)
 
@@ -347,18 +364,32 @@ class ConverterService:
             if skip_next:
                 skip_next = False
                 continue
-            if arg in {"-gpu", "-hwaccel", "-hwaccel_output_format", "-rc", "-rc:v", "-cq", "-qp_i", "-qp_p", "-qp_b", "-global_quality", "-allow_sw", "-require_sw", "-realtime"}:
+            if arg in {
+                "-gpu",
+                "-hwaccel",
+                "-hwaccel_output_format",
+                "-rc",
+                "-rc:v",
+                "-cq",
+                "-qp_i",
+                "-qp_p",
+                "-qp_b",
+                "-global_quality",
+                "-allow_sw",
+                "-require_sw",
+                "-realtime",
+            }:
                 skip_next = True
                 continue
             cleaned.append(arg)
         quality = next((new_cmd[new_cmd.index(flag) + 1] for flag in ("-cq", "-global_quality", "-qp_i") if flag in new_cmd), "23")
         if "-b:v" in cleaned and cleaned[cleaned.index("-b:v") + 1] == "0":
             pos = cleaned.index("-b:v")
-            del cleaned[pos:pos + 2]
+            del cleaned[pos : pos + 2]
         if current_enc.endswith("_videotoolbox") and "-q:v" in cleaned:
             pos = cleaned.index("-q:v")
             quality = str(round(51 - float(cleaned[pos + 1]) * 51 / 100))
-            del cleaned[pos:pos + 2]
+            del cleaned[pos : pos + 2]
         if cpu_enc == "prores_ks":
             if "-profile:v" in cleaned:
                 pos = cleaned.index("-profile:v")
@@ -504,11 +535,17 @@ class ConverterService:
         )
         with self._output_path_lock:
             return build_output_path(
-                out_dir, task.path, out_ext,
-                template=settings.output_template, index=index,
-                operation=settings.operation, media_type_name=task.media_type,
-                overwrite=settings.overwrite, skip_existing=settings.skip_existing,
-                info=self.media_info.get(task.path), collision_policy=collision_policy,
+                out_dir,
+                task.path,
+                out_ext,
+                template=settings.output_template,
+                index=index,
+                operation=settings.operation,
+                media_type_name=task.media_type,
+                overwrite=settings.overwrite,
+                skip_existing=settings.skip_existing,
+                info=self.media_info.get(task.path),
+                collision_policy=collision_policy,
                 reserved=self._reserved_output_paths,
             )
 
@@ -532,10 +569,11 @@ class ConverterService:
         self._log("INFO", f"Hook {stage}: {command}")
         try:
             import shlex
-            cmd_list = command if os.name == 'nt' else shlex.split(command)
+
+            cmd_list = command if os.name == "nt" else shlex.split(command)
             result = self._run_command(cmd_list, env=env)
         except Exception as e:
-            self._log('WARN', f'Hook {stage} failed: {e}')
+            self._log("WARN", f"Hook {stage} failed: {e}")
             return
         if result.returncode == 0:
             output = (result.stdout or "").strip()
@@ -592,7 +630,15 @@ class ConverterService:
         total_duration = 0.0
         for task in tasks:
             settings = self._effective_settings(task, defaults)
-            if settings.operation in {"convert", "audio_only", "subtitle_extract", "subtitle_burn", "thumbnail", "contact_sheet", "auto_subtitle"}:
+            if settings.operation in {
+                "convert",
+                "audio_only",
+                "subtitle_extract",
+                "subtitle_burn",
+                "thumbnail",
+                "contact_sheet",
+                "auto_subtitle",
+            }:
                 total_duration += self._task_duration(task)
         return total_duration
 
@@ -802,7 +848,14 @@ class ConverterService:
             for task in tasks:
                 self._task_state(task.path, status, str(exc))
                 results.append({"path": str(task.path), "status": status, "message": str(exc), "output_path": ""})
-            self._emit_run_summary(settings=settings, out_dir=out_dir, total_files=len(tasks), stopped=self.stop_event.is_set(), results=results, started_at=started)
+            self._emit_run_summary(
+                settings=settings,
+                out_dir=out_dir,
+                total_files=len(tasks),
+                stopped=self.stop_event.is_set(),
+                results=results,
+                started_at=started,
+            )
             self._emit("done", self.stop_event.is_set())
         finally:
             self.active_task_path = None
@@ -813,10 +866,7 @@ class ConverterService:
             self._emit("done", True)
             return
 
-        needs_ffmpeg = any(
-            task.media_type != "text" or self._effective_settings(task, settings).operation != "convert"
-            for task in tasks
-        )
+        needs_ffmpeg = any(task.media_type != "text" or self._effective_settings(task, settings).operation != "convert" for task in tasks)
         if needs_ffmpeg and not self.ffmpeg.ffmpeg_path:
             raise FileNotFoundError("FFmpeg не знайдено. Вкажи шлях до ffmpeg.")
 
@@ -900,8 +950,7 @@ class ConverterService:
         merge_candidates = [
             task
             for task in tasks
-            if task.media_type in {"video", "audio"}
-            and self._effective_settings(task, settings).operation in {"convert", "audio_only"}
+            if task.media_type in {"video", "audio"} and self._effective_settings(task, settings).operation in {"convert", "audio_only"}
         ]
         merge_enabled = settings.merge and len(merge_candidates) >= 2
         is_audio_merge = merge_enabled and all(task.media_type == "audio" for task in merge_candidates)
@@ -1055,9 +1104,7 @@ class ConverterService:
                     self._log("ERROR", f"Файл не знайдено: {task.path}")
                     self._task_state(task.path, "failed", "Файл не знайдено")
                     done_files += 1
-                    run_results.append(
-                        {"path": str(task.path), "status": "failed", "message": "Файл не знайдено", "output_path": ""}
-                    )
+                    run_results.append({"path": str(task.path), "status": "failed", "message": "Файл не знайдено", "output_path": ""})
                     self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
                     continue
 
@@ -1254,7 +1301,9 @@ class ConverterService:
                         temporary = outp.with_name(f".{outp.stem}.{uuid.uuid4().hex}.partial{outp.suffix}")
                         try:
                             if isinstance(self.transcriber, TranscriptionService):
-                                rc = self.transcriber.generate_managed(task.path, temporary, settings_for_task, self._run_command, self.ffmpeg.ffmpeg_path)
+                                rc = self.transcriber.generate_managed(
+                                    task.path, temporary, settings_for_task, self._run_command, self.ffmpeg.ffmpeg_path
+                                )
                             else:
                                 rc = self.transcriber.generate(task.path, temporary, settings_for_task, log_cb=self._log)
                             self._checkpoint()
@@ -1402,9 +1451,7 @@ class ConverterService:
         output_path = Path(cmd[-1])
         work_output_path = output_path
         if publish_output:
-            work_output_path = output_path.with_name(
-                f".{output_path.stem}.{uuid.uuid4().hex}.partial{output_path.suffix}"
-            )
+            work_output_path = output_path.with_name(f".{output_path.stem}.{uuid.uuid4().hex}.partial{output_path.suffix}")
             cmd = [*cmd[:-1], str(work_output_path)]
         cmd_with_progress = [*cmd[:2], "-progress", "pipe:1", "-nostats", "-hide_banner", *cmd[2:]]
         proc = subprocess.Popen(

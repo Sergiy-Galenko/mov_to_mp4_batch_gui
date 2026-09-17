@@ -100,7 +100,9 @@ class QmlLoadTest(unittest.TestCase):
                 self.assertTrue(manager.property("downloading"))
                 QMetaObject.invokeMethod(manager, "close")
                 backend.whisper_model_manager._states[("tiny", "whisper")] = {
-                    "state": "error", "error": "Checksum mismatch", "progress": 0.0,
+                    "state": "error",
+                    "error": "Checksum mismatch",
+                    "progress": 0.0,
                 }
                 QMetaObject.invokeMethod(manager, "open")
                 QTest.qWait(80)
@@ -261,7 +263,8 @@ QueueItemCard {
         qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
         engine = QQmlApplicationEngine()
         engine.addImportPath(str(qml_dir))
-        engine.loadData(b'''
+        engine.loadData(
+            b"""
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import "components"
@@ -273,7 +276,9 @@ ApplicationWindow {
     GhostButton { objectName: "toggleAction"; x: 420; y: 50; text: "Preview"; checkable: true }
     AppSwitch { objectName: "featureSwitch"; x: 20; y: 120; width: 260; text: "Enable feature" }
 }
-''', QUrl.fromLocalFile(str(qml_dir / "ButtonInteractionTest.qml")))
+""",
+            QUrl.fromLocalFile(str(qml_dir / "ButtonInteractionTest.qml")),
+        )
         self.assertTrue(engine.rootObjects())
         window = engine.rootObjects()[0]
         try:
@@ -337,8 +342,11 @@ ApplicationWindow {
                 QMetaObject.invokeMethod(window.findChild(QObject, "whatsNewPopup"), "close")
 
                 def open_page(target):
-                    self.assertTrue(QMetaObject.invokeMethod(window, "openSidebarSection",
-                        Q_ARG("QVariant", 5), Q_ARG("QVariant", target), Q_ARG("QVariant", -1)))
+                    self.assertTrue(
+                        QMetaObject.invokeMethod(
+                            window, "openSidebarSection", Q_ARG("QVariant", 5), Q_ARG("QVariant", target), Q_ARG("QVariant", -1)
+                        )
+                    )
                     QTest.qWait(70)
 
                 open_page("core")
@@ -347,9 +355,21 @@ ApplicationWindow {
                 open_page("smart_convert")
                 switch = window.findChild(QQuickItem, "smartConvertSwitch")
                 switch.setProperty("checked", True)
-                pages = ["output", "video", "video_editor", "audio_subtitles", "subtitle_tools",
-                         "images_sheets", "watermark_text", "metadata_hooks", "privacy_security",
-                         "cloud_integration", "device_profiles", "ffmpeg_watch", "commercial_license"]
+                pages = [
+                    "output",
+                    "video",
+                    "video_editor",
+                    "audio_subtitles",
+                    "subtitle_tools",
+                    "images_sheets",
+                    "watermark_text",
+                    "metadata_hooks",
+                    "privacy_security",
+                    "cloud_integration",
+                    "device_profiles",
+                    "ffmpeg_watch",
+                    "commercial_license",
+                ]
                 for target in pages:
                     with self.subTest(page=target):
                         open_page(target)

@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 
 from app.presets import DEFAULT_PRESETS
 

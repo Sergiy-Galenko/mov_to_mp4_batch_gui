@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    # --- Theme properties ---
+BODY = r"""    # --- Theme properties ---
 
     @QtCore.Property(str, notify=themeChanged)
     def accentColor(self) -> str:
@@ -165,4 +165,4 @@ BODY = r'''    # --- Theme properties ---
 
     @QtCore.Property("QVariantList", notify=shortcutsChanged)
     def allShortcuts(self) -> List[Dict[str, str]]:
-'''
+"""

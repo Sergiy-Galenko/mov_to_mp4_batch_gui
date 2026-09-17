@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''        self._refresh_size_predictions(settings_map)
+BODY = r"""        self._refresh_size_predictions(settings_map)
         self._refresh_smart_recommendations(settings_map)
         self._set_output_preview(summary.text)
         self._set_selected_preview(summary.selected_source, summary.selected_output, summary.selected_command)
@@ -203,4 +203,4 @@ BODY = r'''        self._refresh_size_predictions(settings_map)
     def loadHistorySettings(self, index: int) -> None:
         entry = self.history_model.entry_at(index)
         if not entry:
-'''
+"""

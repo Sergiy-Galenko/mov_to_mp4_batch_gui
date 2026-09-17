@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''            self.event_queue.put(("youtube_download_progress", download_id, progress.percent, progress.message, progress.speed, progress.eta, progress.filename))
+BODY = r"""            self.event_queue.put(("youtube_download_progress", download_id, progress.percent, progress.message, progress.speed, progress.eta, progress.filename))
 
         try:
             service = YouTubeDownloadService(self.ffmpegPath or self.ffmpeg_service.ffmpeg_path)
@@ -78,4 +78,4 @@ BODY = r'''            self.event_queue.put(("youtube_download_progress", downlo
         if not added and not duplicates and not unsupported:
             self._append_log("WARN", self._tr("backend.no_tasks"))
         return added
-'''
+"""

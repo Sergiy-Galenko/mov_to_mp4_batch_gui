@@ -1,5 +1,6 @@
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 from services.montage_service import MontageService
 from ui.backend import Backend
 
@@ -55,4 +56,3 @@ def test_backend_montage_slots(monkeypatch):
         # Test translation slot
         t_res = backend.translateSubtitles(segs, ["uk"], "en")
         assert "uk" in t_res["translations"]
-

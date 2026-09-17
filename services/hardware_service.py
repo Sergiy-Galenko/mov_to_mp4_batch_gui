@@ -70,10 +70,30 @@ def usable_videotoolbox_encoders(ffmpeg_path: str, encoders: set[str]) -> set[st
         pixel_format = "ayuv64le" if encoder == "prores_videotoolbox" else "yuv420p"
         try:
             result = subprocess.run(
-                [ffmpeg_path, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-                 "color=size=64x64:rate=1", "-frames:v", "1", "-an", "-c:v", encoder,
-                 "-pix_fmt", pixel_format, "-allow_sw", "0", "-f", "null", "-"],
-                capture_output=True, timeout=10,
+                [
+                    ffmpeg_path,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=size=64x64:rate=1",
+                    "-frames:v",
+                    "1",
+                    "-an",
+                    "-c:v",
+                    encoder,
+                    "-pix_fmt",
+                    pixel_format,
+                    "-allow_sw",
+                    "0",
+                    "-f",
+                    "null",
+                    "-",
+                ],
+                capture_output=True,
+                timeout=10,
             )
             if result.returncode == 0:
                 usable.add(encoder)
@@ -124,7 +144,9 @@ class HardwareService:
     def _list_encoders(self) -> set[str]:
         result = subprocess.run(
             [self.ffmpeg_path, "-hide_banner", "-encoders"],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         encoders: set[str] = set()
         for line in result.stdout.splitlines():

@@ -60,10 +60,7 @@ class MultiLanguageSubtitles:
     def to_dict(self) -> dict[str, Any]:
         return {
             "source_language": self.source_language,
-            "translations": {
-                lang: [s.to_dict() for s in segs]
-                for lang, segs in self.translations.items()
-            },
+            "translations": {lang: [s.to_dict() for s in segs] for lang, segs in self.translations.items()},
         }
 
 
@@ -105,7 +102,9 @@ class SubtitleTranslationService:
                     raw_data = response.read().decode("utf-8")
                     parsed = json.loads(raw_data)
                     if parsed and isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], list):
-                        translated_pieces = [piece[0] for piece in parsed[0] if piece and isinstance(piece, list) and len(piece) > 0 and piece[0]]
+                        translated_pieces = [
+                            piece[0] for piece in parsed[0] if piece and isinstance(piece, list) and len(piece) > 0 and piece[0]
+                        ]
                         translated = "".join(translated_pieces).strip()
                         if translated:
                             return f"{speaker_prefix}{translated}".strip()
@@ -238,11 +237,14 @@ class SubtitleTranslationService:
             iso_map = {"uk": "ukr", "en": "eng", "pl": "pol", "de": "deu", "es": "spa", "fr": "fra"}
             tag = iso_map.get(lang_code, lang_code)
             lang_title = SUPPORTED_LANGUAGES.get(lang_code, lang_code.upper())
-            cmd.extend([
-                f"-metadata:s:s:{i}", f"language={tag}",
-                f"-metadata:s:s:{i}", f"title={lang_title}",
-            ])
+            cmd.extend(
+                [
+                    f"-metadata:s:s:{i}",
+                    f"language={tag}",
+                    f"-metadata:s:s:{i}",
+                    f"title={lang_title}",
+                ]
+            )
 
         cmd.append(str(Path(output_path).resolve()))
         return cmd
-

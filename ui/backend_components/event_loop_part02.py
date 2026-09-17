@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''                        self.speedHistoryChanged.emit(list(self._speed_history))
+BODY = r"""                        self.speedHistoryChanged.emit(list(self._speed_history))
                     if self._run_started_monotonic and now - self._last_resource_emit >= RESOURCE_SAMPLE_INTERVAL_SEC:
                         self._last_resource_emit = now
                         self._append_resource_sample(now)
@@ -102,4 +102,4 @@ BODY = r'''                        self.speedHistoryChanged.emit(list(self._spee
                     self.previewGenerated.emit(str(path_text), dict(preview_data or {}))
         except queue.Empty:
             return
-'''
+"""

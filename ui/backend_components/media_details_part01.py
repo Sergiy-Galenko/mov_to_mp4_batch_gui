@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    def _probe_media_async(self, path: Path) -> None:
+BODY = r"""    def _probe_media_async(self, path: Path) -> None:
         info = self.media_analysis.probe(path)
         self.event_queue.put(("media_info", path, info))
 
@@ -151,4 +151,4 @@ BODY = r'''    def _probe_media_async(self, path: Path) -> None:
         )
         for item in summary.items:
             self.queue_model.set_preview_output(item.source_path, str(item.output_path))
-'''
+"""

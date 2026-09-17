@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''        self.uiLanguageChanged.emit()
+BODY = r"""        self.uiLanguageChanged.emit()
         self.languageChanged.emit()
         self._save_state()
 
@@ -120,4 +120,4 @@ BODY = r'''        self.uiLanguageChanged.emit()
             started_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry.get("started_at", 0) or 0))
             results = entry.get("results", [])
             failed = sum(1 for item in results if item.get("status") == TaskStatus.FAILED)
-'''
+"""

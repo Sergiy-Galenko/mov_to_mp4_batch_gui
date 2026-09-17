@@ -288,9 +288,7 @@ class MontageService:
         num_speakers: int = 2,
         language: str = "uk",
     ) -> dict[str, Any]:
-        result = self.diarization_service.diarize_segments(
-            file_path, segments, num_speakers=num_speakers, language=language
-        )
+        result = self.diarization_service.diarize_segments(file_path, segments, num_speakers=num_speakers, language=language)
         session = self.get_session(file_path)
         session["diarization_data"] = result.to_dict()
         self.save_session(file_path, session)
@@ -332,13 +330,9 @@ class MontageService:
                 )
             )
         if output_path:
-            p = self.subtitle_style_service.export_ass_file(
-                lines, output_path, template_name=template, res_x=res_x, res_y=res_y
-            )
+            p = self.subtitle_style_service.export_ass_file(lines, output_path, template_name=template, res_x=res_x, res_y=res_y)
             return str(p)
-        return self.subtitle_style_service.build_ass_script(
-            lines, template_name=template, res_x=res_x, res_y=res_y
-        )
+        return self.subtitle_style_service.build_ass_script(lines, template_name=template, res_x=res_x, res_y=res_y)
 
     # 5. Subtitle translation
     def translate_subtitles(
@@ -347,9 +341,7 @@ class MontageService:
         target_languages: list[str],
         source_lang: str = "auto",
     ) -> dict[str, Any]:
-        res = self.subtitle_translation_service.translate_segments(
-            segments, target_languages=target_languages, source_language=source_lang
-        )
+        res = self.subtitle_translation_service.translate_segments(segments, target_languages=target_languages, source_language=source_lang)
         return res.to_dict()
 
     # 6. Smart vertical reframe
@@ -374,13 +366,9 @@ class MontageService:
         blur_style: str = "box",
     ) -> dict[str, Any]:
         bbox_tuple = tuple(initial_bbox) if (initial_bbox and len(initial_bbox) == 4) else None
-        res = self.blur_service.track_object(
-            file_path, target_type=target_type, initial_bbox=bbox_tuple, blur_style=blur_style
-        )
+        res = self.blur_service.track_object(file_path, target_type=target_type, initial_bbox=bbox_tuple, blur_style=blur_style)
         session = self.get_session(file_path)
         session["blur_target_type"] = target_type
         session["blur_tracking_data"] = res.to_dict()
         self.save_session(file_path, session)
         return res.to_dict()
-
-

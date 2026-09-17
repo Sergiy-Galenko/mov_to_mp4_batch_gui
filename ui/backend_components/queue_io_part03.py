@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''        saved = max(input_bytes - output_bytes, 0)
+BODY = r"""        saved = max(input_bytes - output_bytes, 0)
         speeds = [point.get("speed", 0.0) for point in self._speed_history if point.get("speed", 0.0) > 0]
         avg_speed = sum(speeds) / len(speeds) if speeds else 0.0
         self._session_elapsed_text = format_time(elapsed)
@@ -68,4 +68,4 @@ BODY = r'''        saved = max(input_bytes - output_bytes, 0)
         self._file_timings.sort(key=lambda item: float(item.get("duration") or 0), reverse=True)
         self._file_timings = self._file_timings[:10]
         self.fileTimingsChanged.emit(list(self._file_timings))
-'''
+"""

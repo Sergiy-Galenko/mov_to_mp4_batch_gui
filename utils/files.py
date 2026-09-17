@@ -31,8 +31,11 @@ def is_text(path: Path) -> bool:
 _MEDIA_TYPES = {
     extension: kind
     for kind, extensions in (
-        ("text", TEXT_EXTS), ("subtitle", SUBTITLE_EXTS), ("audio", AUDIO_EXTS),
-        ("image", IMAGE_EXTS), ("video", VIDEO_EXTS),
+        ("text", TEXT_EXTS),
+        ("subtitle", SUBTITLE_EXTS),
+        ("audio", AUDIO_EXTS),
+        ("image", IMAGE_EXTS),
+        ("video", VIDEO_EXTS),
     )
     for extension in extensions
 }

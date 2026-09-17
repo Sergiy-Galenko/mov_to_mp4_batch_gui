@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import shutil
 from collections.abc import Iterable, Mapping
@@ -92,7 +92,8 @@ class ValidationService:
             if not queue_items:
                 add_error("queue", "Черга порожня.")
             needs_ffmpeg = not queue_items or any(
-                item.media_type != "text" or settings_map_to_model(merge_settings_maps(raw, item.overrides), defaults=ConversionSettings()).operation != "convert"
+                item.media_type != "text"
+                or settings_map_to_model(merge_settings_maps(raw, item.overrides), defaults=ConversionSettings()).operation != "convert"
                 for item in queue_items
             )
             if needs_ffmpeg:
@@ -225,9 +226,7 @@ class ValidationService:
                     add_error("audio_codec", f"{item.path.name}: обробка аудіо потребує перекодування; зміни audio codec з copy на auto.")
 
         merge_candidates = [
-            item
-            for item in queue_items
-            if item.media_type == "video" and resolved_by_path[item.path].operation == "convert"
+            item for item in queue_items if item.media_type == "video" and resolved_by_path[item.path].operation == "convert"
         ]
         merge_enabled = settings.merge and len(merge_candidates) >= 2
         merge_paths = {item.path for item in merge_candidates} if merge_enabled else set()
@@ -324,11 +323,7 @@ class ValidationService:
             if item.probe_data is not None:
                 cached_info.setdefault(item.path, item.probe_data)
 
-        missing_paths = [
-            item.path
-            for item in queue_items
-            if item.media_type in {"video", "audio"} and item.path not in cached_info
-        ]
+        missing_paths = [item.path for item in queue_items if item.media_type in {"video", "audio"} and item.path not in cached_info]
         probe_batch = getattr(self.ffmpeg, "probe_media_batch", None)
         if missing_paths and getattr(self.ffmpeg, "ffprobe_path", None) and callable(probe_batch):
             try:
@@ -353,7 +348,9 @@ class ValidationService:
                 if not info.audio_streams:
                     add_error("audio_stream", f"{item.path.name}: у джерелі немає аудіодоріжки для вилучення.")
                 elif audio_track >= info.audio_streams:
-                    add_error("audio_stream", f"{item.path.name}: аудіодоріжка #{audio_track + 1} відсутня (доступно: {info.audio_streams}).")
+                    add_error(
+                        "audio_stream", f"{item.path.name}: аудіодоріжка #{audio_track + 1} відсутня (доступно: {info.audio_streams})."
+                    )
 
             if operation == "subtitle_extract":
                 if not info.subtitle_streams:
@@ -388,9 +385,7 @@ class ValidationService:
             if out_format == "webm" and settings.audio_codec == "copy":
                 add_warning(f"{item.path.name}: WebM перекодує аудіо в Opus; копіювання аудіопотоку не застосовується.")
             if info.dynamic_range == "HDR":
-                add_warning(
-                    f"{item.path.name}: HDR-джерело. Автоматичний тонмапінг не увімкнено; перевір результат на SDR-пристрої."
-                )
+                add_warning(f"{item.path.name}: HDR-джерело. Автоматичний тонмапінг не увімкнено; перевір результат на SDR-пристрої.")
             if settings.fast_copy and info.vcodec:
                 supports_copy, reason = self.ffmpeg.fast_copy_allowed(
                     item.path,
@@ -434,8 +429,7 @@ class ValidationService:
                 )
             elif free < required + 256 * 1024 * 1024:
                 add_warning(
-                    "Малий запас місця: потрібно приблизно "
-                    f"{required / 1024 / 1024:.0f} MiB, доступно {free / 1024 / 1024:.0f} MiB."
+                    f"Малий запас місця: потрібно приблизно {required / 1024 / 1024:.0f} MiB, доступно {free / 1024 / 1024:.0f} MiB."
                 )
         except Exception:
             return

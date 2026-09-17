@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    def _start_next_youtube_download(self) -> None:
+BODY = r"""    def _start_next_youtube_download(self) -> None:
         if self._youtube_download_running:
             return
         next_item = None
@@ -88,4 +88,4 @@ BODY = r'''    def _start_next_youtube_download(self) -> None:
             self._youtube_download_progress = max(0.0, min(1.0, float(progress)))
         self._youtube_download_status = status
         self.youtubeDownloadChanged.emit()
-'''
+"""

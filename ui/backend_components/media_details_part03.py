@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''            return
+BODY = r"""            return
         settings = dict(entry.get("settings") or {})
         if not settings:
             self._append_log("WARN", "У цьому запуску немає збережених налаштувань.")
@@ -178,4 +178,4 @@ BODY = r'''            return
         return self.montage_service.track_and_blur(
             path, target_type=target_type, initial_bbox=bbox, blur_style=blur_style
         )
-'''
+"""

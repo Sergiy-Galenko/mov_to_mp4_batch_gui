@@ -6,14 +6,13 @@ a moving blur/mosaic mask following its trajectory.
 
 from __future__ import annotations
 
-import json
 import logging
-import math
 import subprocess
 import tempfile
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +65,7 @@ class ObjectTrackingBlurService:
         # 1. OpenCV Haar Cascade if available
         try:
             import cv2  # type: ignore
+
             img = cv2.imread(str(image_path))
             if img is not None:
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -88,6 +88,7 @@ class ObjectTrackingBlurService:
         # 2. PIL-based Fallback Region Detection
         try:
             from PIL import Image
+
             with Image.open(image_path) as im:
                 width, height = im.size
                 if target_type == "plate":
@@ -240,4 +241,3 @@ class ObjectTrackingBlurService:
             return True
         logger.error("Failed to render tracked blur: %s", (res.stderr or "")[-500:])
         return False
-

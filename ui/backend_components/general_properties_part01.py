@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Property(str, constant=True)
+BODY = r"""    @QtCore.Property(str, constant=True)
     def appTitle(self) -> str:
         return APP_TITLE
 
@@ -124,4 +124,4 @@ BODY = r'''    @QtCore.Property(str, constant=True)
         if self._ui_language == normalized:
             return
         self._ui_language = normalized
-'''
+"""

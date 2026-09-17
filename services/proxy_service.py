@@ -10,8 +10,8 @@ from __future__ import annotations
 import hashlib
 import logging
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from app.paths import APP_DATA_DIR
 from services.timeline_service import TimelineClip, TimelineProject
@@ -168,4 +168,3 @@ class ProxyService:
             height=project.height,
             fps=project.fps,
         )
-

@@ -110,6 +110,7 @@ class SmartReframeService:
         # 1. Try OpenCV Haar Cascade if installed
         try:
             import cv2  # type: ignore
+
             img = cv2.imread(str(image_path))
             if img is not None:
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -129,6 +130,7 @@ class SmartReframeService:
         # 2. PIL-based Luminance & Edge Saliency Fallback
         try:
             from PIL import Image
+
             with Image.open(image_path) as im:
                 im_small = im.convert("L").resize((64, 36))
                 pixels = im_small.load()
@@ -197,9 +199,7 @@ class SmartReframeService:
                 # Apply deadband: ignore tiny shifts
                 if abs(detected_center - current_smooth_center) > deadband:
                     # Exponential Moving Average (EMA)
-                    current_smooth_center = (
-                        smoothing_factor * detected_center + (1.0 - smoothing_factor) * current_smooth_center
-                    )
+                    current_smooth_center = smoothing_factor * detected_center + (1.0 - smoothing_factor) * current_smooth_center
                 keyframes.append(KeyframeFocus(timestamp=t, center_x=round(current_smooth_center, 3), center_y=0.5))
 
         if keyframes:

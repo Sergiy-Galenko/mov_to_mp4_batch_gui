@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''            skipped = sum(1 for item in results if item.get("status") == TaskStatus.SKIPPED)
+BODY = r"""            skipped = sum(1 for item in results if item.get("status") == TaskStatus.SKIPPED)
             cancelled = sum(1 for item in results if item.get("status") == TaskStatus.CANCELLED)
             lines.append(
                 f"{started_at} | {entry.get('operation', '—')} | файлів {entry.get('total_files', 0)} | "
@@ -83,4 +83,4 @@ BODY = r'''            skipped = sum(1 for item in results if item.get("status")
     @QtCore.Property(str, notify=sessionStatsChanged)
     def sessionSavedText(self) -> str:
         return self._session_saved_text
-'''
+"""

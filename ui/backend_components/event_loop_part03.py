@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    def _handle_youtube_event(self, event: tuple) -> None:
+BODY = r"""    def _handle_youtube_event(self, event: tuple) -> None:
         etype = event[0]
         if etype == "youtube_playlist_preview_done":
             self._youtube_playlist_preview = str(event[1] if len(event) > 1 else "")
@@ -108,4 +108,4 @@ BODY = r'''    def _handle_youtube_event(self, event: tuple) -> None:
             self._youtube_current_download_id = ""
             self._youtube_cancel_event = None
             self._start_next_youtube_download()
-'''
+"""

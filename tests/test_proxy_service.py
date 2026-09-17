@@ -1,5 +1,6 @@
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 from services.proxy_service import ProxyService
 from services.timeline_service import TimelineClip, TimelineProject
 

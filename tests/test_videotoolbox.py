@@ -13,11 +13,14 @@ from services.ffmpeg_service import FfmpegService
 from services.hardware_service import HardwareCapabilities, usable_videotoolbox_encoders
 
 
-@pytest.mark.parametrize("codec,label,encoder,cpu,pixel_format", [
-    ("h264", "H.264 (AVC)", "h264_videotoolbox", "libx264", "yuv420p"),
-    ("h265", "H.265 (HEVC)", "hevc_videotoolbox", "libx265", "yuv420p"),
-    ("prores", "ProRes", "prores_videotoolbox", "prores_ks", "ayuv64le"),
-])
+@pytest.mark.parametrize(
+    "codec,label,encoder,cpu,pixel_format",
+    [
+        ("h264", "H.264 (AVC)", "h264_videotoolbox", "libx264", "yuv420p"),
+        ("h265", "H.265 (HEVC)", "hevc_videotoolbox", "libx265", "yuv420p"),
+        ("prores", "ProRes", "prores_videotoolbox", "prores_ks", "ayuv64le"),
+    ],
+)
 def test_videotoolbox_auto_selection_commands_merge_and_cpu_fallback(codec, label, encoder, cpu, pixel_format):
     ffmpeg = FfmpegService("ffmpeg", "ffprobe")
     ffmpeg.encoder_caps = {encoder, cpu}
@@ -81,7 +84,10 @@ def test_runtime_probe_removes_unusable_prores_and_enforces_hardware(monkeypatch
         return SimpleNamespace(returncode=1 if "prores_videotoolbox" in cmd else 0)
 
     monkeypatch.setattr(hardware_service.subprocess, "run", run)
-    assert usable_videotoolbox_encoders("ffmpeg", {"h264_videotoolbox", "prores_videotoolbox", "libx264"}) == {"h264_videotoolbox", "libx264"}
+    assert usable_videotoolbox_encoders("ffmpeg", {"h264_videotoolbox", "prores_videotoolbox", "libx264"}) == {
+        "h264_videotoolbox",
+        "libx264",
+    }
     assert len(calls) == 2
     assert all(cmd[cmd.index("-allow_sw") + 1] == "0" for cmd in calls)
 

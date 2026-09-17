@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
+BODY = r"""    @QtCore.Property(QtCore.QObject, constant=True)
     def filteredQueueModel(self) -> QtCore.QObject:
         return self.queue_filter_model
 
@@ -38,4 +38,4 @@ BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
             "trimEnd": settings.trim_end or 0,
             "fastCopy": settings.fast_copy,
         }
-'''
+"""

@@ -17,6 +17,7 @@ from pathlib import Path
 
 try:
     from PIL import Image
+
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
@@ -47,6 +48,7 @@ class OcrService:
         # 2. Try pytesseract Python package
         try:
             import pytesseract  # type: ignore
+
             if PILLOW_AVAILABLE:
                 with Image.open(image_path) as img:
                     res = str(pytesseract.image_to_string(img, lang=lang.replace("+", "+")))
@@ -58,6 +60,7 @@ class OcrService:
         # 3. Try easyocr Python package
         try:
             import easyocr  # type: ignore
+
             reader = easyocr.Reader(["en", "uk"], gpu=False)
             results = reader.readtext(str(image_path), detail=0)
             if results:

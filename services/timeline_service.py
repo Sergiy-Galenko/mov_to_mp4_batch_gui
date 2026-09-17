@@ -9,13 +9,13 @@ Supports:
 
 from __future__ import annotations
 
-import json
 import logging
 import subprocess
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -202,13 +202,9 @@ class TimelineService:
                     trans_dur = min(prev_clip.transition_duration, curr_dur / 2.0, 5.0)
                     offset = max(0.0, cumulative_offset - trans_dur)
                     next_v = f"[vx{i}]"
-                    filter_chains.append(
-                        f"{current_v}[v{i}]xfade=transition={trans}:duration={trans_dur:.3f}:offset={offset:.3f}{next_v}"
-                    )
+                    filter_chains.append(f"{current_v}[v{i}]xfade=transition={trans}:duration={trans_dur:.3f}:offset={offset:.3f}{next_v}")
                     next_a = f"[ax{i}]"
-                    filter_chains.append(
-                        f"{current_a}[a{i}]acrossfade=d={trans_dur:.3f}:c1=tri:c2=tri{next_a}"
-                    )
+                    filter_chains.append(f"{current_a}[a{i}]acrossfade=d={trans_dur:.3f}:c1=tri:c2=tri{next_a}")
                     current_v = next_v
                     current_a = next_a
                     cumulative_offset = offset + curr_dur
@@ -216,9 +212,7 @@ class TimelineService:
                     # Concat transition
                     next_v = f"[vc{i}]"
                     next_a = f"[ac{i}]"
-                    filter_chains.append(
-                        f"{current_v}{current_a}[v{i}][a{i}]concat=n=2:v=1:a=1{next_v}{next_a}"
-                    )
+                    filter_chains.append(f"{current_v}{current_a}[v{i}][a{i}]concat=n=2:v=1:a=1{next_v}{next_a}")
                     current_v = next_v
                     current_a = next_a
                     cumulative_offset += curr_dur
@@ -234,17 +228,14 @@ class TimelineService:
                 label = f"[bga{j}]"
                 vol = max(0.0, min(audio.volume, 2.0))
                 filter_chains.append(
-                    f"[{track_input_idx}:a]volume={vol:.2f},"
-                    f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo{label}"
+                    f"[{track_input_idx}:a]volume={vol:.2f},aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo{label}"
                 )
                 bg_audio_labels.append(label)
 
             # Mix primary clip audio with background music
             all_audios = f"{last_a}" + "".join(bg_audio_labels)
             total_tracks = 1 + len(bg_audio_labels)
-            filter_chains.append(
-                f"{all_audios}amix=inputs={total_tracks}:duration=first:dropout_transition=2[a_final]"
-            )
+            filter_chains.append(f"{all_audios}amix=inputs={total_tracks}:duration=first:dropout_transition=2[a_final]")
             final_a = "[a_final]"
         else:
             final_a = last_a
@@ -292,4 +283,3 @@ class TimelineService:
         except Exception as exc:
             logger.error("Error during timeline render: %s", exc)
             return False
-

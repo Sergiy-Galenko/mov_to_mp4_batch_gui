@@ -1,5 +1,6 @@
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 from services.subtitle_translation_service import (
     SubtitleTranslationService,
     TranslatedSubtitleSegment,
@@ -57,4 +58,3 @@ def test_multitrack_embed_command():
     assert "-map 2:s" in cmd_str
     assert "language=ukr" in cmd_str
     assert "language=eng" in cmd_str
-

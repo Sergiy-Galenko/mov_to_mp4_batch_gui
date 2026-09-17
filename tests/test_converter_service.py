@@ -1,4 +1,4 @@
-﻿import queue
+import queue
 import sys
 import tempfile
 import threading
@@ -118,6 +118,7 @@ class ConverterServiceTest(unittest.TestCase):
         self.assertEqual(suspended.call_args_list[0].args, (123, True))
         self.assertEqual(suspended.call_args_list[1].args, (123, False))
         self.assertFalse(service.pause_event.is_set())
+
     def test_skip_existing_marks_task_as_skipped(self) -> None:
         fake = FakeFfmpegService()
         events: queue.Queue[tuple] = queue.Queue()
@@ -398,9 +399,7 @@ class ConverterServiceTest(unittest.TestCase):
             )
             result: list[int] = []
             thread = threading.Thread(
-                target=lambda: result.append(
-                    service._run_ffmpeg([sys.executable, str(worker), str(output)], None, 0, 0, 0, 1, time.time())
-                )
+                target=lambda: result.append(service._run_ffmpeg([sys.executable, str(worker), str(output)], None, 0, 0, 0, 1, time.time()))
             )
             thread.start()
             for _ in range(100):

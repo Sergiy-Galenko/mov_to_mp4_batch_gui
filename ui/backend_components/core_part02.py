@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''        self._youtube_history = self.settings_manager.youtube_history()
+BODY = r"""        self._youtube_history = self.settings_manager.youtube_history()
         self._youtube_cookies_path = self.settings_manager.youtube_cookies_path()
         self._youtube_cancel_event: Optional[threading.Event] = None
         self._youtube_download_queue: List[Dict[str, Any]] = []
@@ -207,4 +207,4 @@ BODY = r'''        self._youtube_history = self.settings_manager.youtube_history
         except Exception as exc:
             self.toastRequested.emit(str(exc))
             return False
-'''
+"""

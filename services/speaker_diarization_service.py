@@ -86,6 +86,7 @@ class SpeakerDiarizationService:
 
             # Unpack 16-bit PCM samples
             import struct
+
             sample_count = len(raw_bytes) // 2
             samples = struct.unpack(f"<{sample_count}h", raw_bytes)
             if not samples:
@@ -96,7 +97,9 @@ class SpeakerDiarizationService:
             rms = math.sqrt(sum_sq / len(samples))
 
             # 2. Zero Crossing Rate (ZCR)
-            zero_crossings = sum(1 for i in range(1, len(samples)) if (samples[i] >= 0 > samples[i - 1]) or (samples[i] < 0 <= samples[i - 1]))
+            zero_crossings = sum(
+                1 for i in range(1, len(samples)) if (samples[i] >= 0 > samples[i - 1]) or (samples[i] < 0 <= samples[i - 1])
+            )
             zcr = zero_crossings / len(samples)
 
             # 3. Mean absolute deviation
@@ -126,6 +129,7 @@ class SpeakerDiarizationService:
         media = Path(media_path).resolve()
         # Convert audio to temporary 16kHz mono WAV for fast feature extraction
         import tempfile
+
         wav_file = None
         tmp_dir = tempfile.TemporaryDirectory()
         try:
@@ -171,7 +175,9 @@ class SpeakerDiarizationService:
         cluster_labels = self._cluster_features(feature_vectors, k)
 
         # Build speaker labels and segments
-        speaker_prefix = "Мовець" if language in {"uk", "ru"} else ("Mówca" if language == "pl" else ("Sprecher" if language == "de" else "Speaker"))
+        speaker_prefix = (
+            "Мовець" if language in {"uk", "ru"} else ("Mówca" if language == "pl" else ("Sprecher" if language == "de" else "Speaker"))
+        )
         aliases: dict[str, str] = {}
         for spk_idx in range(k):
             spk_id = f"SPEAKER_{spk_idx:02d}"
@@ -216,10 +222,7 @@ class SpeakerDiarizationService:
             # Assign points to nearest centroid
             new_assignments = []
             for vec in features:
-                dists = [
-                    math.sqrt(sum((vec[d] - c[d]) ** 2 for d in range(dim)))
-                    for c in centroids
-                ]
+                dists = [math.sqrt(sum((vec[d] - c[d]) ** 2 for d in range(dim))) for c in centroids]
                 new_assignments.append(int(dists.index(min(dists))))
 
             if new_assignments == assignments:

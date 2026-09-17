@@ -30,20 +30,24 @@ class ReportService:
         writer = csv.writer(output, lineterminator="\n")
 
         # Header
-        writer.writerow([
-            "Файл",
-            "Статус",
-            "Повідомлення",
-            "Вихідний файл",
-        ])
+        writer.writerow(
+            [
+                "Файл",
+                "Статус",
+                "Повідомлення",
+                "Вихідний файл",
+            ]
+        )
 
         for result in results:
-            writer.writerow([
-                result.get("path", ""),
-                result.get("status", ""),
-                result.get("message", ""),
-                result.get("output_path", ""),
-            ])
+            writer.writerow(
+                [
+                    result.get("path", ""),
+                    result.get("status", ""),
+                    result.get("message", ""),
+                    result.get("output_path", ""),
+                ]
+            )
 
         # Summary footer
         total = len(results)

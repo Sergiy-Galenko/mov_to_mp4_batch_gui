@@ -61,9 +61,12 @@ class TranscriptionService:
             manager = WhisperModelManager()
             try:
                 cached = manager.model_path(model_name, "faster-whisper")
-                model = WhisperModel(str(cached) if cached else model_name, device=device,
-                                     compute_type="float16" if device == "cuda" else "int8",
-                                     download_root=str(manager.hub_dir))
+                model = WhisperModel(
+                    str(cached) if cached else model_name,
+                    device=device,
+                    compute_type="float16" if device == "cuda" else "int8",
+                    download_root=str(manager.hub_dir),
+                )
             finally:
                 manager.shutdown()
             segments, _info = model.transcribe(str(inp), language=lang_arg, beam_size=5)
@@ -77,7 +80,9 @@ class TranscriptionService:
                         start_m, start_s = divmod(start_rem, 60)
                         end_h, end_rem = divmod(seg.end, 3600)
                         end_m, end_s = divmod(end_rem, 60)
-                        f.write(f"{int(start_h):02d}:{int(start_m):02d}:{start_s:06.3f} --> {int(end_h):02d}:{int(end_m):02d}:{end_s:06.3f}\n")
+                        f.write(
+                            f"{int(start_h):02d}:{int(start_m):02d}:{start_s:06.3f} --> {int(end_h):02d}:{int(end_m):02d}:{end_s:06.3f}\n"
+                        )
                         f.write(f"{seg.text.strip()}\n\n")
                 else:
                     for i, seg in enumerate(segments, start=1):
@@ -86,7 +91,9 @@ class TranscriptionService:
                         end_h, end_rem = divmod(seg.end, 3600)
                         end_m, end_s = divmod(end_rem, 60)
                         f.write(f"{i}\n")
-                        f.write(f"{int(start_h):02d}:{int(start_m):02d}:{int(start_s):02d},{int((start_s % 1) * 1000):03d} --> {int(end_h):02d}:{int(end_m):02d}:{int(end_s):02d},{int((end_s % 1) * 1000):03d}\n")
+                        f.write(
+                            f"{int(start_h):02d}:{int(start_m):02d}:{int(start_s):02d},{int((start_s % 1) * 1000):03d} --> {int(end_h):02d}:{int(end_m):02d}:{int(end_s):02d},{int((end_s % 1) * 1000):03d}\n"
+                        )
                         f.write(f"{seg.text.strip()}\n\n")
             return outp.exists()
         except Exception as exc:
@@ -103,8 +110,8 @@ class TranscriptionService:
         # Use the app's selected executable, including binaries not named ffmpeg
         # or installed on PATH. Match Whisper's 16 kHz mono float32 input.
         result = subprocess.run(
-            [ffmpeg, "-nostdin", "-v", "error", "-i", str(inp), "-vn", "-f", "s16le",
-             "-ac", "1", "-ar", "16000", "-"], capture_output=True,
+            [ffmpeg, "-nostdin", "-v", "error", "-i", str(inp), "-vn", "-f", "s16le", "-ac", "1", "-ar", "16000", "-"],
+            capture_output=True,
         )
         if result.returncode:
             raise RuntimeError(result.stderr.decode("utf-8", errors="replace").strip() or "Audio decoding failed")
@@ -126,13 +133,17 @@ class TranscriptionService:
             device = resolve_device(settings.subtitle_device, "whisper")
             # Whisper registers a sparse alignment buffer, unsupported by MPS.
             # Segment subtitles do not use word alignment, so move a dense buffer.
-            model = whisper.load_model(model_name, device="cpu" if device == "mps" else device,
-                                       download_root=str(cache_root() / "whisper"))
+            model = whisper.load_model(model_name, device="cpu" if device == "mps" else device, download_root=str(cache_root() / "whisper"))
             if device == "mps":
                 model.register_buffer("alignment_heads", model.alignment_heads.to_dense(), persistent=False)
                 model = model.to("mps")
-            result = model.transcribe(self._whisper_audio(inp), language=None if language == "auto" else language,
-                                      verbose=False, fp16=device == "cuda", word_timestamps=False)
+            result = model.transcribe(
+                self._whisper_audio(inp),
+                language=None if language == "auto" else language,
+                verbose=False,
+                fp16=device == "cuda",
+                word_timestamps=False,
+            )
             out_format = self._resolve_format(settings, outp)
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_dir = Path(tmpdir)

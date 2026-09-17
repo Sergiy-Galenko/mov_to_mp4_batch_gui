@@ -15,7 +15,7 @@ from .theme_preferences import BODY as THEME_PREFERENCES_BODY
 from .ui_preferences import BODY as UI_PREFERENCES_BODY
 
 _CLASS_SOURCE = (
-    'class Backend(QtCore.QObject):\n'
+    "class Backend(QtCore.QObject):\n"
     '    """Qt/QML backend assembled from focused source components."""\n'
     '    __module__ = "ui.backend"\n'
     + CORE_BODY

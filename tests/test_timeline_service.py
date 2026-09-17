@@ -1,5 +1,3 @@
-from pathlib import Path
-import tempfile
 from services.timeline_service import (
     TimelineAudioTrack,
     TimelineClip,
@@ -64,4 +62,3 @@ def test_timeline_service_build_command_transitions_and_audio():
     assert "amix=" in cmd_str
     assert "-stream_loop -1" in cmd_str
     assert "/tmp/out.mp4" in cmd[-1]
-

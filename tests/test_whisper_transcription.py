@@ -19,6 +19,7 @@ def install_python_whisper(monkeypatch, model):
     def writer_for(fmt, folder):
         def write(result, source):
             Path(folder, Path(source).stem + "." + fmt).write_text("WEBVTT\n\nHello", encoding="utf-8")
+
         return write
 
     monkeypatch.setitem(sys.modules, "whisper", whisper)
@@ -38,8 +39,9 @@ def test_python_whisper_uses_selected_device_and_managed_cache(tmp_path, monkeyp
     output = tmp_path / "out.vtt"
     assert TranscriptionService().generate(tmp_path / "input.wav", output, settings) == 0
     assert output.read_text().startswith("WEBVTT")
-    load.assert_called_once_with("large-v3-turbo", device="cpu" if device == "mps" else device,
-                                 download_root=str(tmp_path / "cache" / "whisper"))
+    load.assert_called_once_with(
+        "large-v3-turbo", device="cpu" if device == "mps" else device, download_root=str(tmp_path / "cache" / "whisper")
+    )
     assert model.transcribe.call_args.kwargs["fp16"] == (device == "cuda")
     if device == "mps":
         model.alignment_heads.to_dense.assert_called_once()
@@ -72,8 +74,9 @@ def test_inference_failure_keeps_selected_device_and_original_error(tmp_path, mo
     cli = Mock()
     monkeypatch.setattr(transcription.subprocess, "run", cli)
     with pytest.raises(RuntimeError, match="CUDA out of memory"):
-        TranscriptionService().generate(tmp_path / "in.wav", tmp_path / "out.srt",
-                                       ConversionSettings(subtitle_engine="whisper", subtitle_device="cuda"))
+        TranscriptionService().generate(
+            tmp_path / "in.wav", tmp_path / "out.srt", ConversionSettings(subtitle_engine="whisper", subtitle_device="cuda")
+        )
     cli.assert_not_called()
 
 
@@ -89,8 +92,9 @@ def test_cli_passes_device_and_model_directory(tmp_path, monkeypatch):
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(transcription.subprocess, "run", run)
-    TranscriptionService().generate(tmp_path / "in.wav", tmp_path / "out.srt",
-                                   ConversionSettings(subtitle_engine="whisper", subtitle_device="cpu"))
+    TranscriptionService().generate(
+        tmp_path / "in.wav", tmp_path / "out.srt", ConversionSettings(subtitle_engine="whisper", subtitle_device="cpu")
+    )
     assert commands[0][commands[0].index("--device") + 1] == "cpu"
     assert commands[0][commands[0].index("--model_dir") + 1] == str(tmp_path / "cache" / "whisper")
 
@@ -117,8 +121,9 @@ def test_managed_worker_receives_configured_ffmpeg_without_changing_parent_envir
         return SimpleNamespace(returncode=0)
 
     ffmpeg = str(tmp_path / "custom ffmpeg" / "ffmpeg")
-    TranscriptionService().generate_managed(tmp_path / "in.wav", tmp_path / "out.srt",
-                                          ConversionSettings(subtitle_device="mps"), run, ffmpeg)
+    TranscriptionService().generate_managed(
+        tmp_path / "in.wav", tmp_path / "out.srt", ConversionSettings(subtitle_device="mps"), run, ffmpeg
+    )
     assert captured["env"]["MEDIA_CONVERTER_FFMPEG"] == ffmpeg
     assert captured["settings"]["subtitle_device"] == "mps"
     assert os.environ["MEDIA_CONVERTER_FFMPEG"] == "original"

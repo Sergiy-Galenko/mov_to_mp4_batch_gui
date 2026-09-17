@@ -3,6 +3,7 @@
 The manager and transcription service use the same engine-specific caches.
 Optional inference packages are not needed to download OpenAI checkpoints.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -29,8 +30,12 @@ _CHECKSUMS = {
 WHISPER_MODELS = [
     {"name": name, "size_mb": size, "vram_mb": memory}
     for name, size, memory in [
-        ("tiny", 75, 1000), ("base", 145, 1000), ("small", 480, 2000),
-        ("medium", 1500, 5000), ("large-v3", 3100, 10000), ("large-v3-turbo", 1600, 6000),
+        ("tiny", 75, 1000),
+        ("base", 145, 1000),
+        ("small", 480, 2000),
+        ("medium", 1500, 5000),
+        ("large-v3", 3100, 10000),
+        ("large-v3-turbo", 1600, 6000),
     ]
 ]
 ProgressCallback = Callable[[float, str], None]
@@ -53,10 +58,15 @@ def faster_repo(name: str) -> str:
 class WhisperModelManager:
     def __init__(self, cache_dir: Path | None = None) -> None:
         self.cache_dir = Path(cache_dir) if cache_dir is not None else cache_root()
-        self.hub_dir = (self.cache_dir / "huggingface" / "hub") if cache_dir is not None else Path(
-            os.environ.get("HF_HUB_CACHE") or os.environ.get("HUGGINGFACE_HUB_CACHE")
-            or str(Path(os.environ.get("HF_HOME", str(self.cache_dir / "huggingface"))) / "hub")
-        ).expanduser()
+        self.hub_dir = (
+            (self.cache_dir / "huggingface" / "hub")
+            if cache_dir is not None
+            else Path(
+                os.environ.get("HF_HUB_CACHE")
+                or os.environ.get("HUGGINGFACE_HUB_CACHE")
+                or str(Path(os.environ.get("HF_HOME", str(self.cache_dir / "huggingface"))) / "hub")
+            ).expanduser()
+        )
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper-download")
         self._lock = threading.RLock()
         self._cancel = threading.Event()
@@ -81,10 +91,9 @@ class WhisperModelManager:
 
     @staticmethod
     def _complete_faster_model(path: Path) -> bool:
-        return all((path / name).is_file() and (path / name).stat().st_size > 0
-                   for name in ("config.json", "model.bin", "tokenizer.json")) and any(
-            (path / name).is_file() and (path / name).stat().st_size > 0 for name in ("vocabulary.json", "vocabulary.txt")
-        )
+        return all(
+            (path / name).is_file() and (path / name).stat().st_size > 0 for name in ("config.json", "model.bin", "tokenizer.json")
+        ) and any((path / name).is_file() and (path / name).stat().st_size > 0 for name in ("vocabulary.json", "vocabulary.txt"))
 
     def model_path(self, model_name: str, engine: str = "whisper") -> Path | None:
         for path in self.get_cache_paths(model_name, engine):
@@ -117,12 +126,19 @@ class WhisperModelManager:
                         except OSError:
                             continue
                 path = self.model_path(name, engine)
-                results.append({
-                    **item, "downloaded": path is not None, "disk_bytes": total,
-                    "disk_size_mb": round(total / 1024**2, 1), "path": str(path or ""),
-                    "state": "ready" if path else "missing", "progress": 0.0, "error": "",
-                    **self._states.get((name, engine), {}),
-                })
+                results.append(
+                    {
+                        **item,
+                        "downloaded": path is not None,
+                        "disk_bytes": total,
+                        "disk_size_mb": round(total / 1024**2, 1),
+                        "path": str(path or ""),
+                        "state": "ready" if path else "missing",
+                        "progress": 0.0,
+                        "error": "",
+                        **self._states.get((name, engine), {}),
+                    }
+                )
         return results
 
     def is_model_downloaded(self, model_name: str, engine: str = "whisper") -> bool:
@@ -147,8 +163,7 @@ class WhisperModelManager:
             self._states.pop((name, engine), None)
             return deleted
 
-    def download_model(self, model_name: str, progress_cb: ProgressCallback | None = None,
-                       engine: str = "whisper") -> Future[bool]:
+    def download_model(self, model_name: str, progress_cb: ProgressCallback | None = None, engine: str = "whisper") -> Future[bool]:
         name = normalize_model(model_name)
         self._validate_engine(engine)
         with self._lock:
@@ -210,9 +225,19 @@ class WhisperModelManager:
         revision = manifest["sha"]
         if not isinstance(revision, str) or not revision.isalnum():
             raise RuntimeError("Invalid model revision")
-        files = [entry for entry in manifest["siblings"] if entry["rfilename"] in {
-            "config.json", "preprocessor_config.json", "model.bin", "tokenizer.json", "vocabulary.json", "vocabulary.txt",
-        }]
+        files = [
+            entry
+            for entry in manifest["siblings"]
+            if entry["rfilename"]
+            in {
+                "config.json",
+                "preprocessor_config.json",
+                "model.bin",
+                "tokenizer.json",
+                "vocabulary.json",
+                "vocabulary.txt",
+            }
+        ]
         target = self.get_cache_paths(name, "faster-whisper")[0]
         staging = target.with_name(target.name + ".partial")
         try:
@@ -220,7 +245,8 @@ class WhisperModelManager:
                 self._check_cancelled()
                 filename = entry["rfilename"]
                 self._transfer(
-                    f"https://huggingface.co/{repo}/resolve/{revision}/{filename}", staging / filename,
+                    f"https://huggingface.co/{repo}/resolve/{revision}/{filename}",
+                    staging / filename,
                     entry.get("lfs", {}).get("sha256"),
                     lambda pct, msg, index=index: progress((index + pct) / len(files) if pct >= 0 else -1, msg),
                 )

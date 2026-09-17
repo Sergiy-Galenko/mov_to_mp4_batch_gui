@@ -121,10 +121,10 @@ def test_faster_cache_requires_complete_snapshot_and_counts_blobs_once(manager):
 
 def test_faster_download_uses_pinned_revision_and_atomic_complete_directory(manager, monkeypatch):
     files = {"model.bin": b"weights", "config.json": b"{}", "tokenizer.json": b"{}", "vocabulary.json": b"[]"}
-    manifest = {"sha": "abc123", "siblings": [
-        {"rfilename": name, "lfs": {"sha256": hashlib.sha256(data).hexdigest()}}
-        for name, data in files.items()
-    ]}
+    manifest = {
+        "sha": "abc123",
+        "siblings": [{"rfilename": name, "lfs": {"sha256": hashlib.sha256(data).hexdigest()}} for name, data in files.items()],
+    }
     urls = []
 
     def fetch(url, **kwargs):
@@ -152,10 +152,14 @@ def test_environment_cache_roots_are_shared(monkeypatch, tmp_path):
 
 def test_devices_follow_runtime_availability_and_engine(monkeypatch):
     monkeypatch.setattr(whisper_runtime, "package_available", lambda name: name == "whisper")
-    monkeypatch.setitem(__import__("sys").modules, "torch", SimpleNamespace(
-        cuda=SimpleNamespace(is_available=lambda: False),
-        backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)),
-    ))
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "torch",
+        SimpleNamespace(
+            cuda=SimpleNamespace(is_available=lambda: False),
+            backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)),
+        ),
+    )
     assert whisper_runtime.available_devices() == ["auto", "cpu", "mps"]
     assert whisper_runtime.resolve_device("auto", "whisper") == "mps"
     with pytest.raises(RuntimeError, match="CUDA"):

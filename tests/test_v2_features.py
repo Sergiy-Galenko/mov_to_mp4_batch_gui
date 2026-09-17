@@ -329,13 +329,20 @@ def test_named_themes_and_json_preserve_every_color_and_layout(tmp_path):
     assert ThemeManager(manager.path).saved_themes() == []
 
 
-@pytest.mark.parametrize("invalid", [
-    {}, {"schema_version": 99, "theme_mode": "dark"}, {"theme_mode": "unknown"},
-    {"colors": {"accent": "red"}}, {"colors": {"notAColor": "#fff"}},
-    {"colors": []}, {"theme_mode": "light", "font_scale": float("nan")},
-    {"theme_mode": "light", "layout_mode": "unknown"},
-    {"theme_mode": "light", "sidebar_collapsed": "false"},
-])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {},
+        {"schema_version": 99, "theme_mode": "dark"},
+        {"theme_mode": "unknown"},
+        {"colors": {"accent": "red"}},
+        {"colors": {"notAColor": "#fff"}},
+        {"colors": []},
+        {"theme_mode": "light", "font_scale": float("nan")},
+        {"theme_mode": "light", "layout_mode": "unknown"},
+        {"theme_mode": "light", "sidebar_collapsed": "false"},
+    ],
+)
 def test_invalid_theme_import_leaves_disk_and_active_theme_unchanged(tmp_path, invalid):
     manager = ThemeManager(tmp_path / "theme.json")
     manager.set_color("accent", "#456789")

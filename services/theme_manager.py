@@ -302,6 +302,7 @@ class ThemeManager:
         if sys.platform == "win32":
             try:
                 import winreg
+
                 key = winreg.OpenKey(
                     winreg.HKEY_CURRENT_USER,
                     r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
@@ -314,9 +315,12 @@ class ThemeManager:
         elif sys.platform == "darwin":
             try:
                 import subprocess
+
                 result = subprocess.run(
                     ["defaults", "read", "-g", "AppleInterfaceStyle"],
-                    capture_output=True, text=True, timeout=2,
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
                 )
                 return "Dark" in result.stdout
             except Exception:

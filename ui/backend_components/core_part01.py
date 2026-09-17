@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    logAdded = QtCore.Signal(str, str)
+BODY = r"""    logAdded = QtCore.Signal(str, str)
     statusChanged = QtCore.Signal()
     fileProgressChanged = QtCore.Signal()
     totalProgressChanged = QtCore.Signal()
@@ -183,4 +183,4 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
         self._youtube_download_running = False
         self._youtube_download_progress = 0.0
         self._youtube_download_status = "Готово"
-'''
+"""

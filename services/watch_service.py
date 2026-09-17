@@ -1,4 +1,4 @@
-﻿"""Watch folder service with debounced file detection."""
+"""Watch folder service with debounced file detection."""
 
 from __future__ import annotations
 

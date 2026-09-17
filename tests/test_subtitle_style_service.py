@@ -1,7 +1,7 @@
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 from services.subtitle_style_service import (
-    STYLE_PRESETS,
     StyledSubtitleLine,
     SubtitleStyleService,
 )
@@ -52,4 +52,3 @@ def test_export_ass_and_burnin_filter():
         filter_str = service.build_burnin_filter(res_path)
         assert filter_str.startswith("ass='")
         assert filter_str.endswith("'")
-

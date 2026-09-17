@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Slot()
+BODY = r"""    @QtCore.Slot()
     def exportLog(self) -> None:
         default_path = Path(self.outputDir).expanduser() / "media-converter-log.txt"
         path, _ = QtWidgets.QFileDialog.getSaveFileName(None, "Експортувати лог", str(default_path), "Text (*.txt)")
@@ -250,4 +250,4 @@ BODY = r'''    @QtCore.Slot()
     def queuePathAt(self, index: int) -> str:
         task = self.queue_model.item_at(index)
         return str(task.path) if task else ""
-'''
+"""

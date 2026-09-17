@@ -53,11 +53,11 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
         "font_name": "Arial Black",
         "font_size": 42,
         # ASS color is &HAABBGGRR
-        "primary_color": "&H00FFFFFF",    # White
+        "primary_color": "&H00FFFFFF",  # White
         "secondary_color": "&H0000D7FF",  # Gold / Yellow
         "highlight_color": "&H0000E6FF",  # Bright Yellow
-        "outline_color": "&H00000000",    # Black
-        "back_color": "&H80000000",       # 50% Black Shadow
+        "outline_color": "&H00000000",  # Black
+        "back_color": "&H80000000",  # 50% Black Shadow
         "bold": 1,
         "italic": 0,
         "outline": 4,
@@ -70,11 +70,11 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
         "name": "Reels Modern",
         "font_name": "Helvetica Neue",
         "font_size": 36,
-        "primary_color": "&H00FFFFFF",    # Pure White
+        "primary_color": "&H00FFFFFF",  # Pure White
         "secondary_color": "&H00F0FF00",  # Cyan highlight
         "highlight_color": "&H00FFF000",  # Vivid Cyan
-        "outline_color": "&H001A1A1A",    # Dark Charcoal
-        "back_color": "&H99000000",       # Soft Translucent Box
+        "outline_color": "&H001A1A1A",  # Dark Charcoal
+        "back_color": "&H99000000",  # Soft Translucent Box
         "bold": 1,
         "italic": 0,
         "outline": 2,
@@ -87,7 +87,7 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
         "name": "Karaoke Classic",
         "font_name": "Arial",
         "font_size": 38,
-        "primary_color": "&H00E0E0E0",    # Silver inactive
+        "primary_color": "&H00E0E0E0",  # Silver inactive
         "secondary_color": "&H0000BFFF",  # Deep Gold active
         "highlight_color": "&H0000BFFF",
         "outline_color": "&H00000000",
@@ -107,7 +107,7 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
         "primary_color": "&H00FFFFFF",
         "secondary_color": "&H0014FF39",  # Neon Green
         "highlight_color": "&H0014FF39",  # Neon Green
-        "outline_color": "&H00660066",    # Dark Purple
+        "outline_color": "&H00660066",  # Dark Purple
         "back_color": "&H00330033",
         "bold": 1,
         "italic": 0,
@@ -176,8 +176,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{tmpl['font_name']},{tmpl['font_size']},{tmpl['primary_color']},{tmpl['secondary_color']},{tmpl['outline_color']},{tmpl['back_color']},{tmpl['bold']},{tmpl['italic']},0,0,100,100,0,0,1,{tmpl['outline']},{tmpl['shadow']},{tmpl['alignment']},30,30,{tmpl['margin_v']},1
-Style: Highlight,{tmpl['font_name']},{tmpl['font_size']},{tmpl['highlight_color']},{tmpl['secondary_color']},{tmpl['outline_color']},{tmpl['back_color']},{tmpl['bold']},{tmpl['italic']},0,0,108,108,0,0,1,{tmpl['outline'] + 1},{tmpl['shadow']}, {tmpl['alignment']},30,30,{tmpl['margin_v']},1
+Style: Default,{tmpl["font_name"]},{tmpl["font_size"]},{tmpl["primary_color"]},{tmpl["secondary_color"]},{tmpl["outline_color"]},{tmpl["back_color"]},{tmpl["bold"]},{tmpl["italic"]},0,0,100,100,0,0,1,{tmpl["outline"]},{tmpl["shadow"]},{tmpl["alignment"]},30,30,{tmpl["margin_v"]},1
+Style: Highlight,{tmpl["font_name"]},{tmpl["font_size"]},{tmpl["highlight_color"]},{tmpl["secondary_color"]},{tmpl["outline_color"]},{tmpl["back_color"]},{tmpl["bold"]},{tmpl["italic"]},0,0,108,108,0,0,1,{tmpl["outline"] + 1},{tmpl["shadow"]}, {tmpl["alignment"]},30,30,{tmpl["margin_v"]},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

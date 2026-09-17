@@ -1,4 +1,3 @@
-from pathlib import Path
 from services.object_blur_service import ObjectTrackingBlurService, TrackingResult
 from services.smart_reframe_service import SmartReframeService
 
@@ -45,4 +44,3 @@ def test_object_blur_service_filter_generation():
     result.blur_style = "gaussian"
     gblur_filter = service.build_ffmpeg_blur_filter(result, blur_strength=20)
     assert "gblur=sigma=20" in gblur_filter
-

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import queue
@@ -80,7 +80,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output-dir", required=True, help="Output directory")
     parser.add_argument("--download-url", action="append", help="Download a video/source URL into the output directory")
     parser.add_argument("--download-mode", choices=["video", "audio"], default="video", help="URL download mode")
-    parser.add_argument("--download-quality", choices=sorted(YouTubeDownloadService.QUALITY_OPTIONS), default="best", help="Video quality for downloads")
+    parser.add_argument(
+        "--download-quality", choices=sorted(YouTubeDownloadService.QUALITY_OPTIONS), default="best", help="Video quality for downloads"
+    )
     parser.add_argument("--download-playlist", action="store_true", help="Allow playlist downloads")
     parser.add_argument("--download-subtitles", action="store_true", help="Download available subtitles next to the media")
     parser.add_argument("--download-cookies", help="Path to a Netscape cookies.txt file for restricted videos")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Slot(str, bool, str)
+BODY = r"""    @QtCore.Slot(str, bool, str)
     def previewYoutubePlaylist(self, url: str, playlist: bool, cookies_file: str) -> None:
         clean_url = str(url or "").strip()
         if not clean_url:
@@ -64,4 +64,4 @@ BODY = r'''    @QtCore.Slot(str, bool, str)
             "message": "Queued",
             "filename": "",
         }
-'''
+"""

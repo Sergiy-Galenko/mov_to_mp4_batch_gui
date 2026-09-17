@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''        return self.shortcut_manager.all_shortcuts()
+BODY = r"""        return self.shortcut_manager.all_shortcuts()
 
     @QtCore.Property("QVariantMap", notify=shortcutsChanged)
     def shortcutsByCategory(self) -> Dict[str, List[Dict[str, str]]]:
@@ -510,4 +510,4 @@ BODY = r'''        return self.shortcut_manager.all_shortcuts()
             QtGui.QDesktopServices.openUrl(QtCore.QUrl(self._paid_update_download_url))
 
     @QtCore.Slot()
-'''
+"""

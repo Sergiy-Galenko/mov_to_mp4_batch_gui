@@ -1,4 +1,5 @@
 """Windows Taskbar Progress (ITaskbarList3) integration for PySide6."""
+
 from __future__ import annotations
 
 import sys
@@ -25,7 +26,7 @@ class TaskbarService:
         self._init_taskbar()
 
     def _init_taskbar(self) -> None:
-        if sys.platform != 'win32' or not self._hwnd:
+        if sys.platform != "win32" or not self._hwnd:
             return
         try:
             import ctypes
@@ -33,18 +34,14 @@ class TaskbarService:
 
             class GUID(ctypes.Structure):
                 _fields_ = [
-                    ('Data1', wintypes.DWORD),
-                    ('Data2', wintypes.WORD),
-                    ('Data3', wintypes.WORD),
-                    ('Data4', wintypes.BYTE * 8),
+                    ("Data1", wintypes.DWORD),
+                    ("Data2", wintypes.WORD),
+                    ("Data3", wintypes.WORD),
+                    ("Data4", wintypes.BYTE * 8),
                 ]
 
-            CLSID_TaskbarList = GUID(
-                0x56FDF344, 0xFD6D, 0x11D0, (wintypes.BYTE * 8)(0x95, 0x8A, 0x00, 0x60, 0x97, 0xC9, 0xA0, 0x90)
-            )
-            IID_ITaskbarList3 = GUID(
-                0xEA1AFB91, 0x9E28, 0x4B86, (wintypes.BYTE * 8)(0x90, 0xE9, 0x9E, 0x9F, 0x8A, 0x5E, 0xEF, 0xAF)
-            )
+            CLSID_TaskbarList = GUID(0x56FDF344, 0xFD6D, 0x11D0, (wintypes.BYTE * 8)(0x95, 0x8A, 0x00, 0x60, 0x97, 0xC9, 0xA0, 0x90))
+            IID_ITaskbarList3 = GUID(0xEA1AFB91, 0x9E28, 0x4B86, (wintypes.BYTE * 8)(0x90, 0xE9, 0x9E, 0x9F, 0x8A, 0x5E, 0xEF, 0xAF))
 
             ole32 = ctypes.windll.ole32
             ole32.CoInitialize(None)
@@ -67,6 +64,7 @@ class TaskbarService:
             return
         try:
             import ctypes
+
             vtable = ctypes.cast(self._taskbar, ctypes.POINTER(ctypes.c_void_p))[0]
             vt_ptr = ctypes.cast(vtable, ctypes.POINTER(ctypes.c_void_p))
             func_type = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int)
@@ -80,11 +78,10 @@ class TaskbarService:
             return
         try:
             import ctypes
+
             vtable = ctypes.cast(self._taskbar, ctypes.POINTER(ctypes.c_void_p))[0]
             vt_ptr = ctypes.cast(vtable, ctypes.POINTER(ctypes.c_void_p))
-            func_type = ctypes.WINFUNCTYPE(
-                ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_ulonglong
-            )
+            func_type = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_ulonglong)
             func = func_type(vt_ptr[9])
             func(self._taskbar, ctypes.c_void_p(self._hwnd), max(0, completed), max(1, total))
         except Exception:

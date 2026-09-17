@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''        if folder:
+BODY = r"""        if folder:
             self.outputDir = folder
 
     @QtCore.Slot(result=bool)
@@ -89,4 +89,4 @@ BODY = r'''        if folder:
                 self.openSourcePath(str(item.path))
                 return
         self._append_log("WARN", "Не вдалося знайти файл для цього повідомлення.")
-'''
+"""

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''        selected_paths = self.queue_manager.paths_from_payload(paths)
+BODY = r"""        selected_paths = self.queue_manager.paths_from_payload(paths)
         changed = 0
         for idx, task in enumerate(self.queue_model.items()):
             if task.path not in selected_paths:
@@ -39,4 +39,4 @@ BODY = r'''        selected_paths = self.queue_manager.paths_from_payload(paths)
             if item.status in {TaskStatus.ANALYZING, TaskStatus.RUNNING, TaskStatus.PAUSED}:
                 self.queue_model.update_task_state(item.path, TaskStatus.CANCELLED, "Скасовано користувачем")
         self._notify_queue_stats()
-'''
+"""

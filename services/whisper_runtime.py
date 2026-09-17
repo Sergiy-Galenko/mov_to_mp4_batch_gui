@@ -1,4 +1,5 @@
 """Shared Whisper engine/device selection for the manager and transcription worker."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -39,6 +40,7 @@ def available_devices(engine: str = "auto") -> list[str]:
     if selected == "faster-whisper":
         try:
             import ctranslate2
+
             if ctranslate2.get_cuda_device_count() > 0:
                 devices.append("cuda")
         except (ImportError, RuntimeError, OSError):
@@ -46,6 +48,7 @@ def available_devices(engine: str = "auto") -> list[str]:
     else:
         try:
             import torch
+
             if torch.cuda.is_available():
                 devices.append("cuda")
             if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
@@ -60,5 +63,7 @@ def resolve_device(requested: str, engine: str) -> str:
     if requested == "auto":
         return next((device for device in ("cuda", "mps") if device in devices), "cpu")
     if requested not in devices:
-        raise RuntimeError(f"Whisper device {requested.upper()} is unavailable for {engine}. Select Auto or CPU, or install a compatible runtime.")
+        raise RuntimeError(
+            f"Whisper device {requested.upper()} is unavailable for {engine}. Select Auto or CPU, or install a compatible runtime."
+        )
     return requested

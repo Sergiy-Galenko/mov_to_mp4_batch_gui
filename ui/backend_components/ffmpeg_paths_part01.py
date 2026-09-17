@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Slot()
+BODY = r"""    @QtCore.Slot()
     def refreshEncoders(self) -> None:
         candidate = self.ffmpegPath or self.ffmpeg_service.ffmpeg_path or ""
         if candidate and (
@@ -126,4 +126,4 @@ BODY = r'''    @QtCore.Slot()
     def pickOutputDir(self) -> None:
         start_dir = self.outputDir or str(Path.home())
         folder = QtWidgets.QFileDialog.getExistingDirectory(None, self._tr("choose_output_folder"), start_dir)
-'''
+"""

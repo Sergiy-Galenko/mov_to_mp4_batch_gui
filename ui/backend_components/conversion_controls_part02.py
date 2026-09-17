@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''            self._append_log("WARN", "Немає попередніх налаштувань для retry.")
+BODY = r"""            self._append_log("WARN", "Немає попередніх налаштувань для retry.")
             return
         self._start_conversion(dict(self._last_settings_map), failed_only=True)
 
@@ -125,4 +125,4 @@ BODY = r'''            self._append_log("WARN", "Немає попередніх
 
     @QtCore.Slot("QVariantList", "QVariantMap")
     def saveBulkOverride(self, paths: List[Any], override_map: Dict[str, Any]) -> None:
-'''
+"""

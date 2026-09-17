@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Slot()
+BODY = r"""    @QtCore.Slot()
     def deduplicateQueue(self) -> None:
         unique, removed = self.queue_manager.deduplicate_by_path(self.queue_model.items())
         self.queue_model.set_items(unique)
@@ -120,4 +120,4 @@ BODY = r'''    @QtCore.Slot()
         self._save_state()
         self._append_log("INFO", "Чергу очищено")
 
-'''
+"""
