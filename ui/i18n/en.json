@@ -609,5 +609,16 @@
   "design.back": "Back",
   "design.forward": "Forward",
   "design.app_menu": "Application menu",
-  "design.deduplicate": "Remove duplicate files"
+  "design.deduplicate": "Remove duplicate files",
+  "montage_multi_clip": "Multi-clip montage",
+  "montage_transitions": "Transitions",
+  "montage_music_track": "Music track",
+  "montage_proxy": "Lightweight proxies",
+  "montage_proxy_desc": "Fast scrubbing without system load",
+  "montage_speakers": "Speaker diarization",
+  "montage_rename_speakers": "Rename speakers",
+  "montage_word_highlight": "Word-level highlight",
+  "montage_sub_translation": "Subtitle translation",
+  "montage_smart_reframe": "Auto vertical reframe 9:16",
+  "montage_motion_blur": "Motion-tracked blur"
 }

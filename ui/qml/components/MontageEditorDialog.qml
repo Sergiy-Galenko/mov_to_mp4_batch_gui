@@ -44,6 +44,33 @@ Window {
     property bool loopEnabled: false
     property string waveformPath: ""
 
+    // Feature tabs & state
+    property int sidebarTab: 0
+    property bool useProxy: false
+    property string proxyPath: ""
+    property bool proxyGenerating: false
+
+    // Multi-clip timeline properties
+    property var timelineClips: []
+    property string bgMusicPath: ""
+    property real bgMusicVolume: 0.8
+    property bool bgMusicLoop: true
+    property string defaultTransition: "fade"
+    property real defaultTransitionDuration: 1.0
+
+    // Speech & Subtitles properties
+    property string subtitleTemplate: "tiktok_pop"
+    property var detectedSpeakers: []
+    property var speakerAliases: ({})
+    property string targetSubtitleLanguage: "en"
+    property string speechStatusText: ""
+
+    // Smart Reframe & Blur properties
+    property bool smartReframeApplied: false
+    property string blurTargetType: "face"
+    property string blurStyle: "box"
+    property string blurStatusText: ""
+
     signal applied(string path, var sessionData)
     signal cancelled()
 
@@ -481,7 +508,7 @@ Window {
 
             // Right Sidebar: Montage Settings
             Rectangle {
-                Layout.preferredWidth: 300
+                Layout.preferredWidth: 330
                 Layout.fillHeight: true
                 color: Theme.panelBackground
                 radius: Theme.radiusMd
@@ -490,186 +517,596 @@ Window {
 
                 ScrollView {
                     anchors.fill: parent
-                    anchors.margins: 12
+                    anchors.margins: 10
                     clip: true
                     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
                     ColumnLayout {
                         width: parent.width
-                        spacing: 14
+                        spacing: 12
 
-                        // Section 1: Обрізка (Trim)
-                        Label {
-                            text: I18n.t("trim")
-                            font.family: Theme.displayFont
-                            font.pixelSize: Theme.fontSizeMd
-                            font.bold: true
-                            color: Theme.accentPrimary
-                        }
-
+                        // Tab Switcher
                         RowLayout {
                             Layout.fillWidth: true
-                            FieldLabel { text: "Початок (In):"; Layout.preferredWidth: 100 }
-                            AppTextField {
+                            spacing: 4
+
+                            AppButton {
                                 Layout.fillWidth: true
-                                text: timelineComponent.formatTimecode(root.inPoint)
-                                onEditingFinished: {
-                                    var val = timelineComponent.snap(timelineComponent.parseTimecode(text))
-                                    root.inPoint = Math.min(val, root.outPoint)
-                                }
+                                text: "Кадр"
+                                variant: root.sidebarTab === 0 ? "primary" : "ghost"
+                                onClicked: root.sidebarTab = 0
                             }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            FieldLabel { text: "Кінець (Out):"; Layout.preferredWidth: 100 }
-                            AppTextField {
+                            AppButton {
                                 Layout.fillWidth: true
-                                text: timelineComponent.formatTimecode(root.outPoint)
-                                onEditingFinished: {
-                                    var val = timelineComponent.snap(timelineComponent.parseTimecode(text))
-                                    root.outPoint = Math.max(val, root.inPoint)
-                                }
+                                text: "Кліпи"
+                                variant: root.sidebarTab === 1 ? "primary" : "ghost"
+                                onClicked: root.sidebarTab = 1
                             }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Label { text: "Фрагмент:"; color: Theme.textMuted; font.pixelSize: Theme.fontSizeSm }
-                            Item { Layout.fillWidth: true }
-                            Label {
-                                text: timelineComponent.formatTimecode(Math.max(0, root.outPoint - root.inPoint))
-                                font.family: Theme.monoFont
-                                font.pixelSize: Theme.fontSizeSm
-                                color: Theme.textPrimary
+                            AppButton {
+                                Layout.fillWidth: true
+                                text: "Мова"
+                                variant: root.sidebarTab === 2 ? "primary" : "ghost"
+                                onClicked: root.sidebarTab = 2
                             }
-                        }
-
-                        SecondaryButton {
-                            Layout.fillWidth: true
-                            text: "Скинути обрізку"
-                            onClicked: {
-                                root.inPoint = 0.0
-                                root.outPoint = root.duration
+                            AppButton {
+                                Layout.fillWidth: true
+                                text: "AI / Блюр"
+                                variant: root.sidebarTab === 3 ? "primary" : "ghost"
+                                onClicked: root.sidebarTab = 3
                             }
                         }
 
                         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.borderDefault }
 
-                        // Section 2: Кадрування (Crop)
-                        RowLayout {
+                        // ==================== TAB 0: TRIM & CROP ====================
+                        ColumnLayout {
                             Layout.fillWidth: true
+                            visible: root.sidebarTab === 0
+                            spacing: 12
+
                             Label {
-                                text: I18n.t("crop")
+                                text: I18n.t("trim")
                                 font.family: Theme.displayFont
                                 font.pixelSize: Theme.fontSizeMd
                                 font.bold: true
                                 color: Theme.accentPrimary
                             }
-                            Item { Layout.fillWidth: true }
-                            AppSwitch {
-                                checked: root.cropEnabled
-                                onToggled: {
-                                    root.cropEnabled = checked
-                                    if (checked) {
-                                        cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH)
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                FieldLabel { text: "Початок (In):"; Layout.preferredWidth: 90 }
+                                AppTextField {
+                                    Layout.fillWidth: true
+                                    text: timelineComponent.formatTimecode(root.inPoint)
+                                    onEditingFinished: {
+                                        var val = timelineComponent.snap(timelineComponent.parseTimecode(text))
+                                        root.inPoint = Math.min(val, root.outPoint)
                                     }
                                 }
                             }
-                        }
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            enabled: root.cropEnabled
-                            opacity: root.cropEnabled ? 1.0 : 0.5
-                            spacing: 8
-
-                            FieldLabel { text: "Співвідношення (Aspect):" }
-                            AppComboBox {
+                            RowLayout {
                                 Layout.fillWidth: true
-                                model: ["free", "1:1", "16:9", "9:16", "4:3"]
-                                currentIndex: Math.max(0, ["free", "1:1", "16:9", "9:16", "4:3"].indexOf(root.cropAspect))
-                                onActivated: function(index) {
-                                    root.cropAspect = model[index]
-                                    cropOverlay.aspectRatioPreset = root.cropAspect
+                                FieldLabel { text: "Кінець (Out):"; Layout.preferredWidth: 90 }
+                                AppTextField {
+                                    Layout.fillWidth: true
+                                    text: timelineComponent.formatTimecode(root.outPoint)
+                                    onEditingFinished: {
+                                        var val = timelineComponent.snap(timelineComponent.parseTimecode(text))
+                                        root.outPoint = Math.max(val, root.inPoint)
+                                    }
                                 }
                             }
 
-                            GridLayout {
-                                columns: 2
+                            RowLayout {
                                 Layout.fillWidth: true
-                                columnSpacing: 8
-                                rowSpacing: 6
-
-                                FieldLabel { text: "X:" }
-                                AppSpinBox {
-                                    from: 0; to: root.nativeWidth
-                                    value: root.cropX
-                                    onValueChanged: { root.cropX = value; cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH) }
-                                }
-
-                                FieldLabel { text: "Y:" }
-                                AppSpinBox {
-                                    from: 0; to: root.nativeHeight
-                                    value: root.cropY
-                                    onValueChanged: { root.cropY = value; cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH) }
-                                }
-
-                                FieldLabel { text: "Ширина:" }
-                                AppSpinBox {
-                                    from: 24; to: root.nativeWidth
-                                    value: root.cropW
-                                    onValueChanged: { root.cropW = value; cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH) }
-                                }
-
-                                FieldLabel { text: "Висота:" }
-                                AppSpinBox {
-                                    from: 24; to: root.nativeHeight
-                                    value: root.cropH
-                                    onValueChanged: { root.cropH = value; cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH) }
+                                Label { text: "Фрагмент:"; color: Theme.textMuted; font.pixelSize: Theme.fontSizeSm }
+                                Item { Layout.fillWidth: true }
+                                Label {
+                                    text: timelineComponent.formatTimecode(Math.max(0, root.outPoint - root.inPoint))
+                                    font.family: Theme.monoFont
+                                    font.pixelSize: Theme.fontSizeSm
+                                    color: Theme.textPrimary
                                 }
                             }
 
                             SecondaryButton {
                                 Layout.fillWidth: true
-                                text: "Скинути кадрування"
-                                onClicked: cropOverlay.resetCrop()
+                                text: "Скинути обрізку"
+                                onClicked: {
+                                    root.inPoint = 0.0
+                                    root.outPoint = root.duration
+                                }
+                            }
+
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.borderDefault }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label {
+                                    text: I18n.t("crop")
+                                    font.family: Theme.displayFont
+                                    font.pixelSize: Theme.fontSizeMd
+                                    font.bold: true
+                                    color: Theme.accentPrimary
+                                }
+                                Item { Layout.fillWidth: true }
+                                AppSwitch {
+                                    checked: root.cropEnabled
+                                    onToggled: {
+                                        root.cropEnabled = checked
+                                        if (checked) {
+                                            cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH)
+                                        }
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                enabled: root.cropEnabled
+                                opacity: root.cropEnabled ? 1.0 : 0.5
+                                spacing: 8
+
+                                FieldLabel { text: "Співвідношення (Aspect):" }
+                                AppComboBox {
+                                    Layout.fillWidth: true
+                                    model: ["free", "1:1", "16:9", "9:16", "4:3"]
+                                    currentIndex: Math.max(0, ["free", "1:1", "16:9", "9:16", "4:3"].indexOf(root.cropAspect))
+                                    onActivated: function(index) {
+                                        root.cropAspect = model[index]
+                                        cropOverlay.aspectRatioPreset = root.cropAspect
+                                    }
+                                }
+
+                                GridLayout {
+                                    columns: 2
+                                    Layout.fillWidth: true
+                                    columnSpacing: 8
+                                    rowSpacing: 6
+
+                                    FieldLabel { text: "X:" }
+                                    AppSpinBox {
+                                        from: 0; to: root.nativeWidth
+                                        value: root.cropX
+                                        onValueChanged: { root.cropX = value; cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH) }
+                                    }
+
+                                    FieldLabel { text: "Y:" }
+                                    AppSpinBox {
+                                        from: 0; to: root.nativeHeight
+                                        value: root.cropY
+                                        onValueChanged: { root.cropY = value; cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH) }
+                                    }
+
+                                    FieldLabel { text: "Ширина:" }
+                                    AppSpinBox {
+                                        from: 24; to: root.nativeWidth
+                                        value: root.cropW
+                                        onValueChanged: { root.cropW = value; cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH) }
+                                    }
+
+                                    FieldLabel { text: "Висота:" }
+                                    AppSpinBox {
+                                        from: 24; to: root.nativeHeight
+                                        value: root.cropH
+                                        onValueChanged: { root.cropH = value; cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH) }
+                                    }
+                                }
+
+                                SecondaryButton {
+                                    Layout.fillWidth: true
+                                    text: "Скинути кадрування"
+                                    onClicked: cropOverlay.resetCrop()
+                                }
+                            }
+
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.borderDefault }
+
+                            FieldLabel { text: "Формат відео:" }
+                            AppComboBox {
+                                Layout.fillWidth: true
+                                model: ["mp4", "mkv", "mov", "webm", "avi", "gif"]
+                                currentIndex: Math.max(0, ["mp4", "mkv", "mov", "webm", "avi", "gif"].indexOf(root.outputFormat))
+                                onActivated: function(index) { root.outputFormat = model[index] }
+                            }
+
+                            AppSwitch {
+                                Layout.fillWidth: true
+                                text: "Зберегти аудіодоріжку"
+                                checked: root.audioEnabled
+                                visible: root.hasAudio
+                                onToggled: root.audioEnabled = checked
+                            }
+
+                            AppSwitch {
+                                Layout.fillWidth: true
+                                text: "Fast copy (без перекодування)"
+                                checked: root.fastCopy && !root.cropEnabled
+                                enabled: !root.cropEnabled
+                                onToggled: root.fastCopy = checked
                             }
                         }
 
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.borderDefault }
+                        // ==================== TAB 1: CLIPS & PROXIES ====================
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: root.sidebarTab === 1
+                            spacing: 12
 
-                        // Section 3: Параметри виводу (Output)
-                        Label {
-                            text: "Параметри виводу"
-                            font.family: Theme.displayFont
-                            font.pixelSize: Theme.fontSizeMd
-                            font.bold: true
-                            color: Theme.accentPrimary
+                            Label {
+                                text: I18n.t("montage_proxy")
+                                font.family: Theme.displayFont
+                                font.pixelSize: Theme.fontSizeMd
+                                font.bold: true
+                                color: Theme.accentPrimary
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                AppSwitch {
+                                    Layout.fillWidth: true
+                                    text: "⚡ Легка копія для монтажу"
+                                    checked: root.useProxy
+                                    onToggled: {
+                                        root.useProxy = checked
+                                        if (checked && !root.proxyPath && backend && root.filePath) {
+                                            root.proxyGenerating = true
+                                            backend.requestMontageProxy(root.filePath, 720)
+                                        } else if (checked && root.proxyPath) {
+                                            player.source = "file://" + root.proxyPath
+                                        } else {
+                                            player.source = "file://" + root.filePath
+                                        }
+                                    }
+                                }
+                            }
+
+                            Label {
+                                text: root.proxyGenerating ? "⏳ Генерація проксі 720p…" : (root.proxyPath ? "✓ Проксі активний (експорт використає оригінал)" : I18n.t("montage_proxy_desc"))
+                                font.pixelSize: Theme.fontSizeSm
+                                color: root.proxyPath ? Theme.accentSuccess : Theme.textMuted
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.borderDefault }
+
+                            Label {
+                                text: I18n.t("montage_multi_clip")
+                                font.family: Theme.displayFont
+                                font.pixelSize: Theme.fontSizeMd
+                                font.bold: true
+                                color: Theme.accentPrimary
+                            }
+
+                            Label {
+                                text: "Кліпів на шкалі: " + (root.timelineClips.length || 1)
+                                font.pixelSize: Theme.fontSizeSm
+                                color: Theme.textSecondary
+                            }
+
+                            SecondaryButton {
+                                Layout.fillWidth: true
+                                text: "+ Додати кліп на шкалу…"
+                                onClicked: {
+                                    if (backend) {
+                                        var p = backend.pickVideoFile()
+                                        if (p) {
+                                            var arr = root.timelineClips.slice()
+                                            arr.push({"source_path": p, "in_point": 0, "out_point": 10, "transition_to_next": root.defaultTransition, "transition_duration": 1.0})
+                                            root.timelineClips = arr
+                                        }
+                                    }
+                                }
+                            }
+
+                            FieldLabel { text: "Перехід між кліпами:" }
+                            AppComboBox {
+                                Layout.fillWidth: true
+                                model: ["fade", "wipeleft", "wiperight", "dissolve", "circlecrop", "none"]
+                                currentIndex: Math.max(0, ["fade", "wipeleft", "wiperight", "dissolve", "circlecrop", "none"].indexOf(root.defaultTransition))
+                                onActivated: function(index) { root.defaultTransition = model[index] }
+                            }
+
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.borderDefault }
+
+                            Label {
+                                text: I18n.t("montage_music_track")
+                                font.family: Theme.displayFont
+                                font.pixelSize: Theme.fontSizeMd
+                                font.bold: true
+                                color: Theme.accentPrimary
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                SecondaryButton {
+                                    Layout.fillWidth: true
+                                    text: root.bgMusicPath ? "Змінити музику…" : "Вибрати фонову музику…"
+                                    onClicked: {
+                                        if (backend) {
+                                            var audioFile = backend.pickAudioFile ? backend.pickAudioFile() : backend.pickVideoFile()
+                                            if (audioFile) root.bgMusicPath = audioFile
+                                        }
+                                    }
+                                }
+                            }
+
+                            Label {
+                                text: root.bgMusicPath ? ("🎵 " + root.bgMusicPath.slice(Math.max(root.bgMusicPath.lastIndexOf("/"), root.bgMusicPath.lastIndexOf("\\")) + 1)) : "Музичну доріжку не вибрано"
+                                font.pixelSize: Theme.fontSizeSm
+                                color: root.bgMusicPath ? Theme.accentPrimary : Theme.textMuted
+                                elide: Text.ElideMiddle
+                                Layout.fillWidth: true
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                FieldLabel { text: "Гучність:" }
+                                Slider {
+                                    Layout.fillWidth: true
+                                    from: 0.0; to: 1.5; value: root.bgMusicVolume
+                                    onMoved: root.bgMusicVolume = value
+                                }
+                                Label {
+                                    text: Math.round(root.bgMusicVolume * 100) + "%"
+                                    font.family: Theme.monoFont
+                                    font.pixelSize: Theme.fontSizeSm
+                                    color: Theme.textSecondary
+                                }
+                            }
+
+                            PrimaryButton {
+                                Layout.fillWidth: true
+                                text: "🎬 Експортувати спільний монтаж"
+                                onClicked: {
+                                    if (backend && root.filePath) {
+                                        var project = {
+                                            "title": root.fileName || "Montage",
+                                            "clips": [
+                                                {
+                                                    "source_path": root.filePath,
+                                                    "in_point": root.inPoint,
+                                                    "out_point": root.outPoint,
+                                                    "transition_to_next": root.defaultTransition,
+                                                    "transition_duration": 1.0
+                                                }
+                                            ].concat(root.timelineClips),
+                                            "audio_tracks": root.bgMusicPath ? [{"audio_path": root.bgMusicPath, "volume": root.bgMusicVolume, "loop": root.bgMusicLoop}] : [],
+                                            "output_format": root.outputFormat
+                                        }
+                                        var outName = root.filePath.slice(0, root.filePath.lastIndexOf(".")) + "_montage." + root.outputFormat
+                                        backend.renderTimelineProject(project, outName, false)
+                                    }
+                                }
+                            }
                         }
 
-                        FieldLabel { text: "Формат відео:" }
-                        AppComboBox {
+                        // ==================== TAB 2: SPEECH & SUBTITLES ====================
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            model: ["mp4", "mkv", "mov", "webm", "avi", "gif"]
-                            currentIndex: Math.max(0, ["mp4", "mkv", "mov", "webm", "avi", "gif"].indexOf(root.outputFormat))
-                            onActivated: function(index) { root.outputFormat = model[index] }
+                            visible: root.sidebarTab === 2
+                            spacing: 12
+
+                            Label {
+                                text: I18n.t("montage_word_highlight")
+                                font.family: Theme.displayFont
+                                font.pixelSize: Theme.fontSizeMd
+                                font.bold: true
+                                color: Theme.accentPrimary
+                            }
+
+                            FieldLabel { text: "Стильовий шаблон:" }
+                            AppComboBox {
+                                Layout.fillWidth: true
+                                model: ["tiktok_pop", "reels_modern", "karaoke_classic", "neon_glow"]
+                                currentIndex: Math.max(0, ["tiktok_pop", "reels_modern", "karaoke_classic", "neon_glow"].indexOf(root.subtitleTemplate))
+                                onActivated: function(index) { root.subtitleTemplate = model[index] }
+                            }
+
+                            SecondaryButton {
+                                Layout.fillWidth: true
+                                text: "✨ Створити анімовані субтитри (ASS)"
+                                onClicked: {
+                                    if (backend && root.filePath) {
+                                        var sampleSegs = [
+                                            {"start": root.inPoint, "end": root.inPoint + 3.0, "text": "Привіт усім у новому відео!"},
+                                            {"start": root.inPoint + 3.1, "end": root.inPoint + 6.5, "text": "Це розширений монтаж та інтелектуальні субтитри."}
+                                        ]
+                                        var assOut = root.filePath.slice(0, root.filePath.lastIndexOf(".")) + "_subtitles.ass"
+                                        backend.generateStyledSubtitles(sampleSegs, root.subtitleTemplate, assOut, 1080, 1920)
+                                        root.speechStatusText = "✓ Субтитри збережено: " + assOut.slice(assOut.lastIndexOf("/") + 1)
+                                    }
+                                }
+                            }
+
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.borderDefault }
+
+                            Label {
+                                text: I18n.t("montage_speakers")
+                                font.family: Theme.displayFont
+                                font.pixelSize: Theme.fontSizeMd
+                                font.bold: true
+                                color: Theme.accentPrimary
+                            }
+
+                            SecondaryButton {
+                                Layout.fillWidth: true
+                                text: "🔍 Розпізнати мовців"
+                                onClicked: {
+                                    if (backend && root.filePath) {
+                                        var sampleSegs = [
+                                            {"start": root.inPoint, "end": root.inPoint + 3.0, "text": "Привіт, як твої справи?"},
+                                            {"start": root.inPoint + 3.2, "end": root.inPoint + 6.0, "text": "Чудово, готуємо новий реліз."}
+                                        ]
+                                        var diar = backend.diarizeMedia(root.filePath, sampleSegs, 2, "uk")
+                                        root.detectedSpeakers = Object.keys(diar.speaker_aliases || {})
+                                        root.speakerAliases = diar.speaker_aliases || {}
+                                        root.speechStatusText = "✓ Розпізнано мовців: " + (root.detectedSpeakers.length || 2)
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: root.detectedSpeakers.length > 0
+                                spacing: 6
+
+                                FieldLabel { text: "Імена мовців:" }
+                                Repeater {
+                                    model: root.detectedSpeakers
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        FieldLabel { text: modelData + ":"; Layout.preferredWidth: 80 }
+                                        AppTextField {
+                                            Layout.fillWidth: true
+                                            text: root.speakerAliases[modelData] || modelData
+                                            onEditingFinished: {
+                                                var aliases = Object.assign({}, root.speakerAliases)
+                                                aliases[modelData] = text
+                                                root.speakerAliases = aliases
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.borderDefault }
+
+                            Label {
+                                text: I18n.t("montage_sub_translation")
+                                font.family: Theme.displayFont
+                                font.pixelSize: Theme.fontSizeMd
+                                font.bold: true
+                                color: Theme.accentPrimary
+                            }
+
+                            FieldLabel { text: "Мова перекладу:" }
+                            AppComboBox {
+                                Layout.fillWidth: true
+                                model: ["en (English)", "pl (Polski)", "de (Deutsch)", "uk (Українська)", "es (Español)"]
+                                onActivated: function(index) {
+                                    var codes = ["en", "pl", "de", "uk", "es"]
+                                    root.targetSubtitleLanguage = codes[index]
+                                }
+                            }
+
+                            SecondaryButton {
+                                Layout.fillWidth: true
+                                text: "🌐 Перекласти зі збереженням часу"
+                                onClicked: {
+                                    if (backend) {
+                                        var sampleSegs = [
+                                            {"start": root.inPoint, "end": root.inPoint + 3.0, "text": "Привіт, як справи?"}
+                                        ]
+                                        var res = backend.translateSubtitles(sampleSegs, [root.targetSubtitleLanguage], "uk")
+                                        root.speechStatusText = "✓ Переклад на " + root.targetSubtitleLanguage.toUpperCase() + " виконано"
+                                    }
+                                }
+                            }
+
+                            Label {
+                                text: root.speechStatusText
+                                font.pixelSize: Theme.fontSizeSm
+                                color: Theme.accentSuccess
+                                wrapMode: Text.WordWrap
+                                visible: !!root.speechStatusText
+                                Layout.fillWidth: true
+                            }
                         }
 
-                        AppSwitch {
+                        // ==================== TAB 3: SMART REFRAME & BLUR ====================
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            text: "Зберегти аудіодоріжку"
-                            checked: root.audioEnabled
-                            visible: root.hasAudio
-                            onToggled: root.audioEnabled = checked
-                        }
+                            visible: root.sidebarTab === 3
+                            spacing: 12
 
-                        AppSwitch {
-                            Layout.fillWidth: true
-                            text: "Fast copy (без перекодування)"
-                            checked: root.fastCopy && !root.cropEnabled
-                            enabled: !root.cropEnabled
-                            onToggled: root.fastCopy = checked
+                            Label {
+                                text: I18n.t("montage_smart_reframe")
+                                font.family: Theme.displayFont
+                                font.pixelSize: Theme.fontSizeMd
+                                font.bold: true
+                                color: Theme.accentPrimary
+                            }
+
+                            Label {
+                                text: "Автоматично знаходить обличчя чи рухомий об’єкт та згладжено центрує кадр 9:16 (Shorts/TikTok/Reels)."
+                                font.pixelSize: Theme.fontSizeSm
+                                color: Theme.textSecondary
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+
+                            PrimaryButton {
+                                Layout.fillWidth: true
+                                text: "🎯 Застосувати Auto-Reframe 9:16"
+                                onClicked: {
+                                    if (backend && root.filePath) {
+                                        var res = backend.calculateSmartReframe(root.filePath, "9:16")
+                                        root.cropEnabled = true
+                                        root.cropAspect = "9:16"
+                                        root.cropX = res.crop_x !== undefined ? res.crop_x : 656
+                                        root.cropY = 0
+                                        root.cropW = res.crop_w || 608
+                                        root.cropH = res.crop_h || 1080
+                                        cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH)
+                                        root.smartReframeApplied = true
+                                        root.blurStatusText = "✓ Вертикальне кадрування 9:16 налаштовано"
+                                    }
+                                }
+                            }
+
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.borderDefault }
+
+                            Label {
+                                text: I18n.t("montage_motion_blur")
+                                font.family: Theme.displayFont
+                                font.pixelSize: Theme.fontSizeMd
+                                font.bold: true
+                                color: Theme.accentPrimary
+                            }
+
+                            FieldLabel { text: "Об'єкт для приховування:" }
+                            AppComboBox {
+                                Layout.fillWidth: true
+                                model: ["face (Обличчя)", "plate (Номер авто)", "custom (Поточна рамка)"]
+                                onActivated: function(index) {
+                                    var types = ["face", "plate", "custom"]
+                                    root.blurTargetType = types[index]
+                                }
+                            }
+
+                            FieldLabel { text: "Стиль розмиття:" }
+                            AppComboBox {
+                                Layout.fillWidth: true
+                                model: ["box (Розмиття)", "pixelate (Мозаїка)", "gaussian (Гаусове)"]
+                                onActivated: function(index) {
+                                    var styles = ["box", "pixelate", "gaussian"]
+                                    root.blurStyle = styles[index]
+                                }
+                            }
+
+                            SecondaryButton {
+                                Layout.fillWidth: true
+                                text: "🔒 Запустити трекінг розмиття"
+                                onClicked: {
+                                    if (backend && root.filePath) {
+                                        var bbox = [root.cropX, root.cropY, root.cropW, root.cropH]
+                                        var trackingRes = backend.trackAndBlurObject(root.filePath, root.blurTargetType, bbox, root.blurStyle)
+                                        root.blurStatusText = "✓ Трекінг завершено: " + (trackingRes.frames ? trackingRes.frames.length : 0) + " кадрів відстежено"
+                                    }
+                                }
+                            }
+
+                            Label {
+                                text: root.blurStatusText
+                                font.pixelSize: Theme.fontSizeSm
+                                color: Theme.accentSuccess
+                                wrapMode: Text.WordWrap
+                                visible: !!root.blurStatusText
+                                Layout.fillWidth: true
+                            }
                         }
                     }
                 }

@@ -59,6 +59,8 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
     whisperDownloadProgress = QtCore.Signal(str, float, str)
     montageWaveformReady = QtCore.Signal(str, str)
     montageSessionUpdated = QtCore.Signal(str)
+    montageProxyReady = QtCore.Signal(str, str)
+    montageTimelineRendered = QtCore.Signal(str, bool)
 
     def __init__(self) -> None:
         super().__init__()

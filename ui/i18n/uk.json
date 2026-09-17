@@ -609,5 +609,16 @@
   "design.back": "Назад",
   "design.forward": "Уперед",
   "design.app_menu": "Меню застосунку",
-  "design.deduplicate": "Видалити дублікати файлів"
+  "design.deduplicate": "Видалити дублікати файлів",
+  "montage_multi_clip": "Монтаж кількох кліпів",
+  "montage_transitions": "Переходи",
+  "montage_music_track": "Музична доріжка",
+  "montage_proxy": "Полегшені копії (Проксі)",
+  "montage_proxy_desc": "Швидкий скрабінг без навантаження системи",
+  "montage_speakers": "Розпізнавання мовців",
+  "montage_rename_speakers": "Перейменування мовців",
+  "montage_word_highlight": "Підсвічування слів",
+  "montage_sub_translation": "Переклад субтитрів",
+  "montage_smart_reframe": "Авто-кадрування 9:16",
+  "montage_motion_blur": "Розмиття з відстеженням"
 }

@@ -609,5 +609,16 @@
   "design.back": "Wstecz",
   "design.forward": "Dalej",
   "design.app_menu": "Menu aplikacji",
-  "design.deduplicate": "Usuń zduplikowane pliki"
+  "design.deduplicate": "Usuń zduplikowane pliki",
+  "montage_multi_clip": "Montaż wielu klipów",
+  "montage_transitions": "Przejścia",
+  "montage_music_track": "Ścieżka muzyczna",
+  "montage_proxy": "Lekkie kopie (Proxy)",
+  "montage_proxy_desc": "Płynny podgląd bez obciążania systemu",
+  "montage_speakers": "Rozpoznawanie mówców",
+  "montage_rename_speakers": "Zmiana nazw mówców",
+  "montage_word_highlight": "Podświetlanie słów",
+  "montage_sub_translation": "Tłumaczenie napisów",
+  "montage_smart_reframe": "Automatyczne kadrowanie 9:16",
+  "montage_motion_blur": "Rozmycie obiektów z trackingiem"
 }
