@@ -11,6 +11,7 @@ from .media_details import BODY as MEDIA_DETAILS_BODY
 from .queue_actions import BODY as QUEUE_ACTIONS_BODY
 from .queue_io import BODY as QUEUE_IO_BODY
 from .queue_view import BODY as QUEUE_VIEW_BODY
+from .setup import BODY as SETUP_BODY
 from .theme_preferences import BODY as THEME_PREFERENCES_BODY
 from .ui_preferences import BODY as UI_PREFERENCES_BODY
 
@@ -19,6 +20,7 @@ _CLASS_SOURCE = (
     '    """Qt/QML backend assembled from focused source components."""\n'
     '    __module__ = "ui.backend"\n'
     + CORE_BODY
+    + SETUP_BODY
     + GENERAL_PROPERTIES_BODY
     + UI_PREFERENCES_BODY
     + THEME_PREFERENCES_BODY

@@ -14,6 +14,13 @@ datas = [
     (str(project_root / "ui" / "i18n"), "ui/i18n"),
     (str(project_root / "assets"), "assets"),
 ]
+# External Whisper venvs need these stdlib-only source modules (not Qt or the frozen archive).
+for relative in (
+    "app/__init__.py", "app/models.py", "app/paths.py", "services/__init__.py",
+    "services/whisper_worker.py", "services/whisper_environment.py", "services/whisper_runtime.py",
+    "services/whisper_model_manager.py", "services/transcription_service.py",
+):
+    datas.append((str(project_root / relative), str(Path(relative).parent)))
 binaries = []
 
 if bundle_dir:

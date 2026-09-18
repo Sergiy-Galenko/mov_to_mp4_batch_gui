@@ -35,7 +35,7 @@ Item {
         border.color: !surface.interactive ? Theme.borderMuted : surface.primary ? Qt.lighter(Theme.accent, Theme.isMac ? 1.12 : 1.0)
             : surface.selected ? Theme.accent
             : Theme.lightMode ? Qt.darker(Theme.panelSecondary, 1.12) : Qt.lighter(Theme.panelSecondary, 1.18)
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { enabled: !Theme.reducedMotion; ColorAnimation { duration: 100 } }
         Rectangle {
             anchors.fill: parent
             anchors.margins: 1
@@ -62,6 +62,6 @@ Item {
         border.width: Theme.isMac ? 3 : 2
         border.color: Theme.focusRing
         opacity: surface.interactive && surface.control.visualFocus ? 0.85 : 0
-        Behavior on opacity { NumberAnimation { duration: 80 } }
+        Behavior on opacity { enabled: !Theme.reducedMotion; NumberAnimation { duration: 80 } }
     }
 }

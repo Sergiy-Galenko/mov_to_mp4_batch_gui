@@ -47,11 +47,13 @@ from services.resource_monitor import ResourceMonitor
 from services.settings_manager import SettingsManager
 from services.shortcut_manager import ShortcutManager
 from services.smart_convert_service import recommend_settings
+from services.system_profile import SystemProfile
 from services.system_tray_service import SystemTrayService
 from services.taskbar_service import TaskbarService
 from services.theme_manager import ThemeManager
 from services.watch_service import WatchService
 from services.whisper_model_manager import WhisperModelManager
+from services.whisper_setup import WhisperSetup
 from services.youtube_download_service import (
     DownloadProgress,
     YouTubeDownloadCancelled,
@@ -109,6 +111,7 @@ __all__ = [
     "ResourceMonitor",
     "SettingsManager",
     "ShortcutManager",
+    "SystemProfile",
     "SystemTrayService",
     "TaskItem",
     "TaskStatus",
@@ -118,6 +121,7 @@ __all__ = [
     "UiEventQueue",
     "WatchService",
     "WhisperModelManager",
+    "WhisperSetup",
     "YouTubeDownloadCancelled",
     "YouTubeDownloadError",
     "YouTubeDownloadService",

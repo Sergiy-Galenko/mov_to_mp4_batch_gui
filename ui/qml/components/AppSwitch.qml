@@ -26,9 +26,9 @@ CheckBox {
             y: 2
             width: 18; height: 18; radius: 9
             color: control.checked ? Theme.textOnAccent : Theme.textSecondary
-            Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            Behavior on x { enabled: !Theme.reducedMotion; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
         }
-        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on color { enabled: !Theme.reducedMotion; ColorAnimation { duration: 120 } }
     }
     contentItem: Label {
         text: control.text

@@ -140,7 +140,7 @@ ApplicationWindow {
     property int lastSelectedIndex: -1
     property string selectedPreset: ""
     property real sharedShimmerPhase: 0
-    property bool highLoadMode: backend ? backend.queueCount > 50 : false
+    property bool highLoadMode: backend ? backend.queueCount > 50 || (backend.autoTuneEnabled && !!backend.systemProfile.result.recommendation && backend.systemProfile.result.recommendation.low_resource_mode) : false
     property int _langVersion: 0
     property string quickConvertPath: ""
     property string quickConvertName: ""
@@ -230,6 +230,16 @@ ApplicationWindow {
         duration: 1200
         loops: Animation.Infinite
         running: root.visible && root.active && !root.highLoadMode && backend && backend.isRunning
+    }
+
+    property alias settingsHistory: settingsHistory
+    readonly property var watchedSettings: settingsPanel ? settingsPanel.collectSettings() : ({})
+    onWatchedSettingsChanged: settingsHistory.schedule()
+    UndoHistory {
+        id: settingsHistory
+        objectName: "settingsUndoHistory"
+        capture: function() { return root.collectSettings() }
+        restore: function(state) { settingsPanel.applyPreset(state) }
     }
 
     function scheduleSettingsSync() {
@@ -739,6 +749,14 @@ ApplicationWindow {
 
     Connections {
         target: backend
+        function onAutoProfileReady(data) {
+            settingsHistory.flush()
+            settingsHistory.restoring = true
+            settingsPanel.applyWorkload(data)
+            settingsHistory.rebase({concurrency_limit: data.concurrency_limit,
+                cpu_load_limit: data.cpu_load_limit, gpu_load_limit: data.gpu_load_limit})
+            settingsHistory.restoring = false
+        }
         function onPresetLoaded(data) { applyPreset(data) }
         function onQueueFilterChanged() { root.retainVisibleSelection() }
         function onSelectedDetailsChanged() { root.refreshSelectedDetails() }
@@ -771,8 +789,10 @@ ApplicationWindow {
             backend.setupSystemTray()
             backend.restoreSession()
             backend.refreshEncoders()
+            backend.startSystemScan()
             scheduleSettingsSync()
             syncQueueFilter()
+            Qt.callLater(function() { settingsHistory.reset() })
         }
     }
 
@@ -1792,6 +1812,7 @@ ApplicationWindow {
             if (preset.preset) root.setComboText(presetCombo, preset.preset)
             if (preset.performance_profile) root.setComboText(performanceProfileCombo, preset.performance_profile)
             targetSizeField.text = preset.target_size_mb || ""
+            if (preset.concurrency_limit !== undefined && backend) backend.concurrencyLimit = Number(preset.concurrency_limit)
             if (preset.cpu_load_limit !== undefined) cpuLimitSpin.value = Number(preset.cpu_load_limit)
             if (preset.gpu_load_limit !== undefined) gpuLimitSpin.value = Number(preset.gpu_load_limit)
             smartConvertCheck.checked = !!preset.smart_convert_enabled
@@ -1916,6 +1937,12 @@ ApplicationWindow {
             root.scheduleSettingsSync()
         }
 
+        function applyWorkload(data) {
+            cpuLimitSpin.value = data.cpu_load_limit
+            gpuLimitSpin.value = data.gpu_load_limit
+            root.scheduleSettingsSync()
+        }
+
         function collectSettings() {
             return {
                 operation: operationCombo.currentText,
@@ -1931,6 +1958,7 @@ ApplicationWindow {
                 preset: presetCombo.currentText,
                 performance_profile: performanceProfileCombo.currentText,
                 target_size_mb: targetSizeField.text,
+                concurrency_limit: backend ? backend.concurrencyLimit : 0,
                 cpu_load_limit: cpuLimitSpin.value,
                 gpu_load_limit: gpuLimitSpin.value,
                 disk_safety_margin_mb: diskSafetyMarginSpin.value,
@@ -2207,9 +2235,9 @@ ApplicationWindow {
                 FieldLabel { text: I18n.t("target_size_mb") }
                 AppTextField { id: targetSizeField; objectName: "targetSizeField"; placeholderText: I18n.t("target_size_hint"); onEditingFinished: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("cpu_load_limit") }
-                AppSpinBox { id: cpuLimitSpin; from: 1; to: 100; value: 95; onValueChanged: scheduleSettingsSync() }
+                AppSpinBox { id: cpuLimitSpin; from: 1; to: 100; value: 95; onValueModified: backend.autoTuneEnabled = false; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("gpu_load_limit") }
-                AppSpinBox { id: gpuLimitSpin; from: 1; to: 100; value: 98; onValueChanged: scheduleSettingsSync() }
+                AppSpinBox { id: gpuLimitSpin; from: 1; to: 100; value: 98; onValueModified: backend.autoTuneEnabled = false; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: "Disk reserve (MiB)" }
                 AppSpinBox { id: diskSafetyMarginSpin; from: 0; to: 10240; value: 512; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: "CRF" }

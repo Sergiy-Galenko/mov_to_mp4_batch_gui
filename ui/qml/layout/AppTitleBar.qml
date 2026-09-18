@@ -19,13 +19,57 @@ Item {
     // Native traffic lights remain above this area on macOS. Drag only on the
     // empty toolbar; buttons keep their normal pointer and keyboard behavior.
     MouseArea {
+        id: titleBarDragArea
+        objectName: "titleBarDragArea"
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
-        onPressed: if (root.appRoot) root.appRoot.startSystemMove()
-        onDoubleClicked: {
+        property point clickPos: Qt.point(0, 0)
+        property bool manualDragging: false
+
+        onPressed: function(mouse) {
+            clickPos = Qt.point(mouse.x, mouse.y)
+            manualDragging = false
             if (!root.appRoot) return
-            if (root.appRoot.visibility === Window.Maximized) root.appRoot.showNormal()
-            else root.appRoot.showMaximized()
+            if (root.appRoot.visibility === Window.FullScreen) return
+
+            var systemMoved = false
+            try {
+                systemMoved = root.appRoot.startSystemMove()
+            } catch (e) {
+                systemMoved = false
+            }
+            if (!systemMoved) {
+                manualDragging = true
+            }
+        }
+
+        onPositionChanged: function(mouse) {
+            if (!manualDragging || !root.appRoot) return
+            if (root.appRoot.visibility === Window.FullScreen) return
+
+            if (root.appRoot.visibility === Window.Maximized) {
+                var ratio = mouse.x / Math.max(root.appRoot.width, 1)
+                root.appRoot.showNormal()
+                clickPos.x = root.appRoot.width * ratio
+            }
+
+            var deltaX = mouse.x - clickPos.x
+            var deltaY = mouse.y - clickPos.y
+            root.appRoot.x += deltaX
+            root.appRoot.y += deltaY
+        }
+
+        onReleased: manualDragging = false
+        onCanceled: manualDragging = false
+
+        onDoubleClicked: {
+            manualDragging = false
+            if (!root.appRoot || root.appRoot.visibility === Window.FullScreen) return
+            if (root.appRoot.visibility === Window.Maximized) {
+                root.appRoot.showNormal()
+            } else {
+                root.appRoot.showMaximized()
+            }
         }
     }
     RowLayout {
@@ -103,6 +147,11 @@ Item {
             color: Theme.textPrimary
             elide: Text.ElideRight
         }
+        SystemStatusBar {
+            id: systemStatusBar
+            appRoot: root.appRoot
+        }
+        HistoryButtons { history: appRoot ? appRoot.settingsHistory : null; targetWindow: appRoot }
         AppIconButton {
             iconName: "bell"
             accessibleLabel: I18n.t("notifications")
@@ -160,6 +209,7 @@ Item {
                 MenuItem { text: I18n.t("switch_to_light_theme"); onTriggered: if (backend) backend.themeMode = "light" }
                 MenuSeparator {}
                 MenuItem { text: I18n.t("design.deduplicate"); onTriggered: if (backend) backend.deduplicateQueueByHash() }
+                MenuItem { text: I18n.t("system.title"); onTriggered: systemStatusBar.openDetails() }
                 MenuItem { text: I18n.t("settings"); onTriggered: appRoot.openSidebarSection(5, "core", -1) }
             }
         }

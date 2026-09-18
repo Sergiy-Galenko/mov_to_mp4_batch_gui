@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QPointF, QSettings, Qt, QUrl
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import Q_ARG, QEvent, QMetaObject, QObject, QPointF, QSettings, Qt, QUrl
+from PySide6.QtGui import QColor, QMouseEvent, QPalette
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtQuickControls2 import QQuickStyle
@@ -443,6 +443,72 @@ ApplicationWindow {
         finally:
             backend.shutdown()
 
+    def test_title_bar_dragging(self):
+        project_root = Path(__file__).resolve().parents[1]
+        qml_dir = project_root / "ui" / "qml"
+        main_qml = qml_dir / "Main.qml"
+
+        engine = QQmlApplicationEngine()
+        engine.addImportPath(str(qml_dir))
+        backend = Backend()
+        backend.settings_manager.save = Mock()
+        try:
+            engine.rootContext().setContextProperty("backend", backend)
+            engine.load(QUrl.fromLocalFile(str(main_qml)))
+            self.assertTrue(engine.rootObjects(), "QML root objects should be created")
+            root = engine.rootObjects()[0]
+            root.show()
+
+            root.setX(100)
+            root.setY(100)
+
+            drag_area = root.findChild(QObject, "titleBarDragArea")
+            self.assertIsNotNone(drag_area, "titleBarDragArea should exist in AppTitleBar")
+
+            # Simulate mouse press on title bar
+            click_pos = QPointF(400, 20)
+            global_pos = QPointF(root.x() + 400, root.y() + 20)
+            press_ev = QMouseEvent(
+                QEvent.Type.MouseButtonPress,
+                click_pos,
+                global_pos,
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+            QApplication.sendEvent(root, press_ev)
+
+            # Move mouse by +50 in x and +30 in y
+            move_pos = QPointF(450, 50)
+            global_move_pos = QPointF(root.x() + 450, root.y() + 50)
+            move_ev = QMouseEvent(
+                QEvent.Type.MouseMove,
+                move_pos,
+                global_move_pos,
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+            QApplication.sendEvent(root, move_ev)
+
+            self.assertEqual(root.x(), 150)
+            self.assertEqual(root.y(), 130)
+
+            # Release mouse
+            release_ev = QMouseEvent(
+                QEvent.Type.MouseButtonRelease,
+                move_pos,
+                global_move_pos,
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.NoButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+            QApplication.sendEvent(root, release_ev)
+            self.assertFalse(drag_area.property("manualDragging"))
+        finally:
+            backend.shutdown()
+
 
 if __name__ == "__main__":
     unittest.main()
+

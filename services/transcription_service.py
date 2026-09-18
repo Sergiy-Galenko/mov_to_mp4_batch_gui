@@ -8,6 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from app.models import ConversionSettings
+from services.whisper_environment import managed_runtime, worker_command, worker_environment
 from services.whisper_model_manager import WhisperModelManager, normalize_model
 from services.whisper_runtime import cache_root, engine_for, package_available, resolve_device
 
@@ -24,7 +25,10 @@ class TranscriptionService:
             config.write_text(json.dumps(asdict(settings)), encoding="utf-8")
             entry = [] if getattr(sys, "frozen", False) else [str(Path(__file__).resolve().parents[1] / "main.py")]
             cmd = [sys.executable, *entry, "--transcribe-worker", str(inp), str(outp), str(config)]
-            if ffmpeg_path:
+            if managed_runtime():
+                cmd = worker_command("transcribe", str(inp), str(outp), str(config))
+                result = run(cmd, env=worker_environment(ffmpeg_path or ""))
+            elif ffmpeg_path:
                 worker_env = dict(os.environ)
                 worker_env["MEDIA_CONVERTER_FFMPEG"] = str(ffmpeg_path)
                 worker_env["PATH"] = str(Path(ffmpeg_path).parent) + os.pathsep + worker_env.get("PATH", "")

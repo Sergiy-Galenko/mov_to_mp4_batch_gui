@@ -16,6 +16,8 @@ Item {
 
     signal valueChangedByUser(real newValue)
     signal selected()
+    signal editingStarted()
+    signal editingFinished()
 
     width: 16
     height: parent ? parent.height : 48
@@ -86,6 +88,8 @@ Item {
     }
 
     MouseArea {
+        onReleased: root.editingFinished()
+        onCanceled: root.editingFinished()
         id: dragArea
         anchors.fill: parent
         anchors.margins: -4
@@ -96,6 +100,7 @@ Item {
         property real startTime: 0
 
         onPressed: function(mouse) {
+            root.editingStarted()
             root.forceActiveFocus()
             root.selected()
             startX = mouse.x

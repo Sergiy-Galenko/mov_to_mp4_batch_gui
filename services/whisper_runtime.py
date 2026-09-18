@@ -6,8 +6,14 @@ import importlib.util
 import os
 from pathlib import Path
 
+from services.whisper_environment import managed_runtime
+
 
 def package_available(name: str) -> bool:
+    runtime = managed_runtime()
+    if runtime and name in {"whisper", "faster_whisper"}:
+        engine = "faster-whisper" if name == "faster_whisper" else "whisper"
+        return bool(runtime.get("report", {}).get("engines", {}).get(engine, {}).get("installed"))
     try:
         return importlib.util.find_spec(name) is not None
     except (ImportError, ValueError):
@@ -37,6 +43,10 @@ def engine_for(device: str = "auto", engine: str = "auto") -> str:
 def available_devices(engine: str = "auto") -> list[str]:
     devices = ["auto", "cpu"]
     selected = engine_for(engine=engine)
+    runtime = managed_runtime()
+    if runtime:
+        verified = runtime.get("report", {}).get("engines", {}).get(selected, {}).get("devices", [])
+        return ["auto", *dict.fromkeys(["cpu", *verified])]
     if selected == "faster-whisper":
         try:
             import ctranslate2

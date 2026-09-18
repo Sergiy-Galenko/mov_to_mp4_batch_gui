@@ -16,6 +16,10 @@ def _bootstrap_dependencies() -> None:
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["--whisper-setup-worker"]:
+        from services.whisper_worker import main as whisper_main
+
+        sys.exit(whisper_main(sys.argv[2:]))
     if sys.argv[1:2] == ["--transcribe-worker"]:
         from services.transcription_service import run_transcription_worker
 

@@ -91,7 +91,7 @@ BODY = r"""    @QtCore.Property(str, constant=True)
     def onboardingVisible(self) -> bool:
         return self._show_onboarding
 
-    @QtCore.Property(bool, constant=True)
+    @QtCore.Property(bool, notify=whisperModelsChanged)
     def isWhisperAvailable(self) -> bool:
         from services.transcription_service import is_whisper_available
 

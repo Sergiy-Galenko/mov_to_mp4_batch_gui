@@ -17,6 +17,8 @@ Item {
     property real cropWidth: width
     property real cropHeight: height
 
+    signal editingStarted()
+    signal editingFinished()
     signal cropChanged(int x, int y, int w, int h)
     signal resetRequested()
 
@@ -53,7 +55,6 @@ Item {
         cropBox.y = Math.max(0, Math.min(root.height - 24, Math.round(ny * scaleY)))
         cropBox.width = Math.max(24, Math.min(root.width - cropBox.x, Math.round(nw * scaleX)))
         cropBox.height = Math.max(24, Math.min(root.height - cropBox.y, Math.round(nh * scaleY)))
-        applyAspectRatioConstraint()
     }
 
     function applyAspectRatioConstraint() {
@@ -174,6 +175,9 @@ Item {
 
         // Drag the whole crop box
         MouseArea {
+            onPressed: root.editingStarted()
+            onReleased: root.editingFinished()
+            onCanceled: root.editingFinished()
             anchors.fill: parent
             anchors.margins: 14
             cursorShape: Qt.SizeAllCursor
@@ -226,6 +230,9 @@ Item {
             x: -parent.halfH; y: -parent.halfH
             color: Theme.accentPrimary
             MouseArea {
+                onPressed: root.editingStarted()
+                onReleased: root.editingFinished()
+                onCanceled: root.editingFinished()
                 anchors.fill: parent; anchors.margins: -4
                 cursorShape: Qt.SizeFDiagCursor
                 onPositionChanged: function(mouse) {
@@ -253,6 +260,9 @@ Item {
             color: Theme.accentPrimary
             visible: root.getTargetRatio() <= 0.0
             MouseArea {
+                onPressed: root.editingStarted()
+                onReleased: root.editingFinished()
+                onCanceled: root.editingFinished()
                 anchors.fill: parent; anchors.margins: -4
                 cursorShape: Qt.SizeVerCursor
                 onPositionChanged: function(mouse) {
@@ -272,6 +282,9 @@ Item {
             x: parent.width - parent.halfH; y: -parent.halfH
             color: Theme.accentPrimary
             MouseArea {
+                onPressed: root.editingStarted()
+                onReleased: root.editingFinished()
+                onCanceled: root.editingFinished()
                 anchors.fill: parent; anchors.margins: -4
                 cursorShape: Qt.SizeBDiagCursor
                 onPositionChanged: function(mouse) {
@@ -297,6 +310,9 @@ Item {
             color: Theme.accentPrimary
             visible: root.getTargetRatio() <= 0.0
             MouseArea {
+                onPressed: root.editingStarted()
+                onReleased: root.editingFinished()
+                onCanceled: root.editingFinished()
                 anchors.fill: parent; anchors.margins: -4
                 cursorShape: Qt.SizeHorCursor
                 onPositionChanged: function(mouse) {
@@ -314,6 +330,9 @@ Item {
             x: parent.width - parent.halfH; y: parent.height - parent.halfH
             color: Theme.accentPrimary
             MouseArea {
+                onPressed: root.editingStarted()
+                onReleased: root.editingFinished()
+                onCanceled: root.editingFinished()
                 anchors.fill: parent; anchors.margins: -4
                 cursorShape: Qt.SizeFDiagCursor
                 onPositionChanged: function(mouse) {
@@ -337,6 +356,9 @@ Item {
             color: Theme.accentPrimary
             visible: root.getTargetRatio() <= 0.0
             MouseArea {
+                onPressed: root.editingStarted()
+                onReleased: root.editingFinished()
+                onCanceled: root.editingFinished()
                 anchors.fill: parent; anchors.margins: -4
                 cursorShape: Qt.SizeVerCursor
                 onPositionChanged: function(mouse) {
@@ -354,6 +376,9 @@ Item {
             x: -parent.halfH; y: parent.height - parent.halfH
             color: Theme.accentPrimary
             MouseArea {
+                onPressed: root.editingStarted()
+                onReleased: root.editingFinished()
+                onCanceled: root.editingFinished()
                 anchors.fill: parent; anchors.margins: -4
                 cursorShape: Qt.SizeBDiagCursor
                 onPositionChanged: function(mouse) {
@@ -379,6 +404,9 @@ Item {
             color: Theme.accentPrimary
             visible: root.getTargetRatio() <= 0.0
             MouseArea {
+                onPressed: root.editingStarted()
+                onReleased: root.editingFinished()
+                onCanceled: root.editingFinished()
                 anchors.fill: parent; anchors.margins: -4
                 cursorShape: Qt.SizeHorCursor
                 onPositionChanged: function(mouse) {

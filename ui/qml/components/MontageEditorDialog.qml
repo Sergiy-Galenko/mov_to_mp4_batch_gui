@@ -71,6 +71,43 @@ Window {
     property string blurStyle: "box"
     property string blurStatusText: ""
 
+    readonly property var editState: ({
+        inPoint: root.inPoint,
+        outPoint: root.outPoint,
+        cropEnabled: root.cropEnabled,
+        cropX: root.cropX,
+        cropY: root.cropY,
+        cropW: root.cropW,
+        cropH: root.cropH,
+        cropAspect: root.cropAspect,
+        audioEnabled: root.audioEnabled,
+        outputFormat: root.outputFormat,
+        fastCopy: root.fastCopy,
+        timelineClips: root.timelineClips,
+        bgMusicPath: root.bgMusicPath,
+        bgMusicVolume: root.bgMusicVolume,
+        bgMusicLoop: root.bgMusicLoop,
+        defaultTransition: root.defaultTransition,
+        defaultTransitionDuration: root.defaultTransitionDuration,
+        subtitleTemplate: root.subtitleTemplate,
+        speakerAliases: root.speakerAliases,
+        targetSubtitleLanguage: root.targetSubtitleLanguage,
+        blurTargetType: root.blurTargetType,
+        blurStyle: root.blurStyle
+    })
+    onEditStateChanged: editHistory.schedule()
+    UndoHistory {
+        id: editHistory
+        objectName: "montageUndoHistory"
+        capture: function() { return root.editState }
+        restore: function(state) {
+            // Assign aspect before coordinates: its visual handler can adjust the box.
+            root.cropAspect = state.cropAspect
+            for (var key in state) root[key] = state[key]
+            cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH)
+        }
+    }
+
     signal applied(string path, var sessionData)
     signal cancelled()
 
@@ -84,6 +121,20 @@ Window {
     }
 
     function openForFile(path) {
+        editHistory.initialized = false
+        root.timelineClips = []
+        root.bgMusicPath = ""
+        root.speakerAliases = ({})
+        root.detectedSpeakers = []
+        root.proxyPath = ""
+        root.useProxy = false
+        root.inPoint = 0
+        root.outPoint = 0
+        root.cropEnabled = false
+        root.cropAspect = "free"
+        root.cropX = 0; root.cropY = 0
+        root.cropW = root.nativeWidth; root.cropH = root.nativeHeight
+        Qt.callLater(function() { editHistory.reset() })
         if (!path) {
             root.filePath = ""
             root.fileName = ""
@@ -215,6 +266,7 @@ Window {
             Layout.fillWidth: true
             spacing: Theme.space3
 
+            HistoryButtons { history: editHistory; targetWindow: root }
             AppIcon {
                 name: "film"
                 width: 22
@@ -350,6 +402,8 @@ Window {
                     // Crop Overlay
                     CropOverlay {
                         id: cropOverlay
+                        onEditingStarted: editHistory.begin()
+                        onEditingFinished: editHistory.end()
                         anchors.fill: videoOutput
                         active: root.cropEnabled
                         nativeWidth: root.nativeWidth
@@ -479,6 +533,8 @@ Window {
                 // Interactive Timeline Component
                 Timeline {
                     id: timelineComponent
+                    onEditingStarted: editHistory.begin()
+                    onEditingFinished: editHistory.end()
                     Layout.fillWidth: true
                     Layout.preferredHeight: 140
                     duration: root.duration

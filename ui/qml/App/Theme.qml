@@ -2,6 +2,9 @@ pragma Singleton
 import QtQuick 2.15
 
 QtObject {
+    readonly property bool reducedMotion: (typeof backend !== "undefined" && backend && backend.autoTuneEnabled
+        && backend.systemProfile && backend.systemProfile.result.recommendation
+        && backend.systemProfile.result.recommendation.low_resource_mode) || false
     readonly property string platformName: (typeof backend !== "undefined" && backend) ? backend.platformName : (Qt.platform.os === "osx" ? "macos" : Qt.platform.os)
     readonly property bool isMac: platformName === "macos"
     readonly property bool isWindows: platformName === "windows"

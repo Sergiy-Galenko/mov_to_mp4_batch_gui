@@ -46,8 +46,10 @@ BODY = r"""    # --- Theme properties ---
     @concurrencyLimit.setter
     def concurrencyLimit(self, value: int) -> None:
         val = max(0, min(16, int(value)))
+        if self.concurrencyLimit == val:
+            return
         self.settings_manager.state["concurrency_limit"] = val
-        self.settings_manager.save()
+        self._save_state()
         self.concurrencyLimitChanged.emit()
 
     @QtCore.Property(str, notify=outputTemplateChanged)
@@ -58,7 +60,7 @@ BODY = r"""    # --- Theme properties ---
     def outputTemplate(self, value: str) -> None:
         val = str(value or "{stem}").strip()
         self.settings_manager.state["output_template"] = val
-        self.settings_manager.save()
+        self._save_state()
         self.outputTemplateChanged.emit()
 
     @QtCore.Slot(float, result=str)

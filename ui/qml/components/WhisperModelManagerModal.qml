@@ -28,6 +28,7 @@ Dialog {
     property var modelsList: []
     property var devices: ["auto", "cpu"]
     property string effectiveEngine: ""
+    property bool engineInstalled: false
     property string activeDownloadingModel: ""
     property real downloadProgress: 0
     property string downloadFile: ""
@@ -39,6 +40,7 @@ Dialog {
     function refreshModels() {
         if (!backend) return
         effectiveEngine = backend.getWhisperEngine(selectedDevice, selectedEngine)
+        engineInstalled = backend.whisperEngineInstalled(effectiveEngine)
         modelsList = backend.getWhisperModels(selectedDevice, selectedEngine)
         devices = backend.getWhisperDevices(selectedEngine)
         var active = ""
@@ -53,7 +55,7 @@ Dialog {
 
     function chooseModel(name) { root.modelChosen(name) }
     function chooseDevice(device) { root.deviceChosen(device) }
-    onOpened: refreshModels()
+    onOpened: { refreshModels(); backend.whisperSetup.check() }
     onSelectedDeviceChanged: if (visible) refreshModels()
     onSelectedEngineChanged: if (visible) refreshModels()
 
@@ -68,6 +70,13 @@ Dialog {
         }
     }
 
+    WhisperSetupDialog {
+        id: setupDialog
+        selectedModel: root.selectedModel
+        selectedEngine: root.effectiveEngine || "whisper"
+        selectedDevice: root.selectedDevice
+    }
+
     background: Rectangle {
         color: Theme.panelBackground
         radius: Theme.radiusLg
@@ -77,6 +86,7 @@ Dialog {
 
     contentItem: ColumnLayout {
         spacing: 12
+        AppButton { text: I18n.t("whisper.setup"); onClicked: setupDialog.open() }
         Label {
             Layout.fillWidth: true
             text: I18n.t("whisper.description")
@@ -120,7 +130,7 @@ Dialog {
         }
         Label {
             Layout.fillWidth: true
-            visible: backend ? !backend.whisperEngineInstalled(root.effectiveEngine) : false
+            visible: !root.engineInstalled
             text: I18n.t("whisper.install_hint")
             color: Theme.accentWarn
             wrapMode: Text.WordWrap

@@ -104,6 +104,8 @@ BODY = r"""        self._youtube_history = self.settings_manager.youtube_history
             self._youtube_cancel_event.set()
         self.watch_service.stop()
         self.whisper_model_manager.shutdown()
+        self._system_profile.shutdown()
+        self._whisper_setup.shutdown()
         self._probe_executor.shutdown(wait=False, cancel_futures=True)
         self._thumbnail_executor.shutdown(wait=False, cancel_futures=True)
 
@@ -158,7 +160,13 @@ BODY = r"""        self._youtube_history = self.settings_manager.youtube_history
 
     @QtCore.Slot(str, result=list)
     def getWhisperDevices(self, engine: str = "auto") -> list:
-        return self.whisper_model_manager.detect_available_devices(engine)
+        from services.whisper_runtime import engine_for
+        try:
+            selected = engine_for(engine=engine)
+        except ValueError:
+            return ["auto", "cpu"]
+        report = self._whisper_setup.diagnostics.get("engines", {}).get(selected, {})
+        return ["auto", *dict.fromkeys(["cpu", *report.get("devices", [])])]
 
     @QtCore.Slot(str, result=bool)
     def whisperEngineInstalled(self, engine: str) -> bool:

@@ -79,6 +79,7 @@ BODY = r"""    @QtCore.Slot()
             self.toastRequested.emit("FFmpeg готовий")
             self._send_push_notification("FFmpeg", "FFmpeg готовий до роботи.")
             self.refreshEncoders()
+            self.startSystemScan()
 
     def _detect_encoders_async(self, ffmpeg_path: str) -> None:
         ffprobe_path = find_ffprobe(ffmpeg_path)
@@ -121,6 +122,7 @@ BODY = r"""    @QtCore.Slot()
         if path:
             self.ffmpegPath = path
             self.refreshEncoders()
+            self.startSystemScan()
 
     @QtCore.Slot()
     def pickOutputDir(self) -> None:

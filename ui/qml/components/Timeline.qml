@@ -21,6 +21,8 @@ Item {
     signal outPointChangedByUser(real val)
     signal playheadSeekRequested(real val)
     signal playPauseRequested()
+    signal editingStarted()
+    signal editingFinished()
 
     readonly property real frameStep: fps > 0 ? (1.0 / fps) : (1.0 / 30.0)
     readonly property real effectiveDuration: duration > 0 ? duration : 1.0
@@ -338,6 +340,8 @@ Item {
 
                 // 5. In Marker
                 InOutMarker {
+                    onEditingStarted: root.editingStarted()
+                    onEditingFinished: root.editingFinished()
                     id: inMarker
                     isOut: false
                     timeValue: root.inPoint
@@ -362,6 +366,8 @@ Item {
 
                 // 6. Out Marker
                 InOutMarker {
+                    onEditingStarted: root.editingStarted()
+                    onEditingFinished: root.editingFinished()
                     id: outMarker
                     isOut: true
                     timeValue: root.outPoint

@@ -35,6 +35,39 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 - Full batch rename preview with copy/export to CSV before conversion starts.
 - JSON-based localization for Ukrainian, English, Polish, and German.
 - CLI mode for automation without starting the GUI.
+- Background startup hardware scan, automatic workload tuning and a visible setup indicator.
+- Undo/redo for conversion parameters and montage edits, with standard platform shortcuts.
+- Whisper dependency installation, MPS/CUDA/CPU diagnostics and a short recognition test from the model manager.
+
+## Startup system scan and workload tuning
+
+The status strip below the toolbar shows setup progress, then the detected OS,
+CPU and RAM. **System details** also shows architecture, CPU cores, available
+memory, GPU names and hardware encoders that successfully encoded a test frame.
+An unavailable FFmpeg installation is reported explicitly; it does not count as
+a successful hardware check. The scan runs in the background and can be cancelled
+or repeated. GPU-name detection is implemented for macOS and Windows.
+
+Automatic tuning is enabled by default. It reserves CPU and memory for the
+desktop, selects 1–4 concurrent conversions, adjusts the existing CPU/GPU load
+thresholds, and reduces control animations on limited hardware. Load thresholds
+delay **new** jobs; they are not a hard usage cap for an already running encoder.
+Video format, codec, quality and presets stay under your control. Recommendations
+are conservative heuristics, not a guarantee against stalls on every workload.
+Changes wait until an active conversion finishes.
+
+Turn off **Automatically tune workload at startup** in System details to retain
+manual settings across launches, then adjust the number of concurrent conversions.
+Editing the CPU/GPU load thresholds also switches to manual control.
+
+## Undo and redo
+
+Use the toolbar's **↶ / ↷** buttons or **Cmd+Z / Cmd+Shift+Z** on macOS and
+**Ctrl+Z / Ctrl+Y** on Windows. Conversion settings and the open montage editor
+have separate histories of up to 100 edits. A trim-marker or crop-handle drag is
+one action. New edits clear the redo history; opening another montage session
+starts a new history. Text fields retain their usual native text undo shortcuts.
+Startup tuning updates the history baseline without discarding unrelated edits.
 
 ## Apple Silicon VideoToolbox and Whisper models
 
@@ -79,7 +112,28 @@ selected runtime are offered. A saved unavailable device is retained with a
 message so you can select another one. An explicitly selected device does not
 silently switch to CPU after an inference error.
 
-Install one optional runtime in the same environment that launches the app:
+Open **Manage models → Whisper setup and test** to install the selected engine
+into an isolated `whisper-runtime` environment in the app data directory. The
+same environment is then used by normal subtitle conversion, including packaged
+builds. Packaged apps need an installed Python 3.12+ interpreter; you can enter its
+executable path in the setup dialog if automatic discovery cannot find it.
+Installation is optional, runs in the background and supports cancellation.
+
+**Check devices** imports the libraries in a separate process and checks actual
+CPU/MPS/CUDA runtime operations. An advertised GPU alone does not imply a usable
+Whisper device. CUDA requires compatible driver/runtime libraries; the default
+package installation does not promise a CUDA-enabled PyTorch build.
+
+Download your chosen model in the manager, select a file with speech at the start,
+then choose **Test recognition**. The app decodes at most the first 12 seconds,
+uses the selected engine/model/device and configured FFmpeg, and displays text,
+elapsed inference time and the actual device. Test jobs can be cancelled and time
+out after five minutes of inference. Tests do not implicitly download models.
+Model caches are shared with the existing manager. Closing the dialog leaves an
+active job running; Cancel or quitting the app stops it.
+
+For source installations, a runtime can alternatively be installed in the Python
+environment that launches the app (used when no managed runtime is configured):
 
 ```bash
 # Apple Silicon MPS, or PyTorch CUDA/CPU
