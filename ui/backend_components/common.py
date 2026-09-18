@@ -43,9 +43,11 @@ from services.preset_manager import PresetManager
 from services.queue_manager import QueueManager
 from services.report_service import ReportService
 from services.resource_monitor import ResourceMonitor
+from services.scripting_service import ScriptingService
 from services.settings_manager import SettingsManager
 from services.shortcut_manager import ShortcutManager
 from services.smart_convert_service import recommend_settings
+from services.speech_diagnostic_service import SpeechDiagnosticService
 from services.system_tray_service import SystemTrayService
 from services.taskbar_service import TaskbarService
 from services.theme_manager import ThemeManager
@@ -104,8 +106,10 @@ __all__ = [
     "QueueModel",
     "ReportService",
     "ResourceMonitor",
+    "ScriptingService",
     "SettingsManager",
     "ShortcutManager",
+    "SpeechDiagnosticService",
     "SystemTrayService",
     "TaskItem",
     "TaskStatus",

@@ -166,6 +166,7 @@ class FfmpegService:
         self.ffmpeg_path = ffmpeg_path
         self.ffprobe_path = ffprobe_path
         self.encoder_caps: set[str] = set()
+        self.scripting_service: Any = None
 
     def set_paths(self, ffmpeg_path: str | None, ffprobe_path: str | None) -> None:
         self.ffmpeg_path = ffmpeg_path
@@ -829,6 +830,40 @@ class FfmpegService:
             filters.append("fps=12")
             if resize_filter is None:
                 filters.append("scale=640:-1:flags=lanczos")
+
+        # User-defined JavaScript filter rules (Scripting Engine)
+        try:
+            from services.scripting_service import ScriptingService
+
+            script_svc = self.scripting_service or ScriptingService()
+            custom_inline_filter = getattr(settings, "js_filter_code", "").strip()
+            should_run_filter = (
+                bool(custom_inline_filter)
+                or (script_svc.config.enabled and script_svc.config.filter_enabled)
+            )
+            if should_run_filter:
+                file_meta = script_svc.build_file_context(inp, info=info)
+                settings_meta = {
+                    "out_video_format": getattr(settings, "out_video_format", ""),
+                    "crf": getattr(settings, "crf", 0),
+                    "preset": getattr(settings, "preset", ""),
+                    "encoder": getattr(settings, "encoder", ""),
+                    "fps": getattr(settings, "fps", 0),
+                }
+                ok_f, custom_filter, err_f = script_svc.evaluate_filter(
+                    file_meta,
+                    settings_meta,
+                    script=custom_inline_filter if custom_inline_filter else None,
+                )
+                if ok_f and custom_filter:
+                    filters.append(custom_filter)
+                    if log_cb:
+                        log_cb("INFO", f"JS filter застосовано: {custom_filter}")
+                elif err_f and log_cb:
+                    log_cb("WARN", f"JS filter помилка: {err_f}")
+        except Exception as exc:
+            if log_cb:
+                log_cb("WARN", f"JS filter виняток: {exc}")
 
         watermark_inputs: list[str] = []
         watermark_path = settings.watermark_path.strip()

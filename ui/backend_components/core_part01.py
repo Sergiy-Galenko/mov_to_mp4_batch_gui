@@ -57,6 +57,11 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
     outputTemplateChanged = QtCore.Signal()
     whisperModelsChanged = QtCore.Signal()
     whisperDownloadProgress = QtCore.Signal(str, float, str)
+    scriptingConfigChanged = QtCore.Signal()
+    speechDiagnosticChanged = QtCore.Signal()
+    speechInstallProgress = QtCore.Signal(str)
+    speechInstallFinished = QtCore.Signal(bool, str)
+    speechTestFinished = QtCore.Signal(dict)
 
     def __init__(self) -> None:
         super().__init__()
@@ -64,6 +69,9 @@ BODY = r'''    logAdded = QtCore.Signal(str, str)
         self.event_queue: "queue.Queue[tuple]" = UiEventQueue()
         self.ffmpeg_service = FfmpegService(find_ffmpeg(), None)
         self.ffmpeg_service.ffprobe_path = find_ffprobe(self.ffmpeg_service.ffmpeg_path)
+        self.scripting_service = ScriptingService()
+        self.ffmpeg_service.scripting_service = self.scripting_service
+        self.speech_diagnostic = SpeechDiagnosticService()
         self._converter_service = None
         self._runner = None
         self._media_analysis = None

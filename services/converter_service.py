@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from queue import Queue
+from typing import Any
 
 from app.constants import PROGRESS_THROTTLE_SEC
 from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
@@ -54,6 +55,7 @@ class ConverterService:
         self._children_lock = threading.RLock()
         self._output_path_lock = threading.Lock()
         self._reserved_output_paths: set[Path] = set()
+        self.scripting_service: Any = None
 
     def _result_output_paths(self, result_output: str) -> list[Path]:
         paths: list[Path] = []
@@ -499,6 +501,7 @@ class ConverterService:
                 overwrite=settings.overwrite, skip_existing=settings.skip_existing,
                 info=self.media_info.get(task.path), collision_policy=collision_policy,
                 reserved=self._reserved_output_paths,
+                script_service=self.scripting_service,
             )
 
     def _reserve_output_path(self, output_path: Path, collision_policy: str = "index") -> Path:

@@ -158,6 +158,7 @@ ApplicationWindow {
         { title: "nav_ffmpeg_watch", icon: "settings", page: 5, target: "ffmpeg_watch", group: "nav_automation" },
         { title: "nav_cloud_integration", icon: "download", page: 5, target: "cloud_integration", group: "nav_automation" },
         { title: "nav_metadata_hooks", icon: "file", page: 5, target: "metadata_hooks", group: "nav_automation" },
+        { title: "nav_scripting", icon: "sliders", page: 5, target: "scripting", group: "nav_automation" },
         { title: "nav_commercial_license", icon: "settings", page: 5, target: "commercial_license", group: "nav_application" }
     ]
 
@@ -1993,6 +1994,10 @@ ApplicationWindow {
 
         function sectionY(section) {
             var target = String(section || "run")
+            if (target === "scripting") {
+                scriptModal.open()
+                return 0
+            }
             var panel = runPanel
             if (["smart_convert", "device_profiles", "video_editor", "subtitle_tools", "privacy_security", "cloud_integration", "commercial_license", "video", "audio_subtitles", "images_sheets", "watermark_text", "metadata_hooks", "selected_override", "ffmpeg_watch"].indexOf(target) >= 0)
                 advancedToolsSection.expanded = true
@@ -2167,7 +2172,20 @@ ApplicationWindow {
                 SecondaryButton { text: "CSV"; onClicked: backend && backend.exportRenamePreviewCsv(collectSettings()) }
             }
             FieldLabel { text: I18n.t("template") }
-            AppTextField { id: outputTemplateField; text: "{stem}"; onEditingFinished: scheduleSettingsSync() }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                AppTextField {
+                    id: outputTemplateField
+                    text: "{stem}"
+                    Layout.fillWidth: true
+                    onEditingFinished: scheduleSettingsSync()
+                }
+                SecondaryButton {
+                    text: "⚡ JS-скрипти…"
+                    onClicked: scriptModal.open()
+                }
+            }
             FieldLabel { text: "Політика колізій" }
             AppComboBox {
                 id: collisionPolicyCombo
@@ -2867,6 +2885,10 @@ ApplicationWindow {
 
     WhisperModelManagerModal {
         id: whisperModal
+    }
+
+    ScriptEditorModal {
+        id: scriptModal
     }
 
     function shortcutAllowed(action) {

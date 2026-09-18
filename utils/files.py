@@ -113,8 +113,20 @@ def render_output_stem(
     media_type_name: str,
     info: Any = None,
 ) -> str:
-    now = datetime.now()
     raw_template = template.strip() or "{stem}"
+    if raw_template.startswith("js:"):
+        try:
+            from services.scripting_service import ScriptingService
+
+            script_svc = ScriptingService()
+            file_meta = script_svc.build_file_context(in_path, info=info, index=index)
+            ok, custom_stem, _ = script_svc.evaluate_rename(file_meta, script=raw_template[3:].strip())
+            if ok and custom_stem:
+                return sanitize_file_stem(custom_stem)
+        except Exception:
+            pass
+
+    now = datetime.now()
     w = getattr(info, "width", None) if info else None
     h = getattr(info, "height", None) if info else None
     vcodec = getattr(info, "vcodec", None) if info else None
@@ -170,16 +182,32 @@ def build_output_path(
     collision_policy: str = "",
     reserved: set[Path] | None = None,
     strict_collisions: bool = True,
+    script_service: Any = None,
 ) -> Path:
-    stem = render_output_stem(
-        template,
-        in_path,
-        index=index,
-        operation=operation,
-        media_type_name=media_type_name,
-        info=info,
-    )
-    desired = out_dir / f"{stem}.{out_ext.lstrip('.')}"
+    target_out_dir = out_dir
+    stem = ""
+
+    if script_service and getattr(script_service, "config", None) and script_service.config.enabled:
+        file_meta = script_service.build_file_context(in_path, info=info, index=index)
+        if script_service.config.route_enabled:
+            ok_r, subfolder, _ = script_service.evaluate_route(file_meta)
+            if ok_r and subfolder:
+                target_out_dir = out_dir / subfolder
+        if script_service.config.rename_enabled and not template.startswith("js:"):
+            ok_n, custom_stem, _ = script_service.evaluate_rename(file_meta)
+            if ok_n and custom_stem:
+                stem = custom_stem
+
+    if not stem:
+        stem = render_output_stem(
+            template,
+            in_path,
+            index=index,
+            operation=operation,
+            media_type_name=media_type_name,
+            info=info,
+        )
+    desired = target_out_dir / f"{stem}.{out_ext.lstrip('.')}"
     if collision_policy:
         if collision_policy == "parent":
             desired = desired.with_name(f"{sanitize_file_stem(in_path.parent.name)}_{desired.name}")

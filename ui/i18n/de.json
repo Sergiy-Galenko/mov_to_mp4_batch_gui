@@ -32,6 +32,7 @@
   "nav_ffmpeg_watch": "Überwachte Ordner",
   "nav_cloud_integration": "Cloud-Integration",
   "nav_metadata_hooks": "Metadaten und Skripte",
+  "nav_scripting": "JS-Skripte & Plugins",
   "nav_commercial_license": "Lizenz und Updates",
   "queue_filter_all": "Alle Status",
   "queue_filter_pending": "Wartend und bereit",

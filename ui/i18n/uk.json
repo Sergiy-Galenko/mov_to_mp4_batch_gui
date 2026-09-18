@@ -32,6 +32,7 @@
   "nav_ffmpeg_watch": "Відстеження папок",
   "nav_cloud_integration": "Хмарна інтеграція",
   "nav_metadata_hooks": "Метадані та скрипти",
+  "nav_scripting": "JS-скрипти та плагіни",
   "nav_commercial_license": "Ліцензія та оновлення",
   "queue_filter_all": "Усі статуси",
   "queue_filter_pending": "У черзі та готові",

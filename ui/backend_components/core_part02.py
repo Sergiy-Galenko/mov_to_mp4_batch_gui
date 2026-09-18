@@ -112,6 +112,7 @@ BODY = r'''        self._youtube_history = self.settings_manager.youtube_history
             from services.converter_service import ConverterService
 
             self._converter_service = ConverterService(self.ffmpeg_service, self.event_queue)
+            self._converter_service.scripting_service = self.scripting_service
         return self._converter_service
 
     @property
