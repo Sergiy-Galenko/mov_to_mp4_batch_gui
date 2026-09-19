@@ -12,8 +12,9 @@ Capabilities:
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -268,14 +269,10 @@ class DisplayService(QtCore.QObject):
         if not app or not isinstance(app, QtGui.QGuiApplication):
             return
 
-        try:
+        with contextlib.suppress(Exception):
             app.screenAdded.connect(self._on_screens_changed)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             app.screenRemoved.connect(self._on_screens_changed)
-        except Exception:
-            pass
         try:
             if hasattr(app, "primaryScreenChanged"):
                 app.primaryScreenChanged.connect(self._on_screens_changed)
@@ -293,18 +290,12 @@ class DisplayService(QtCore.QObject):
             screens = []
         for scr in screens:
             if scr not in self._connected_screens:
-                try:
+                with contextlib.suppress(Exception):
                     scr.geometryChanged.connect(self._on_screen_geometry_changed)
-                except Exception:
-                    pass
-                try:
+                with contextlib.suppress(Exception):
                     scr.availableGeometryChanged.connect(self._on_screen_geometry_changed)
-                except Exception:
-                    pass
-                try:
+                with contextlib.suppress(Exception):
                     scr.logicalDotsPerInchChanged.connect(self._on_screen_geometry_changed)
-                except Exception:
-                    pass
                 self._connected_screens.append(scr)
 
     def _on_screen_geometry_changed(self, *args) -> None:

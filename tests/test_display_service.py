@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 from PySide6 import QtWidgets
 
@@ -19,6 +18,7 @@ class DisplayServiceTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         import os
+
         from PySide6.QtQuickControls2 import QQuickStyle
 
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -115,7 +115,7 @@ class DisplayServiceTest(unittest.TestCase):
     def test_ensure_window_in_bounds_offscreen_recovery(self) -> None:
         service = DisplayService()
         # Simulated offscreen coordinates (e.g. was on a second monitor at x=3000, y=2000)
-        recovered_x, recovered_y, w, h = service.ensure_window_in_bounds(3000, 2000, 1200, 800)
+        recovered_x, recovered_y, _w, _h = service.ensure_window_in_bounds(3000, 2000, 1200, 800)
         # Should be brought back within active screen area
         self.assertLess(recovered_x, service.current_metrics().available_width)
         self.assertLess(recovered_y, service.current_metrics().available_height)

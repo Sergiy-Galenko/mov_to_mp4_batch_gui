@@ -1,4 +1,5 @@
 import os
+
 from PySide6.QtQuickControls2 import QQuickStyle
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
