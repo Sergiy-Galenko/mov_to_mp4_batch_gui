@@ -102,16 +102,23 @@ Canvas {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 8 * u, Math.PI * .2, Math.PI * 1.85); ctx.stroke()
             line(20, 3, 20, 8); line(15, 8, 20, 8)
         } else if (name === "palette") {
-            ctx.beginPath(); ctx.arc(pt(12), pt(12), 9 * u, 0, Math.PI * 2); ctx.stroke()
+            ctx.beginPath()
+            ctx.moveTo(pt(12), pt(3))
+            ctx.bezierCurveTo(pt(17), pt(3), pt(21), pt(7), pt(21), pt(12))
+            ctx.bezierCurveTo(pt(21), pt(15), pt(19), pt(15), pt(17), pt(15))
+            ctx.bezierCurveTo(pt(14), pt(15), pt(14), pt(17), pt(16), pt(19))
+            ctx.bezierCurveTo(pt(17), pt(21), pt(14), pt(21), pt(12), pt(21))
+            ctx.bezierCurveTo(pt(7), pt(21), pt(3), pt(17), pt(3), pt(12))
+            ctx.bezierCurveTo(pt(3), pt(7), pt(7), pt(3), pt(12), pt(3))
+            ctx.closePath(); ctx.stroke()
             for (var dot = 0; dot < 3; ++dot) {
                 ctx.beginPath(); ctx.arc(pt(7 + dot * 5), pt(dot === 1 ? 7 : 11), 1.5 * u, 0, Math.PI * 2); ctx.fill()
             }
-            ctx.beginPath(); ctx.arc(pt(12), pt(17), 2 * u, 0, Math.PI * 2); ctx.stroke()
         } else if (name === "search") {
             ctx.beginPath(); ctx.arc(pt(10), pt(10), 5.5 * u, 0, Math.PI * 2); ctx.stroke(); line(14, 14, 20, 20)
         } else if (name === "bell") {
-            ctx.beginPath(); ctx.arc(pt(12), pt(18.5), 1.2 * u, 0, Math.PI * 2); ctx.fill()
-            ctx.beginPath(); ctx.moveTo(pt(5), pt(17)); ctx.lineTo(pt(7), pt(15)); ctx.lineTo(pt(7), pt(10)); ctx.bezierCurveTo(pt(7), pt(4), pt(17), pt(4), pt(17), pt(10)); ctx.lineTo(pt(17), pt(15)); ctx.lineTo(pt(19), pt(17)); ctx.closePath(); ctx.stroke()
+            ctx.beginPath(); ctx.arc(pt(12), pt(18), 2 * u, 0, Math.PI); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(pt(4), pt(18)); ctx.lineTo(pt(6), pt(15)); ctx.lineTo(pt(6), pt(9)); ctx.bezierCurveTo(pt(6), pt(1), pt(18), pt(1), pt(18), pt(9)); ctx.lineTo(pt(18), pt(15)); ctx.lineTo(pt(20), pt(18)); ctx.closePath(); ctx.stroke()
         } else if (name === "sun") {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 4.4 * u, 0, Math.PI * 2); ctx.stroke()
             for (var ray = 0; ray < 8; ++ray) {
@@ -167,6 +174,12 @@ Canvas {
             line(5, 7, 19, 7); line(5, 12, 15, 12); line(5, 17, 10, 17)
         } else if (name === "info") {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 8 * u, 0, Math.PI * 2); ctx.stroke(); line(12, 11, 12, 17); ctx.beginPath(); ctx.arc(pt(12), pt(7.5), 1 * u, 0, Math.PI * 2); ctx.fill()
+        } else if (name === "undo" || name === "redo") {
+            ctx.save()
+            if (name === "redo") { ctx.translate(width, 0); ctx.scale(-1, 1) }
+            ctx.beginPath(); ctx.moveTo(pt(9), pt(5)); ctx.lineTo(pt(4), pt(10)); ctx.lineTo(pt(9), pt(15)); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(pt(4), pt(10)); ctx.lineTo(pt(14), pt(10)); ctx.bezierCurveTo(pt(18), pt(10), pt(20), pt(12), pt(20), pt(16)); ctx.lineTo(pt(20), pt(19)); ctx.stroke()
+            ctx.restore()
         } else if (name === "history") {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 8 * u, Math.PI * .72, Math.PI * 2.15); ctx.stroke(); line(12, 7, 12, 12); line(12, 12, 16, 14); line(4, 7, 4, 12); line(4, 7, 8, 7)
         } else {

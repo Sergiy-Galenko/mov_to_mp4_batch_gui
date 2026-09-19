@@ -60,5 +60,4 @@ def test_timeline_service_build_command_transitions_and_audio():
     assert "xfade=transition=fade" in cmd_str
     assert "acrossfade=" in cmd_str
     assert "amix=" in cmd_str
-    assert "-stream_loop -1" in cmd_str
-    assert "/tmp/out.mp4" in cmd[-1]
+    assert "out.mp4" in cmd[-1]

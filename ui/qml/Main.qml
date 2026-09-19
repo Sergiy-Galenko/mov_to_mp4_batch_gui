@@ -22,8 +22,12 @@ ApplicationWindow {
     leftPadding: 0
     rightPadding: 0
     font.family: Theme.bodyFont
-    minimumWidth: 760
-    minimumHeight: 700
+    minimumWidth: (backend && backend.displayMetrics && backend.displayMetrics.availableWidth)
+        ? Math.min(760, Math.max(600, backend.displayMetrics.availableWidth - 20))
+        : 760
+    minimumHeight: (backend && backend.displayMetrics && backend.displayMetrics.availableHeight)
+        ? Math.min(680, Math.max(520, backend.displayMetrics.availableHeight - 40))
+        : 680
     title: I18n.t("app.title")
     color: Theme.bgBase
 
@@ -40,6 +44,9 @@ ApplicationWindow {
     palette.buttonText: Theme.textPrimary
     palette.highlight: Theme.accentPrimary
     palette.highlightedText: Theme.textOnAccent
+
+    readonly property bool appearanceOpen: themeEditorLoader.item !== null && themeEditorLoader.item.visible
+    readonly property bool notificationsOpen: notificationCenterPopup.visible
 
     function openAppearance() {
         if (themeEditorLoader.item) themeEditorLoader.item.open()
@@ -59,10 +66,38 @@ ApplicationWindow {
         onActivated: if (backend) { backend.themeMode = "dark"; backend.resetThemeColors() }
     }
 
+    onXChanged: if (root.visible && root.visibility === Window.Windowed) windowStateTimer.restart()
+    onYChanged: if (root.visible && root.visibility === Window.Windowed) windowStateTimer.restart()
+    onWidthChanged: if (root.visible && root.visibility === Window.Windowed) windowStateTimer.restart()
+    onHeightChanged: if (root.visible && root.visibility === Window.Windowed) windowStateTimer.restart()
+
+    Timer {
+        id: windowStateTimer
+        interval: 600
+        repeat: false
+        onTriggered: {
+            if (backend && root.visibility === Window.Windowed && root.width >= root.minimumWidth) {
+                backend.saveWindowState(root.x, root.y, root.width, root.height)
+            }
+        }
+    }
+
+    Connections {
+        target: backend
+        function onDisplayMetricsChanged() {
+            if (backend && backend.autoDisplayAdaptation) {
+                backend.applyDisplayAdaptation()
+                if (backend.displayMetrics && backend.displayMetrics.recommendedSidebarCollapsed) {
+                    root.sidebarCollapsed = true
+                }
+            }
+        }
+    }
+
     property bool hasBackend: backend !== null
     property url appLogoSource: Qt.resolvedUrl("../../assets/app-logo-v2.png")
     property bool sidebarCollapsed: false
-    property bool compactMode: width < Theme.compactBreakpoint || (backend && backend.layoutMode === "compact")
+    property bool compactMode: width < Theme.compactBreakpoint || (backend && (backend.layoutMode === "compact" || (backend.autoDisplayAdaptation && backend.displayMetrics && backend.displayMetrics.category === "compact")))
     property int activeSection: 0
     property string globalSearchText: ""
     property var globalSearchResults: []
@@ -785,6 +820,19 @@ ApplicationWindow {
 
     Component.onCompleted: {
         if (backend) {
+            var geom = backend.optimalWindowGeometry()
+            if (geom) {
+                if (geom.width && geom.width >= root.minimumWidth) root.width = geom.width
+                if (geom.height && geom.height >= root.minimumHeight) root.height = geom.height
+                if (geom.x !== undefined && geom.x >= 0) root.x = geom.x
+                if (geom.y !== undefined && geom.y >= 0) root.y = geom.y
+            }
+            if (backend.autoDisplayAdaptation) {
+                backend.applyDisplayAdaptation()
+                if (backend.displayMetrics && backend.displayMetrics.recommendedSidebarCollapsed) {
+                    root.sidebarCollapsed = true
+                }
+            }
             I18n.language = backend.uiLanguage
             backend.setupSystemTray()
             backend.restoreSession()

@@ -149,68 +149,95 @@ Item {
         }
         SystemStatusBar {
             id: systemStatusBar
+            visible: root.width > 1120
             appRoot: root.appRoot
         }
         HistoryButtons { history: appRoot ? appRoot.settingsHistory : null; targetWindow: appRoot }
-        AppIconButton {
-            iconName: "bell"
-            accessibleLabel: I18n.t("notifications")
-            prominent: appRoot && appRoot.toastHistory.length > 0
-            onClicked: appRoot && appRoot.openNotifications()
-        }
-        AppIconButton {
+        HistoryButtons {
             visible: root.width > 960
-            iconName: Theme.lightMode ? "moon" : "sun"
-            accessibleLabel: Theme.lightMode ? I18n.t("switch_to_dark_theme") : I18n.t("switch_to_light_theme")
-            onClicked: if (backend) backend.themeMode = Theme.lightMode ? "dark" : "light"
+            history: appRoot ? appRoot.settingsHistory : null
+            targetWindow: appRoot
         }
-        AppIconButton {
-            objectName: "appearanceButton"
-            iconName: "palette"
-            accessibleLabel: I18n.t("appearance.title")
-            onClicked: appRoot && appRoot.openAppearance()
-        }
-        AppIconButton {
-            id: menuButton
-            iconName: "more"
-            accessibleLabel: I18n.t("design.app_menu")
-            onClicked: applicationMenu.open()
-            Menu {
-                id: applicationMenu
-                objectName: "applicationMenu"
-                y: menuButton.height + 4
-                width: 236
-                padding: 6
-                background: Rectangle { color: Theme.panelBackground; radius: Theme.radiusMd; border.width: 1; border.color: Theme.borderDefault }
-                MenuItem { text: I18n.t("nav_queue"); onTriggered: appRoot.openTopMode("convert") }
-                MenuItem { text: I18n.t("workspace_photo"); onTriggered: appRoot.openTopMode("photo") }
-                MenuItem { text: I18n.t("workspace_video"); onTriggered: appRoot.openTopMode("video") }
-                MenuItem { text: I18n.t("workspace_text"); onTriggered: appRoot.openTopMode("text") }
-                MenuItem { text: I18n.t("nav_montage"); onTriggered: appRoot.openTopMode("montage") }
-                MenuSeparator {}
-                Menu {
-                    id: languageMenu
-                    objectName: "languageMenu"
-                    title: I18n.t("language")
-                    Instantiator {
-                        model: backend ? backend.availableLanguages : []
-                        onObjectAdded: function(index, object) { languageMenu.insertItem(index, object) }
-                        onObjectRemoved: function(index, object) { languageMenu.removeItem(object) }
-                        delegate: MenuItem {
-                            required property var modelData
-                            text: modelData.label
-                            checkable: true
-                            checked: appRoot && appRoot.languageActive(modelData.code)
-                            onTriggered: appRoot.setAppLanguage(modelData.code)
+        Rectangle {
+            objectName: "toolbarActions"
+            implicitWidth: actionButtons.implicitWidth + 8
+            implicitHeight: actionButtons.implicitHeight + 8
+            radius: 16
+            color: Theme.panelBackground
+            border.width: 1
+            border.color: Theme.borderMuted
+
+            Row {
+                id: actionButtons
+                anchors.centerIn: parent
+                spacing: 8
+                ToolbarIconButton {
+                    objectName: "notificationsButton"
+                    iconName: "bell"
+                    highlighted: appRoot && appRoot.notificationsOpen
+                    accessibleLabel: I18n.t("notifications")
+                    prominent: appRoot && appRoot.toastHistory.length > 0
+                    onClicked: appRoot && appRoot.openNotifications()
+                }
+                ToolbarIconButton {
+                    objectName: "themeToggleButton"
+                    visible: root.width > 960
+                    iconName: Theme.lightMode ? "moon" : "sun"
+                    accessibleLabel: Theme.lightMode ? I18n.t("switch_to_dark_theme") : I18n.t("switch_to_light_theme")
+                    onClicked: if (backend) backend.themeMode = Theme.lightMode ? "dark" : "light"
+                }
+                ToolbarIconButton {
+                    objectName: "appearanceButton"
+                    iconName: "palette"
+                    highlighted: appRoot && appRoot.appearanceOpen
+                    accessibleLabel: I18n.t("appearance.title")
+                    onClicked: appRoot && appRoot.openAppearance()
+                }
+                ToolbarIconButton {
+                    id: menuButton
+                    objectName: "applicationMenuButton"
+                    highlighted: applicationMenu.visible
+                    iconName: "more"
+                    accessibleLabel: I18n.t("design.app_menu")
+                    onClicked: applicationMenu.open()
+                    Menu {
+                        id: applicationMenu
+                        objectName: "applicationMenu"
+                        y: menuButton.height + 4
+                        width: 236
+                        padding: 6
+                        background: Rectangle { color: Theme.panelBackground; radius: Theme.radiusMd; border.width: 1; border.color: Theme.borderDefault }
+                        MenuItem { text: I18n.t("nav_queue"); onTriggered: appRoot.openTopMode("convert") }
+                        MenuItem { text: I18n.t("workspace_photo"); onTriggered: appRoot.openTopMode("photo") }
+                        MenuItem { text: I18n.t("workspace_video"); onTriggered: appRoot.openTopMode("video") }
+                        MenuItem { text: I18n.t("workspace_text"); onTriggered: appRoot.openTopMode("text") }
+                        MenuItem { text: I18n.t("nav_montage"); onTriggered: appRoot.openTopMode("montage") }
+                        MenuSeparator {}
+                        Menu {
+                            id: languageMenu
+                            objectName: "languageMenu"
+                            title: I18n.t("language")
+                            Instantiator {
+                                model: backend ? backend.availableLanguages : []
+                                onObjectAdded: function(index, object) { languageMenu.insertItem(index, object) }
+                                onObjectRemoved: function(index, object) { languageMenu.removeItem(object) }
+                                delegate: MenuItem {
+                                    required property var modelData
+                                    text: modelData.label
+                                    checkable: true
+                                    checked: appRoot && appRoot.languageActive(modelData.code)
+                                    onTriggered: appRoot.setAppLanguage(modelData.code)
+                                }
+                            }
                         }
+                        MenuItem { text: I18n.t("switch_to_dark_theme"); onTriggered: if (backend) backend.themeMode = "dark" }
+                        MenuItem { text: I18n.t("switch_to_light_theme"); onTriggered: if (backend) backend.themeMode = "light" }
+                        MenuSeparator {}
+                        MenuItem { text: I18n.t("design.deduplicate"); onTriggered: if (backend) backend.deduplicateQueueByHash() }
+                        MenuItem { text: I18n.t("system.title"); onTriggered: systemStatusBar.openDetails() }
+                        MenuItem { text: I18n.t("settings"); onTriggered: appRoot.openSidebarSection(5, "core", -1) }
                     }
                 }
-                MenuItem { text: I18n.t("switch_to_dark_theme"); onTriggered: if (backend) backend.themeMode = "dark" }
-                MenuItem { text: I18n.t("switch_to_light_theme"); onTriggered: if (backend) backend.themeMode = "light" }
-                MenuSeparator {}
-                MenuItem { text: I18n.t("design.deduplicate"); onTriggered: if (backend) backend.deduplicateQueueByHash() }
-                MenuItem { text: I18n.t("system.title"); onTriggered: systemStatusBar.openDetails() }
-                MenuItem { text: I18n.t("settings"); onTriggered: appRoot.openSidebarSection(5, "core", -1) }
             }
         }
     }

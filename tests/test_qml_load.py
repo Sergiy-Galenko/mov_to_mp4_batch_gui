@@ -465,9 +465,10 @@ ApplicationWindow {
             drag_area = root.findChild(QObject, "titleBarDragArea")
             self.assertIsNotNone(drag_area, "titleBarDragArea should exist in AppTitleBar")
 
-            # Simulate mouse press on title bar
-            click_pos = QPointF(400, 20)
-            global_pos = QPointF(root.x() + 400, root.y() + 20)
+            # Drag the title label, whose position depends on the toolbar width.
+            title_label = root.findChild(QQuickItem, "currentPageTitle")
+            click_pos = title_label.mapToScene(QPointF(title_label.width() / 2, title_label.height() / 2))
+            global_pos = QPointF(root.x() + click_pos.x(), root.y() + click_pos.y())
             press_ev = QMouseEvent(
                 QEvent.Type.MouseButtonPress,
                 click_pos,
@@ -476,11 +477,11 @@ ApplicationWindow {
                 Qt.MouseButton.LeftButton,
                 Qt.KeyboardModifier.NoModifier,
             )
-            QApplication.sendEvent(root, press_ev)
+            QApplication.sendEvent(drag_area, press_ev)
 
             # Move mouse by +50 in x and +30 in y
-            move_pos = QPointF(450, 50)
-            global_move_pos = QPointF(root.x() + 450, root.y() + 50)
+            move_pos = click_pos + QPointF(50, 30)
+            global_move_pos = global_pos + QPointF(50, 30)
             move_ev = QMouseEvent(
                 QEvent.Type.MouseMove,
                 move_pos,
@@ -489,7 +490,7 @@ ApplicationWindow {
                 Qt.MouseButton.LeftButton,
                 Qt.KeyboardModifier.NoModifier,
             )
-            QApplication.sendEvent(root, move_ev)
+            QApplication.sendEvent(drag_area, move_ev)
 
             self.assertEqual(root.x(), 150)
             self.assertEqual(root.y(), 130)
@@ -503,7 +504,7 @@ ApplicationWindow {
                 Qt.MouseButton.NoButton,
                 Qt.KeyboardModifier.NoModifier,
             )
-            QApplication.sendEvent(root, release_ev)
+            QApplication.sendEvent(drag_area, release_ev)
             self.assertFalse(drag_area.property("manualDragging"))
         finally:
             backend.shutdown()

@@ -156,12 +156,21 @@ class ThemeManager:
         self._state["queue_view_mode"] = "grid" if mode == "grid" else "list"
         self._save()
 
+    def auto_display_adaptation(self) -> bool:
+        """Return whether auto display adaptation is enabled (default True)."""
+        return bool(self._state.get("auto_display_adaptation", True))
+
+    def set_auto_display_adaptation(self, enabled: bool) -> None:
+        self._state["auto_display_adaptation"] = bool(enabled)
+        self._save()
+
     def layout_mode(self) -> str:
-        """Return 'compact', 'comfortable', or 'spacious'."""
+        """Return 'compact', 'comfortable', 'spacious', or 'auto'."""
         return str(self._state.get("layout_mode") or "comfortable")
 
     def set_layout_mode(self, mode: str) -> None:
-        self._state["layout_mode"] = mode if mode in LAYOUT_MODES else "comfortable"
+        valid_modes = set(LAYOUT_MODES.keys()) | {"auto"}
+        self._state["layout_mode"] = mode if mode in valid_modes else "comfortable"
         self._save()
 
     def layout_config(self) -> dict[str, Any]:
@@ -248,7 +257,7 @@ class ThemeManager:
         if "accent_color" in data and "accent" not in colors:
             colors["accent"] = normalize_color(data["accent_color"])
         layout = data.get("layout_mode", self.layout_mode())
-        if not isinstance(layout, str) or layout not in LAYOUT_MODES:
+        if not isinstance(layout, str) or (layout not in LAYOUT_MODES and layout != "auto"):
             raise ValueError("Unknown layout mode")
         scale = self._normalize_scale(data.get("font_scale", self.font_scale()))
         state = deepcopy(self._state)

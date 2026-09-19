@@ -31,6 +31,7 @@ from app.performance_profiles import prediction_factor
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.batch_workflow_service import DEFAULT_FOLDER_RULES, BatchWorkflowService
 from services.event_queue import UiEventQueue
+from services.display_service import DisplayService, ScreenMetrics
 from services.ffmpeg_auto_installer import FfmpegAutoInstaller, FfmpegAutoInstallResult
 from services.ffmpeg_service import FfmpegService
 from services.folder_scanner import FolderScanner
@@ -80,6 +81,7 @@ __all__ = [
     "BatchWorkflowService",
     "ConversionSettings",
     "Dict",
+    "DisplayService",
     "DownloadProgress",
     "FfmpegAutoInstallResult",
     "FfmpegAutoInstaller",

@@ -58,9 +58,9 @@ Dialog {
                 Layout.fillWidth: true
                 FieldLabel { text: I18n.t("appearance.density"); wrapMode: Text.WordWrap }
                 AppComboBox {
-                    model: ["compact", "comfortable", "spacious"]
+                    model: ["auto", "compact", "comfortable", "spacious"]
                     translationPrefix: "appearance.density."
-                    currentIndex: backend ? Math.max(0, model.indexOf(backend.layoutMode)) : 1
+                    currentIndex: backend ? Math.max(0, model.indexOf(backend.layoutMode)) : 0
                     Accessible.name: I18n.t("appearance.density")
                     onActivated: backend.layoutMode = currentText
                 }
@@ -78,6 +78,37 @@ Dialog {
                     onPressedChanged: if (!pressed && backend) backend.fontScale = value
                     onMoved: if (!pressed && backend) backend.fontScale = value
                 }
+            }
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 12
+            visible: backend !== null
+
+            AppCheckBox {
+                id: autoDisplayCheck
+                text: I18n.t("appearance.auto_display")
+                checked: backend ? backend.autoDisplayAdaptation : true
+                onToggled: if (backend) backend.autoDisplayAdaptation = checked
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: (backend && backend.displayMetrics)
+                    ? (I18n.t("appearance.display_info") + ": " +
+                       backend.displayMetrics.screenWidth + "×" + backend.displayMetrics.screenHeight +
+                       " · " + Math.round(backend.displayMetrics.devicePixelRatio * 100) + "% DPI · " +
+                       backend.displayMetrics.category.toUpperCase())
+                    : ""
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontSizeXs
+                elide: Text.ElideRight
+            }
+
+            SecondaryButton {
+                text: I18n.t("appearance.adapt_now")
+                enabled: backend !== null
+                onClicked: if (backend) backend.applyDisplayAdaptation()
             }
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.borderMuted }

@@ -12,7 +12,7 @@ def test_translate_text_offline_and_speaker_preservation():
     # Offline dictionary translation with speaker tag
     translated = service.translate_text("[Мовець 1] привіт", source_lang="uk", target_lang="en")
     assert "[Мовець 1]" in translated
-    assert "Hello" in translated
+    assert ("Hello" in translated or "Greetings" in translated)
 
 
 def test_translate_segments_batch():

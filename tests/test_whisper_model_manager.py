@@ -107,14 +107,19 @@ def test_faster_cache_requires_complete_snapshot_and_counts_blobs_once(manager):
     (repository / "blobs").mkdir()
     (repository / "blobs" / "unfinished.incomplete").write_bytes(b"partial")
     assert not manager.is_model_downloaded("large-v3-turbo", "faster-whisper")
+    can_symlink = True
     for name in ("model.bin", "config.json", "tokenizer.json", "vocabulary.json"):
         blob = repository / "blobs" / name
         blob.write_bytes(b"data")
-        (snapshot / name).symlink_to(blob)
+        try:
+            (snapshot / name).symlink_to(blob)
+        except OSError:
+            can_symlink = False
+            (snapshot / name).write_bytes(b"data")
     assert manager.model_path("large-v3-turbo", "faster-whisper") == snapshot
     assert not manager.is_model_downloaded("large-v3-turbo", "whisper")
     row = manager.list_models("faster-whisper")[-1]
-    assert row["disk_bytes"] == 4 * 4 + 7
+    assert row["disk_bytes"] == (4 * 4 + 7 if can_symlink else 4 * 4 * 2 + 7)
     assert manager.delete_model("large-v3-turbo", "faster-whisper")
     assert not repository.exists()
 

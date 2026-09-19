@@ -163,6 +163,60 @@ BODY = r"""    # --- Theme properties ---
     def loadWindowState(self) -> Dict[str, int]:
         return self.theme_manager.window_state()
 
+    @QtCore.Property("QVariantMap", notify=displayMetricsChanged)
+    def displayMetrics(self) -> Dict[str, Any]:
+        return self.display_service.current_metrics().to_dict()
+
+    @QtCore.Property(bool, notify=autoDisplayAdaptationChanged)
+    def autoDisplayAdaptation(self) -> bool:
+        return self.theme_manager.auto_display_adaptation()
+
+    @autoDisplayAdaptation.setter
+    def autoDisplayAdaptation(self, value: bool) -> None:
+        self.theme_manager.set_auto_display_adaptation(value)
+        self.autoDisplayAdaptationChanged.emit()
+        if value:
+            self.applyDisplayAdaptation()
+
+    def _on_display_metrics_changed(self) -> None:
+        self.displayMetricsChanged.emit()
+        if self.autoDisplayAdaptation:
+            self.applyDisplayAdaptation()
+
+    @QtCore.Slot()
+    def applyDisplayAdaptation(self) -> None:
+        metrics = self.display_service.current_metrics()
+        rec_mode = metrics.recommended_layout_mode
+        self.theme_manager.set_layout_mode(rec_mode)
+        self.theme_manager.set_font_scale(metrics.recommended_font_scale)
+        if metrics.recommended_sidebar_collapsed:
+            self.theme_manager.set_sidebar_collapsed(True)
+        self.themeChanged.emit()
+
+    @QtCore.Slot(result="QVariantMap")
+    def optimalWindowGeometry(self) -> Dict[str, Any]:
+        saved = self.theme_manager.window_state()
+        if saved and "width" in saved and "height" in saved:
+            x = saved.get("x", 100)
+            y = saved.get("y", 100)
+            w = saved.get("width", 1240)
+            h = saved.get("height", 840)
+            vx, vy, vw, vh = self.display_service.ensure_window_in_bounds(x, y, w, h)
+            return {"x": vx, "y": vy, "width": vw, "height": vh, "isDefault": False}
+        metrics = self.display_service.current_metrics()
+        return {
+            "x": metrics.recommended_window_x,
+            "y": metrics.recommended_window_y,
+            "width": metrics.recommended_window_width,
+            "height": metrics.recommended_window_height,
+            "isDefault": True,
+        }
+
+    @QtCore.Slot(int, int, int, int, result="QVariantMap")
+    def validateWindowBounds(self, x: int, y: int, width: int, height: int) -> Dict[str, int]:
+        vx, vy, vw, vh = self.display_service.ensure_window_in_bounds(x, y, width, height)
+        return {"x": vx, "y": vy, "width": vw, "height": vh}
+
     # --- Shortcut properties ---
 
     @QtCore.Property("QVariantList", notify=shortcutsChanged)
