@@ -164,8 +164,13 @@ def test_system_and_whisper_setup_controls_load(window):
     invoke(setup, "close")
 
 
-def test_shortcut_undo_redo_and_native_text_editing(window):
+@pytest.mark.parametrize("width", [960, 1400])
+def test_shortcut_undo_redo_and_native_text_editing(window, width):
     root, _, _ = window
+    root.setWidth(width)
+    toolbar = root.findChild(QObject, "appTitleBar")
+    assert len(toolbar.findChildren(QObject, "undoButton")) == 1
+    assert len(toolbar.findChildren(QObject, "redoButton")) == 1
     invoke(root, "openSidebarSection", 5, "core", -1)
     root.requestActivate()
     QTest.qWait(30)

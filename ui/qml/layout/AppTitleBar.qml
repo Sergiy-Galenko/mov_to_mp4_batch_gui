@@ -152,7 +152,6 @@ Item {
             visible: root.width > 1120
             appRoot: root.appRoot
         }
-        HistoryButtons { history: appRoot ? appRoot.settingsHistory : null; targetWindow: appRoot }
         HistoryButtons {
             visible: root.width > 960
             history: appRoot ? appRoot.settingsHistory : null
