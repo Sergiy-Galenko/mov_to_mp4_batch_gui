@@ -76,6 +76,51 @@ def recognition_test(source: str, output: str, model: str, engine: str, device: 
     return {"text": text, "seconds": round(time.monotonic() - started, 2), "device": resolved, "engine": selected, "model": model}
 
 
+def timed_transcript(source: str, output: str, model: str, engine: str, device: str) -> dict:
+    """Real word alignment, used by text-driven cuts. Never invent word times."""
+    from services.whisper_model_manager import WhisperModelManager, normalize_model
+    from services.whisper_runtime import cache_root, engine_for, resolve_device
+
+    selected = engine_for(device, engine)
+    resolved = resolve_device(device, selected)
+    # OpenAI's word alignment needs sparse alignment heads, unsupported on MPS.
+    # The editor announces this CPU alignment policy before starting the job.
+    if resolved == "mps":
+        resolved = "cpu"
+    manager = WhisperModelManager()
+    try:
+        model_path = manager.model_path(normalize_model(model), selected)
+        if model_path is None:
+            raise RuntimeError("Download the selected Whisper model in the model manager first")
+    finally:
+        manager.shutdown()
+    if selected == "faster-whisper":
+        from faster_whisper import WhisperModel
+
+        instance = WhisperModel(str(model_path), device=resolved, compute_type="float16" if resolved == "cuda" else "int8")
+        segments, _ = instance.transcribe(source, word_timestamps=True)
+        cues, words = [], []
+        for segment in segments:
+            aligned = [{"start": word.start, "end": word.end, "word": word.word.strip()} for word in segment.words or []]
+            cues.append({"start": segment.start, "end": segment.end, "text": segment.text.strip(), "words": aligned})
+            words.extend(aligned)
+    else:
+        import whisper
+
+        from services.transcription_service import TranscriptionService
+
+        instance = whisper.load_model(str(model_path), device=resolved, download_root=str(cache_root() / "whisper"))
+        result = instance.transcribe(TranscriptionService()._whisper_audio(Path(source)),
+                                     word_timestamps=True, fp16=resolved == "cuda", verbose=False)
+        cues = [{"start": part["start"], "end": part["end"], "text": part["text"].strip(), "words": part.get("words", [])}
+                for part in result["segments"]]
+        words = [{"start": word["start"], "end": word["end"], "word": word["word"].strip()}
+                 for part in result["segments"] for word in part.get("words", [])]
+    data = {"cues": cues, "words": words, "device": resolved, "engine": selected, "model": model}
+    Path(output).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return {"device": resolved, "word_count": len(words)}
+
+
 def main(argv=None) -> int:
     os.environ["MEDIA_CONVERTER_WHISPER_WORKER"] = "1"
     args = list(sys.argv[1:] if argv is None else argv)
@@ -84,6 +129,8 @@ def main(argv=None) -> int:
             result = diagnose()
         elif len(args) == 6 and args[0] == "test":
             result = recognition_test(*args[1:])
+        elif len(args) == 6 and args[0] == "align":
+            result = timed_transcript(*args[1:])
         elif args[:1] == ["transcribe"]:
             from services.transcription_service import run_transcription_worker
 

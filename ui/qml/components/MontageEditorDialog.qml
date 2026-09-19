@@ -55,6 +55,7 @@ Window {
     property string bgMusicPath: ""
     property real bgMusicVolume: 0.8
     property bool bgMusicLoop: true
+    property bool bgMusicDucking: true
     property string defaultTransition: "fade"
     property real defaultTransitionDuration: 1.0
 
@@ -87,6 +88,7 @@ Window {
         bgMusicPath: root.bgMusicPath,
         bgMusicVolume: root.bgMusicVolume,
         bgMusicLoop: root.bgMusicLoop,
+        bgMusicDucking: root.bgMusicDucking,
         defaultTransition: root.defaultTransition,
         defaultTransitionDuration: root.defaultTransitionDuration,
         subtitleTemplate: root.subtitleTemplate,
@@ -107,6 +109,8 @@ Window {
             cropOverlay.setNativeCrop(root.cropX, root.cropY, root.cropW, root.cropH)
         }
     }
+
+    MontageToolsWindow { id: editingTools; transientParent: root }
 
     signal applied(string path, var sessionData)
     signal cancelled()
@@ -267,6 +271,19 @@ Window {
             spacing: Theme.space3
 
             HistoryButtons { history: editHistory; targetWindow: root }
+            AppButton {
+                objectName: "openMontageTools"
+                text: I18n.t("studio.title")
+                enabled: root.filePath.length > 0 && root.duration > 0 && !backend.montageEditing.busy
+                onClicked: {
+                    player.pause()
+                    editingTools.openSource(root.filePath, {duration: root.duration, width: root.nativeWidth,
+                        height: root.nativeHeight, fps: root.fps, has_audio: root.hasAudio,
+                        start: root.inPoint, end: root.outPoint,
+                        crop: root.cropEnabled ? [root.cropX, root.cropY, root.cropW, root.cropH] : [],
+                        music: root.bgMusicPath, music_volume: root.bgMusicVolume, ducking: root.bgMusicDucking})
+                }
+            }
             AppIcon {
                 name: "film"
                 width: 22
@@ -913,6 +930,11 @@ Window {
                                 }
                             }
 
+                            AppCheckBox {
+                                text: I18n.t("studio.ducking")
+                                checked: root.bgMusicDucking
+                                onClicked: root.bgMusicDucking = checked
+                            }
                             PrimaryButton {
                                 Layout.fillWidth: true
                                 text: "🎬 Експортувати спільний монтаж"
@@ -925,11 +947,12 @@ Window {
                                                     "source_path": root.filePath,
                                                     "in_point": root.inPoint,
                                                     "out_point": root.outPoint,
+                                                    "has_audio": root.hasAudio,
                                                     "transition_to_next": root.defaultTransition,
                                                     "transition_duration": 1.0
                                                 }
                                             ].concat(root.timelineClips),
-                                            "audio_tracks": root.bgMusicPath ? [{"audio_path": root.bgMusicPath, "volume": root.bgMusicVolume, "loop": root.bgMusicLoop}] : [],
+                                            "audio_tracks": root.bgMusicPath ? [{"audio_path": root.bgMusicPath, "volume": root.bgMusicVolume, "loop": root.bgMusicLoop, "ducking": root.bgMusicDucking}] : [],
                                             "output_format": root.outputFormat
                                         }
                                         var outName = root.filePath.slice(0, root.filePath.lastIndexOf(".")) + "_montage." + root.outputFormat

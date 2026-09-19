@@ -95,6 +95,7 @@ Item {
         anchors.margins: -4
         cursorShape: Qt.SizeHorCursor
         hoverEnabled: true
+        preventStealing: true
 
         property real startX: 0
         property real startTime: 0
@@ -103,13 +104,13 @@ Item {
             root.editingStarted()
             root.forceActiveFocus()
             root.selected()
-            startX = mouse.x
+            startX = mapToItem(root.parent, mouse.x, mouse.y).x
             startTime = root.timeValue
         }
 
         onPositionChanged: function(mouse) {
             if (pressed && root.trackWidth > 0 && root.totalDuration > 0) {
-                var deltaPixels = mouse.x - startX
+                var deltaPixels = mapToItem(root.parent, mouse.x, mouse.y).x - startX
                 var deltaTime = (deltaPixels / root.trackWidth) * root.totalDuration
                 var targetTime = startTime + deltaTime
                 targetTime = root.snap(targetTime)
@@ -118,4 +119,3 @@ Item {
         }
     }
 }
-

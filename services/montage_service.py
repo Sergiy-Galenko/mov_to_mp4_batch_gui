@@ -44,6 +44,7 @@ class MontageSession:
     zoom_level: float = 1.0
     playhead_pos: float = 0.0
     use_proxy: bool = False
+    editing_tools: dict[str, Any] = field(default_factory=dict)
     timeline_project: dict[str, Any] = field(default_factory=dict)
     diarization_data: dict[str, Any] = field(default_factory=dict)
     subtitle_template: str = "tiktok_pop"
@@ -231,7 +232,8 @@ class MontageService:
 
     def save_session(self, file_path: str | Path, session_data: dict[str, Any]) -> None:
         """Persist session data."""
-        self.session_store.save_session(file_path, session_data)
+        existing = self.session_store.get_session(file_path) or {}
+        self.session_store.save_session(file_path, {**existing, **session_data})
 
     # 1. Proxy management
     def create_or_get_proxy(self, file_path: str | Path, target_height: int = 720) -> str:

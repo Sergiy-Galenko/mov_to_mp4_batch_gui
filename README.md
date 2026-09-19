@@ -38,6 +38,45 @@ Desktop batch converter for video, photos, audio, subtitles, and text files. The
 - Background startup hardware scan, automatic workload tuning and a visible setup indicator.
 - Undo/redo for conversion parameters and montage edits, with standard platform shortcuts.
 - Whisper dependency installation, MPS/CUDA/CPU diagnostics and a short recognition test from the model manager.
+- Editing and subtitles workspace: draggable subtitle timing, Whisper word cuts, synchronized before/after playback, music ducking and scene detection/export.
+
+## Editing and subtitles
+
+Open a video's **Montage editor → Editing and subtitles**. The workspace reads
+the current trim and crop, saves its document with the source file's montage
+session, and provides undo/redo across its five tabs.
+
+- **Subtitles:** import UTF-8 SRT/VTT or generate captions with Whisper. Select
+  a cue, edit its text, and drag either timing handle or enter times in seconds.
+  To split, place the video playhead inside the cue and the text cursor between
+  words, then choose **Split**. **Merge** joins the selected cue with the next.
+  Export SRT/VTT or enable subtitle burn-in for MP4 export.
+- **Text editing:** generate word timestamps with the selected, downloaded
+  Whisper model, select words, then choose **Cut selected words**. Exports remove
+  the corresponding source intervals and retime captions. Original files remain
+  intact. Word alignment uses CPU when MPS is selected; CUDA/CPU are supported
+  according to the installed runtime. Imported SRT/VTT does not supply word times.
+- **Before / after:** position the source playhead, then generate a preview of
+  up to 12 retained seconds. Drag the divider while playing or seeking both views
+  together. Both views use the same cuts for synchronization; the processed view
+  includes crop, subtitle burn-in and music. Only its audio is played. Regenerate
+  the preview after changing edits.
+- **Music:** choose a background track, adjust its volume and enable automatic
+  ducking. Compression follows the main audio track's level, so other loud sounds
+  can also lower the music. Strength and recovery time control the effect. The
+  background loops to cover the edited video. Ducking is also available in the
+  existing multi-clip montage music controls.
+- **Scenes:** detect visual cuts, inspect the yellow timeline markers, select
+  scenes and export them into a new folder. A lower detection threshold finds
+  more changes. Scene exports use original source intervals without workspace
+  crop, captions or music.
+
+Use this workspace's **Export MP4** to render its edits; ordinary queue conversion
+does not apply this separate document. MP4 exports currently use H.264/AAC software
+encoding. FFmpeg must include `libx264`; burned captions also require its
+`subtitles`/libass filter. Analysis and exports run in cancellable background jobs.
+Incomplete exports are removed, and an existing output is replaced only after a
+successful render.
 
 ## Startup system scan and workload tuning
 
@@ -545,11 +584,10 @@ CPU and RAM metrics use `psutil`. GPU metrics use `nvidia-smi` when available.
 python -m pytest -q
 ```
 
-Current expected result:
-
-```text
-124 passed, 3 subtests passed
-```
+Media integration tests use FFmpeg from `PATH` or `MEDIA_CONVERTER_TEST_FFMPEG`.
+They check actual rendered cuts, captions, scene boundaries, playback and music
+levels. These tests skip when FFmpeg is unavailable. Whisper word-alignment tests
+mock inference and do not require downloading a model.
 
 ## Build
 

@@ -7,7 +7,7 @@ Rectangle {
     property var history
     property var targetWindow
     readonly property bool textEditing: targetWindow && targetWindow.activeFocusItem
-        && typeof targetWindow.activeFocusItem.undo === "function"
+        && typeof targetWindow.activeFocusItem.undo === "function" && !targetWindow.activeFocusItem.readOnly
     implicitWidth: actions.implicitWidth + 8
     implicitHeight: actions.implicitHeight + 8
     radius: 16
@@ -16,12 +16,12 @@ Rectangle {
     border.color: Theme.borderMuted
     Shortcut {
         sequences: [StandardKey.Undo]
-        enabled: root.targetWindow && root.targetWindow.active && !root.textEditing
+        enabled: root.enabled && root.targetWindow && root.targetWindow.active && !root.textEditing
         onActivated: if (root.history) root.history.undo()
     }
     Shortcut {
         sequences: [StandardKey.Redo]
-        enabled: root.targetWindow && root.targetWindow.active && !root.textEditing
+        enabled: root.enabled && root.targetWindow && root.targetWindow.active && !root.textEditing
         onActivated: if (root.history) root.history.redo()
     }
     Row {

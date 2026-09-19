@@ -104,6 +104,7 @@ BODY = r"""        self._youtube_history = self.settings_manager.youtube_history
             self._youtube_cancel_event.set()
         self.watch_service.stop()
         self.whisper_model_manager.shutdown()
+        self._montage_editing.shutdown()
         self._system_profile.shutdown()
         self._whisper_setup.shutdown()
         self._probe_executor.shutdown(wait=False, cancel_futures=True)

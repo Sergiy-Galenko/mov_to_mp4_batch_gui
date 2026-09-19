@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-BODY = r'''    autoTuneChanged = QtCore.Signal()
+BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
+    def montageEditing(self):
+        return self._montage_editing
+
+    autoTuneChanged = QtCore.Signal()
     autoProfileReady = QtCore.Signal(dict)
 
     @QtCore.Property(QtCore.QObject, constant=True)

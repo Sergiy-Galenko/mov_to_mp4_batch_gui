@@ -30,14 +30,15 @@ from app.paths import find_ffmpeg, find_ffprobe
 from app.performance_profiles import prediction_factor
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.batch_workflow_service import DEFAULT_FOLDER_RULES, BatchWorkflowService
+from services.display_service import DisplayService
 from services.event_queue import UiEventQueue
-from services.display_service import DisplayService, ScreenMetrics
 from services.ffmpeg_auto_installer import FfmpegAutoInstaller, FfmpegAutoInstallResult
 from services.ffmpeg_service import FfmpegService
 from services.folder_scanner import FolderScanner
 from services.history_store import HistoryStore
 from services.license_service import LicenseInfo, LicenseService
 from services.media_preview_service import MediaPreviewService
+from services.montage_editing import MontageEditing
 from services.montage_service import MontageService, MontageSessionStore
 from services.notification_service import NotificationService
 from services.paid_update_service import PaidUpdateInfo, PaidUpdateService
@@ -95,6 +96,7 @@ __all__ = [
     "LogModel",
     "MediaInfo",
     "MediaPreviewService",
+    "MontageEditing",
     "MontageService",
     "MontageSessionStore",
     "NotificationService",

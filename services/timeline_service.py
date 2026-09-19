@@ -40,6 +40,8 @@ class TimelineClip:
     duration: float = 0.0
     transition_to_next: str = "none"
     transition_duration: float = 1.0
+    has_audio: bool = True
+    crop: list[int] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.duration <= 0.0 and self.out_point > self.in_point:
@@ -65,6 +67,12 @@ class TimelineAudioTrack:
     volume: float = 1.0
     loop: bool = False
     offset: float = 0.0
+    source_start: float = 0.0
+    ducking: bool = False
+    duck_threshold: float = 0.03
+    duck_ratio: float = 8.0
+    duck_attack_ms: float = 30.0
+    duck_release_ms: float = 450.0
     track_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
 
     def to_dict(self) -> dict[str, Any]:
@@ -86,6 +94,7 @@ class TimelineProject:
     width: int = 1920
     height: int = 1080
     fps: float = 30.0
+    subtitle_path: str = ""
 
     def total_duration(self) -> float:
         """Calculate total timeline duration taking transitions into account."""
@@ -111,6 +120,7 @@ class TimelineProject:
             "width": self.width,
             "height": self.height,
             "fps": self.fps,
+            "subtitle_path": self.subtitle_path,
             "total_duration": self.total_duration(),
         }
 
@@ -127,6 +137,7 @@ class TimelineProject:
             width=int(data.get("width", 1920)),
             height=int(data.get("height", 1080)),
             fps=float(data.get("fps", 30.0)),
+            subtitle_path=str(data.get("subtitle_path", "")),
         )
 
 
@@ -152,6 +163,10 @@ class TimelineService:
 
         # 1. Inputs: add all clips
         for clip in project.clips:
+            # Accurate input seeking avoids decoding hours of preceding material for a short preview.
+            if clip.effective_duration() <= 0:
+                raise ValueError("Every timeline clip needs a positive duration")
+            inputs.extend(["-ss", f"{max(0.0, clip.in_point):.3f}", "-t", f"{clip.effective_duration():.3f}"])
             inputs.extend(["-i", str(Path(clip.source_path).resolve())])
 
         # Add background audio tracks
@@ -165,12 +180,20 @@ class TimelineService:
 
         # 2. Trim and standardize scale/fps for each video clip
         for i, clip in enumerate(project.clips):
-            in_pt = max(0.0, clip.in_point)
+            in_pt = 0.0  # Input seeking has already applied the source in-point.
             dur = clip.effective_duration()
+            crop_filter = ""
+            if clip.crop:
+                if len(clip.crop) != 4:
+                    raise ValueError("Crop requires x, y, width and height")
+                x, y, width, height = (int(value) for value in clip.crop)
+                if min(x, y) < 0 or min(width, height) < 2:
+                    raise ValueError("Invalid crop rectangle")
+                crop_filter = f"crop={width}:{height}:{x}:{y},"
             # Standardize video resolution, aspect ratio (letterbox/pad), and framerate
             v_filter = (
                 f"[{i}:v]trim=start={in_pt:.3f}:duration={dur:.3f},setpts=PTS-STARTPTS,"
-                f"scale={project.width}:{project.height}:force_original_aspect_ratio=decrease,"
+                f"{crop_filter}scale={project.width}:{project.height}:force_original_aspect_ratio=decrease,"
                 f"pad={project.width}:{project.height}:(ow-iw)/2:(oh-ih)/2:black,"
                 f"setsar=1,fps={project.fps}[v{i}]"
             )
@@ -181,6 +204,8 @@ class TimelineService:
                 f"[{i}:a]atrim=start={in_pt:.3f}:duration={dur:.3f},asetpts=PTS-STARTPTS,"
                 f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a{i}]"
             )
+            if not clip.has_audio:
+                a_filter = f"anullsrc=r=44100:cl=stereo,atrim=duration={dur:.3f},asetpts=PTS-STARTPTS[a{i}]"
             filter_chains.append(a_filter)
 
         # 3. Transitions between clips
@@ -220,25 +245,47 @@ class TimelineService:
             last_v = current_v
             last_a = current_a
 
-        # 4. Background audio tracks mixing
-        if project.audio_tracks:
-            bg_audio_labels: list[str] = []
-            for j, audio in enumerate(project.audio_tracks):
-                track_input_idx = audio_input_start_idx + j
-                label = f"[bga{j}]"
-                vol = max(0.0, min(audio.volume, 2.0))
-                filter_chains.append(
-                    f"[{track_input_idx}:a]volume={vol:.2f},aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo{label}"
-                )
-                bg_audio_labels.append(label)
-
-            # Mix primary clip audio with background music
-            all_audios = f"{last_a}" + "".join(bg_audio_labels)
-            total_tracks = 1 + len(bg_audio_labels)
-            filter_chains.append(f"{all_audios}amix=inputs={total_tracks}:duration=first:dropout_transition=2[a_final]")
+        # Split the voice signal once for each sidechain. The audible voice stays unchanged.
+        duck_count = sum(bool(track.ducking) for track in project.audio_tracks)
+        voice_mix = last_a
+        if duck_count:
+            voice_mix = "[voice_mix]"
+            filter_chains.append(f"{last_a}asplit={duck_count + 1}{voice_mix}" + "".join(f"[voice_side{i}]" for i in range(duck_count)))
+        bg_audio_labels = []
+        sidechain_index = 0
+        for j, audio in enumerate(project.audio_tracks):
+            track_input_idx = audio_input_start_idx + j
+            label = f"[bga{j}]"
+            volume = max(0.0, min(audio.volume, 2.0))
+            delay = max(0, round(audio.offset * 1000))
+            filter_chains.append(
+                f"[{track_input_idx}:a]atrim=start={max(0.0, audio.source_start):.3f},asetpts=PTS-STARTPTS,volume={volume:.4f},"
+                f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo,"
+                f"adelay={delay}:all=1,apad,atrim=duration={project.total_duration():.3f}{label}"
+            )
+            if audio.ducking:
+                threshold = max(0.001, min(1.0, audio.duck_threshold))
+                ratio = max(1.0, min(20.0, audio.duck_ratio))
+                attack = max(1.0, min(2000.0, audio.duck_attack_ms))
+                release = max(10.0, min(9000.0, audio.duck_release_ms))
+                ducked = f"[ducked{j}]"
+                filter_chains.append(f"{label}[voice_side{sidechain_index}]sidechaincompress="
+                                     f"threshold={threshold}:ratio={ratio}:attack={attack}:release={release}:makeup=1{ducked}")
+                label = ducked
+                sidechain_index += 1
+            bg_audio_labels.append(label)
+        if bg_audio_labels:
+            filter_chains.append(voice_mix + "".join(bg_audio_labels)
+                                 + f"amix=inputs={1 + len(bg_audio_labels)}:duration=first:dropout_transition=0:normalize=0,"
+                                   "alimiter=limit=0.95:level=0:latency=1[a_final]")
             final_a = "[a_final]"
         else:
             final_a = last_a
+        if project.subtitle_path:
+            from services.ffmpeg_service import escape_filter_path
+
+            filter_chains.append(f"{last_v}subtitles='{escape_filter_path(project.subtitle_path)}'[subtitled]")
+            last_v = "[subtitled]"
 
         cmd = [self.ffmpeg_path, "-y"]
         cmd.extend(inputs)
