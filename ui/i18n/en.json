@@ -709,5 +709,10 @@
   "studio.preview_hint": "Up to 12 seconds from the playhead. Both versions share the same cuts to stay in sync. Drag the divider; audio comes from After.",
   "setup.scenes": "Detecting scenes…",
   "setup.preview": "Preparing comparison…",
-  "setup.exporting": "Exporting edit…"
+  "setup.exporting": "Exporting edit…",
+  "dependencies.title": "Libraries · Whisper",
+  "dependencies.automatic": "Install automatically at startup",
+  "dependencies.retry": "Check / retry",
+  "dependencies.hint": "Core libraries are ready. Whisper is checked and installed in the background. The first download can be large; choose models in the Whisper manager.",
+  "setup.waiting": "Waiting for another installer"
 }

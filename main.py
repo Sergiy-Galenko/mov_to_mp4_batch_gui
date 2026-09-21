@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -5,11 +6,11 @@ from pathlib import Path
 def _bootstrap_dependencies() -> None:
     base_dir = Path(__file__).resolve().parent
     try:
-        from app.dependency_bootstrap import ensure_runtime_dependencies
+        from app.bootstrap_window import run_bootstrap
 
-        installed = ensure_runtime_dependencies(base_dir / "requirements.txt")
-        if installed:
-            print("Installed missing Python libraries: " + ", ".join(installed))
+        result = run_bootstrap(base_dir / "requirements.txt", gui="--cli" not in sys.argv)
+        if result.installed or result.python != sys.executable:
+            os.execv(result.python, [result.python, *sys.argv])
     except Exception as exc:
         print(f"Dependency bootstrap failed: {exc}", file=sys.stderr)
         raise
@@ -62,6 +63,7 @@ def main() -> None:
     if not engine.rootObjects():
         sys.exit(1)
 
+    QtCore.QTimer.singleShot(0, backend.startDependencySetup)
     sys.exit(app.exec())
 
 

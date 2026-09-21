@@ -709,5 +709,10 @@
   "studio.preview_hint": "Do 12 sekund od głowicy. Obie wersje mają te same cięcia dla synchronizacji. Przeciągnij separator; dźwięk pochodzi z wersji Po.",
   "setup.scenes": "Wykrywanie scen…",
   "setup.preview": "Przygotowywanie porównania…",
-  "setup.exporting": "Eksportowanie montażu…"
+  "setup.exporting": "Eksportowanie montażu…",
+  "dependencies.title": "Biblioteki · Whisper",
+  "dependencies.automatic": "Instaluj automatycznie przy starcie",
+  "dependencies.retry": "Sprawdź / ponów",
+  "dependencies.hint": "Podstawowe biblioteki są gotowe. Whisper jest sprawdzany i instalowany w tle. Pierwsze pobieranie może być duże; wybierz modele w menedżerze Whisper.",
+  "setup.waiting": "Oczekiwanie na inny instalator"
 }

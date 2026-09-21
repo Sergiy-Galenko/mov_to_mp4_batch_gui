@@ -9,11 +9,13 @@ from pathlib import Path
 
 from PySide6 import QtCore
 
+from app.dependency_bootstrap import compatible_version
+from app.install_lock import install_lock
 from app.paths import APP_DATA_DIR
 from services.background_job import BackgroundJob
 from services.whisper_environment import managed_runtime, save_runtime, worker_command, worker_environment
 
-PACKAGES = {"whisper": "openai-whisper", "faster-whisper": "faster-whisper"}
+PACKAGES = {"whisper": "openai-whisper>=20250625", "faster-whisper": "faster-whisper"}
 
 
 def read_worker_result(process) -> dict:
@@ -34,9 +36,19 @@ def check_runtime(context, python="") -> dict:
     return result
 
 
-def install_runtime(context, engine, base_python="") -> dict:
+def install_runtime(context, engine, base_python="", *, only_if_missing=False) -> dict:
     if engine not in PACKAGES:
         raise ValueError("Unsupported Whisper engine")
+    context.progress("waiting", 5)
+    with install_lock(APP_DATA_DIR / "whisper-runtime.install.lock", context.check):
+        if only_if_missing:
+            report = _startup_report(context)
+            if _engine_ready(report, engine):
+                return report
+        return _install_runtime(context, engine, base_python)
+
+
+def _install_runtime(context, engine, base_python="") -> dict:
     context.progress("environment", 10)
     directory = APP_DATA_DIR / "whisper-runtime"
     python = directory / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
@@ -48,7 +60,8 @@ def install_runtime(context, engine, base_python="") -> dict:
         if created.returncode:
             raise RuntimeError((created.stderr or created.stdout)[-4000:])
     context.progress("installing", 35)
-    installed = context.run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", PACKAGES[engine]],
+    installed = context.run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input",
+                             "--timeout", "20", "--retries", "2", PACKAGES[engine]],
                             timeout=1800, env=worker_environment())
     if installed.returncode:
         raise RuntimeError((installed.stderr or installed.stdout)[-4000:])
@@ -58,6 +71,31 @@ def install_runtime(context, engine, base_python="") -> dict:
     context.check()
     save_runtime(str(python), report)
     return report
+
+
+def _engine_ready(report, engine):
+    info = report.get("engines", {}).get(engine, {})
+    return bool(info.get("installed")) and (engine != "whisper" or compatible_version(info.get("version", ""), ">=20250625"))
+
+
+def _startup_report(context):
+    try:
+        return check_runtime(context)
+    except (RuntimeError, OSError):
+        context.check()
+        return {"engines": {}}
+
+
+def ensure_runtime(context, engine="auto") -> dict:
+    """No pip/network activity when the selected inference engine already works."""
+    if engine not in {*PACKAGES, "auto"}:
+        raise ValueError("Unsupported Whisper engine")
+    report = _startup_report(context)
+    if engine == "auto":
+        engine = next((name for name in PACKAGES if _engine_ready(report, name)), "whisper")
+    if _engine_ready(report, engine):
+        return report
+    return install_runtime(context, engine, only_if_missing=True)
 
 
 def test_recognition(context, source, model, engine, device, ffmpeg):
@@ -104,6 +142,10 @@ class WhisperSetup(BackgroundJob):
     @QtCore.Slot(str, str)
     def install(self, engine, base_python=""):
         self.start_job(lambda context: install_runtime(context, engine, base_python))
+
+    @QtCore.Slot(str)
+    def ensure(self, engine="auto"):
+        self.start_job(lambda context: ensure_runtime(context, engine))
 
     @QtCore.Slot(str, str, str, str, str)
     def test(self, source, model, engine, device, ffmpeg):

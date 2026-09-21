@@ -4,6 +4,32 @@ BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
     def montageEditing(self):
         return self._montage_editing
 
+    dependencySetupChanged = QtCore.Signal()
+
+    @QtCore.Property(bool, notify=dependencySetupChanged)
+    def autoDependencySetup(self):
+        return bool(self.settings_manager.state.get("auto_dependency_setup", True))
+
+    @autoDependencySetup.setter
+    def autoDependencySetup(self, value):
+        self.settings_manager.state["auto_dependency_setup"] = bool(value)
+        self._save_state()
+        self.dependencySetupChanged.emit()
+        if value:
+            self.startDependencySetup()
+
+    @QtCore.Slot()
+    def startDependencySetup(self):
+        from app.dependency_bootstrap import bootstrap_enabled
+
+        if self.autoDependencySetup and bootstrap_enabled():
+            self.retryDependencySetup()
+
+    @QtCore.Slot()
+    def retryDependencySetup(self):
+        engine = self._last_settings_map.get("subtitle_engine") or "auto"
+        self._whisper_setup.ensure(engine)
+
     autoTuneChanged = QtCore.Signal()
     autoProfileReady = QtCore.Signal(dict)
 

@@ -124,7 +124,7 @@ def test_installer_uses_isolated_environment_and_fixed_package(tmp_path, monkeyp
     context = SimpleNamespace(run=run, progress=Mock(), check=Mock())
     assert whisper_setup.install_runtime(context, "whisper", "/python path/python") == report
     assert commands[0] == ["/python path/python", "-m", "venv", str(tmp_path / "whisper-runtime")]
-    assert commands[1][-1] == "openai-whisper"
+    assert commands[1][-1] == "openai-whisper>=20250625"
     assert Path(commands[1][0]).is_relative_to(tmp_path)
     saved.assert_called_once()
     with pytest.raises(ValueError, match="Unsupported"):
@@ -135,7 +135,7 @@ def test_failed_install_does_not_activate_runtime(tmp_path, monkeypatch):
     monkeypatch.setattr(whisper_setup, "APP_DATA_DIR", tmp_path)
     save = Mock()
     monkeypatch.setattr(whisper_setup, "save_runtime", save)
-    context = SimpleNamespace(progress=Mock(), run=Mock(return_value=subprocess.CompletedProcess([], 1, "", "pip failed")))
+    context = SimpleNamespace(check=Mock(), progress=Mock(), run=Mock(return_value=subprocess.CompletedProcess([], 1, "", "pip failed")))
     with pytest.raises(RuntimeError, match="pip failed"):
         whisper_setup.install_runtime(context, "whisper")
     save.assert_not_called()
@@ -243,3 +243,52 @@ def test_workload_preferences_survive_regular_state_save(tmp_path):
     restored = SettingsManager(manager.path)
     assert restored.state["auto_tune_enabled"] is False
     assert restored.state["concurrency_limit"] == 3
+
+
+def test_startup_setup_uses_working_engine_without_installing(monkeypatch):
+    report = {"engines": {"whisper": {"installed": False}, "faster-whisper": {"installed": True}}}
+    monkeypatch.setattr(whisper_setup, "check_runtime", Mock(return_value=report))
+    install = Mock()
+    monkeypatch.setattr(whisper_setup, "install_runtime", install)
+    assert whisper_setup.ensure_runtime(Mock(), "auto") == report
+    install.assert_not_called()
+    whisper_setup.ensure_runtime(Mock(), "whisper")
+    assert install.call_args.args[1] == "whisper"
+
+
+def test_startup_setup_defaults_to_whisper_and_propagates_failure(monkeypatch):
+    monkeypatch.setattr(whisper_setup, "check_runtime", Mock(return_value={"engines": {}}))
+    install = Mock(side_effect=RuntimeError("offline"))
+    monkeypatch.setattr(whisper_setup, "install_runtime", install)
+    with pytest.raises(RuntimeError, match="offline"):
+        whisper_setup.ensure_runtime(Mock(), "auto")
+    assert install.call_args.args[1] == "whisper"
+
+
+def test_startup_backend_honours_preference_environment_and_selected_engine(monkeypatch):
+    from ui.backend import Backend
+
+    app = QApplication.instance() or QApplication([])
+    backend = Backend()
+    monkeypatch.setattr(backend, "_save_state", Mock())
+    ensure = Mock()
+    monkeypatch.setattr(backend._whisper_setup, "ensure", ensure)
+    monkeypatch.delenv("MEDIA_CONVERTER_SKIP_DEP_BOOTSTRAP", raising=False)
+    monkeypatch.delenv("MEDIA_CONVERTER_AUTO_INSTALL_DEPS", raising=False)
+    backend.settings_manager.state["auto_dependency_setup"] = True
+    backend._last_settings_map["subtitle_engine"] = "faster-whisper"
+    backend.startDependencySetup()
+    ensure.assert_called_once_with("faster-whisper")
+    ensure.reset_mock()
+    backend.autoDependencySetup = False
+    backend.startDependencySetup()
+    ensure.assert_not_called()
+    backend.retryDependencySetup()
+    ensure.assert_called_once_with("faster-whisper")
+    ensure.reset_mock()
+    monkeypatch.setenv("MEDIA_CONVERTER_AUTO_INSTALL_DEPS", "0")
+    backend.autoDependencySetup = True
+    backend.startDependencySetup()
+    ensure.assert_not_called()
+    backend.shutdown()
+    app.processEvents()

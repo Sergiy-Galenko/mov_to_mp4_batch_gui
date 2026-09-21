@@ -709,5 +709,10 @@
   "studio.preview_hint": "Bis zu 12 Sekunden ab Abspielkopf. Beide Versionen nutzen dieselben Schnitte für Synchronität. Trenner ziehen; Ton kommt von Nachher.",
   "setup.scenes": "Szenen werden erkannt…",
   "setup.preview": "Vergleich vorbereiten…",
-  "setup.exporting": "Schnitt exportieren…"
+  "setup.exporting": "Schnitt exportieren…",
+  "dependencies.title": "Bibliotheken · Whisper",
+  "dependencies.automatic": "Beim Start automatisch installieren",
+  "dependencies.retry": "Prüfen / wiederholen",
+  "dependencies.hint": "Die Basisbibliotheken sind bereit. Whisper wird im Hintergrund geprüft und installiert. Der erste Download kann groß sein; Modelle wählen Sie im Whisper-Manager.",
+  "setup.waiting": "Warten auf eine andere Installation"
 }

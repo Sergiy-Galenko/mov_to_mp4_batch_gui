@@ -10,6 +10,7 @@ icon_path = project_root / "assets" / "app-logo-v2.ico"
 icon_arg = str(icon_path) if icon_path.exists() else None
 
 datas = [
+    (str(project_root / "requirements.txt"), "."),
     (str(project_root / "ui" / "qml"), "ui/qml"),
     (str(project_root / "ui" / "i18n"), "ui/i18n"),
     (str(project_root / "assets"), "assets"),
