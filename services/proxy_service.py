@@ -62,6 +62,13 @@ class ProxyService:
             logger.warning("Source file does not exist: %s", src)
             return None
 
+        # Images don't need proxy transcoding — use the original file directly
+        if src.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff",
+                                   ".heic", ".heif", ".avif", ".jxl"}:
+            if progress_cb:
+                progress_cb(1.0)
+            return src
+
         out = self.get_proxy_path(src, target_height)
         if self.is_proxy_ready(src, target_height):
             self._register_pair(str(src), str(out))
@@ -155,6 +162,8 @@ class ProxyService:
                     duration=clip.duration,
                     transition_to_next=clip.transition_to_next,
                     transition_duration=clip.transition_duration,
+                    media_type=clip.media_type,
+                    still_duration=clip.still_duration,
                 )
             )
 

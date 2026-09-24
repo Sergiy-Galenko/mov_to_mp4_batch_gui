@@ -94,9 +94,21 @@ def editing_project(source: str, document: dict, options: dict, ranges: list, *,
                 duck_release_ms=float(document.get("duck_release_ms", 450)),
             )
         )
+    ext = Path(source).suffix.lower()
+    is_image = ext in {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif", ".jxl"}
+    still_dur = float(options.get("still_duration") or 5.0) if is_image else 5.0
+
     return TimelineProject(
         clips=[
-            TimelineClip(source_path=source, in_point=a, out_point=b, has_audio=bool(options.get("has_audio")), crop=crop or [])
+            TimelineClip(
+                source_path=source,
+                in_point=a,
+                out_point=b,
+                has_audio=bool(options.get("has_audio")) if not is_image else False,
+                crop=crop or [],
+                media_type="image" if is_image else "video",
+                still_duration=still_dur,
+            )
             for a, b in ranges
         ],
         audio_tracks=tracks,

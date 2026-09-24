@@ -28,6 +28,22 @@ logger = logging.getLogger(__name__)
 
 MONTAGE_STORE_PATH = APP_DATA_DIR / "montage_sessions.json"
 
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif", ".jxl"}
+_VIDEO_EXTS = {".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv", ".wmv", ".mts", ".m2ts"}
+_AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".opus", ".ogg", ".wma", ".aiff", ".aif", ".mka"}
+
+DEFAULT_STILL_DURATION = 5.0
+
+
+def detect_media_type(file_path: str | Path) -> str:
+    """Determine media type from file extension."""
+    ext = Path(file_path).suffix.lower()
+    if ext in _IMAGE_EXTS:
+        return "image"
+    if ext in _AUDIO_EXTS:
+        return "audio"
+    return "video"
+
 
 @dataclass
 class MontageSession:
@@ -129,15 +145,17 @@ class MontageService:
     def get_media_metadata(self, file_path: str | Path) -> dict[str, Any]:
         """Probe media file for precise duration, resolution, fps, and stream layout."""
         path = Path(file_path).resolve()
+        media_type = detect_media_type(path)
         result: dict[str, Any] = {
             "path": str(path),
             "file_name": path.name,
+            "media_type": media_type,
             "duration": 0.0,
             "width": 1920,
             "height": 1080,
             "fps": 30.0,
-            "has_video": True,
-            "has_audio": False,
+            "has_video": media_type != "audio",
+            "has_audio": media_type != "image",
             "vcodec": "",
             "acodec": "",
             "size_bytes": path.stat().st_size if path.exists() else 0,
@@ -185,6 +203,12 @@ class MontageService:
         except Exception as exc:
             logger.warning("Error probing media for montage: %s", exc)
 
+        # Images: force no audio, no native duration
+        if media_type == "image":
+            result["has_audio"] = False
+            result["duration"] = 0.0
+            result["fps"] = 30.0
+
         return result
 
     def get_audio_waveform(self, file_path: str | Path, width: int = 1200, height: int = 100) -> str:
@@ -197,20 +221,24 @@ class MontageService:
         """Retrieve stored session or initialize one from existing task overrides and media metadata."""
         stored = self.session_store.get_session(file_path)
         meta = self.get_media_metadata(file_path)
+        is_image = meta.get("media_type") == "image"
         duration = float(meta.get("duration", 0.0) or 0.0)
+        effective_duration = DEFAULT_STILL_DURATION if is_image else duration
 
         if stored:
             session = dict(stored)
-            if session.get("out_point", 0.0) <= 0.0 or session.get("out_point", 0.0) > duration:
-                session["out_point"] = duration
+            if session.get("out_point", 0.0) <= 0.0 or (not is_image and session.get("out_point", 0.0) > duration):
+                session["out_point"] = effective_duration
             session["metadata"] = meta
+            session["is_image"] = is_image
+            session.setdefault("still_duration", DEFAULT_STILL_DURATION)
             return session
 
         overrides = existing_overrides or {}
         trim_start = float(overrides.get("trim_start") or 0.0)
-        trim_end = float(overrides.get("trim_end") or duration)
-        if trim_end <= 0.0 or trim_end > duration:
-            trim_end = duration
+        trim_end = float(overrides.get("trim_end") or effective_duration)
+        if trim_end <= 0.0 or (not is_image and trim_end > duration):
+            trim_end = effective_duration
 
         session_obj = MontageSession(
             file_path=str(Path(file_path).resolve()),
@@ -228,6 +256,8 @@ class MontageService:
         )
         res = session_obj.to_dict()
         res["metadata"] = meta
+        res["is_image"] = is_image
+        res["still_duration"] = float(overrides.get("still_duration", DEFAULT_STILL_DURATION))
         return res
 
     def save_session(self, file_path: str | Path, session_data: dict[str, Any]) -> None:
@@ -255,11 +285,17 @@ class MontageService:
 
         # Create default single-clip project
         meta = session.get("metadata", {})
+        is_image = meta.get("media_type") == "image"
+        still_dur = float(session.get("still_duration", DEFAULT_STILL_DURATION))
+        dur = still_dur if is_image else float(meta.get("duration", 0.0) or 0.0)
         clip = TimelineClip(
             source_path=str(Path(file_path).resolve()),
             in_point=float(session.get("in_point", 0.0) or 0.0),
-            out_point=float(session.get("out_point", meta.get("duration", 0.0)) or meta.get("duration", 0.0)),
-            duration=float(meta.get("duration", 0.0) or 0.0),
+            out_point=float(session.get("out_point", dur) or dur),
+            duration=dur,
+            media_type="image" if is_image else "video",
+            still_duration=still_dur,
+            has_audio=not is_image and bool(session.get("audio_enabled", True)),
         )
         proj = TimelineProject(
             title=Path(file_path).name,

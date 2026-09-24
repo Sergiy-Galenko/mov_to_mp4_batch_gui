@@ -3100,7 +3100,7 @@ ApplicationWindow {
 
     function openMontageEditor(path) {
         var target = path || ""
-        if (!target && root.selectedPath && root.selectedMediaType === "video") {
+        if (!target && root.selectedPath && (root.selectedMediaType === "video" || root.selectedMediaType === "image")) {
             target = root.selectedPath
         }
         if (!target && root.selectedPath) {
@@ -3110,7 +3110,8 @@ ApplicationWindow {
             for (var i = 0; i < backend.visibleQueuePaths.length; ++i) {
                 var candidate = String(backend.visibleQueuePaths[i])
                 var ext = candidate.slice(candidate.lastIndexOf(".")).toLowerCase()
-                if ([".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".flv", ".wmv", ".ts", ".m2ts"].indexOf(ext) >= 0) {
+                if ([".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".flv", ".wmv", ".ts", ".m2ts",
+                     ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif"].indexOf(ext) >= 0) {
                     target = candidate
                     break
                 }

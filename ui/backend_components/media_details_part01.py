@@ -107,12 +107,17 @@ BODY = r"""    def _probe_media_async(self, path: Path) -> None:
     def pickVideoFile(self) -> str:
         filt = "Video Files (*.mp4 *.mov *.mkv *.webm *.avi *.m4v *.flv *.wmv *.mts *.m2ts);;All Files (*)"
         files, _ = QtWidgets.QFileDialog.getOpenFileNames(None, "Вибрати відео для монтажу", "", filt)
+        files, _ = QtWidgets.QFileDialog.getOpenFileNames(None, "Вибрати медіа для монтажу (відео / фото)", "", MONTAGE_MEDIA_FILTER)
         if files:
             paths = [Path(path) for path in files]
             self._remember_folder(str(paths[0].parent))
             self._add_paths(paths)
             return str(paths[0])
         return ""
+
+    @QtCore.Slot(result=str)
+    def pickMediaFile(self) -> str:
+        return self.pickVideoFile()
 
     @QtCore.Slot(str, result=str)
     def readTextPreview(self, path_text: str) -> str:

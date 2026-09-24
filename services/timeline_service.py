@@ -42,12 +42,23 @@ class TimelineClip:
     transition_duration: float = 1.0
     has_audio: bool = True
     crop: list[int] = field(default_factory=list)
+    media_type: str = "video"  # "video" | "image" | "audio"
+    still_duration: float = 5.0  # duration for image clips (seconds)
 
     def __post_init__(self) -> None:
-        if self.duration <= 0.0 and self.out_point > self.in_point:
+        if self.media_type == "image":
+            # Images have no native duration; use still_duration
+            self.has_audio = False
+            if self.duration <= 0.0:
+                self.duration = self.still_duration
+            self.out_point = self.duration
+            self.in_point = 0.0
+        elif self.duration <= 0.0 and self.out_point > self.in_point:
             self.duration = round(self.out_point - self.in_point, 3)
 
     def effective_duration(self) -> float:
+        if self.media_type == "image":
+            return max(0.1, self.still_duration)
         if self.out_point > self.in_point:
             return round(self.out_point - self.in_point, 3)
         return max(0.0, self.duration)
@@ -166,8 +177,13 @@ class TimelineService:
             # Accurate input seeking avoids decoding hours of preceding material for a short preview.
             if clip.effective_duration() <= 0:
                 raise ValueError("Every timeline clip needs a positive duration")
-            inputs.extend(["-ss", f"{max(0.0, clip.in_point):.3f}", "-t", f"{clip.effective_duration():.3f}"])
-            inputs.extend(["-i", str(Path(clip.source_path).resolve())])
+            if clip.media_type == "image":
+                # Images: loop single frame for the still duration
+                inputs.extend(["-loop", "1", "-t", f"{clip.effective_duration():.3f}",
+                               "-framerate", f"{project.fps}", "-i", str(Path(clip.source_path).resolve())])
+            else:
+                inputs.extend(["-ss", f"{max(0.0, clip.in_point):.3f}", "-t", f"{clip.effective_duration():.3f}"])
+                inputs.extend(["-i", str(Path(clip.source_path).resolve())])
 
         # Add background audio tracks
         audio_input_start_idx = len(project.clips)
@@ -180,7 +196,6 @@ class TimelineService:
 
         # 2. Trim and standardize scale/fps for each video clip
         for i, clip in enumerate(project.clips):
-            in_pt = 0.0  # Input seeking has already applied the source in-point.
             dur = clip.effective_duration()
             crop_filter = ""
             if clip.crop:
@@ -190,22 +205,35 @@ class TimelineService:
                 if min(x, y) < 0 or min(width, height) < 2:
                     raise ValueError("Invalid crop rectangle")
                 crop_filter = f"crop={width}:{height}:{x}:{y},"
-            # Standardize video resolution, aspect ratio (letterbox/pad), and framerate
-            v_filter = (
-                f"[{i}:v]trim=start={in_pt:.3f}:duration={dur:.3f},setpts=PTS-STARTPTS,"
-                f"{crop_filter}scale={project.width}:{project.height}:force_original_aspect_ratio=decrease,"
-                f"pad={project.width}:{project.height}:(ow-iw)/2:(oh-ih)/2:black,"
-                f"setsar=1,fps={project.fps}[v{i}]"
-            )
+
+            if clip.media_type == "image":
+                # Image inputs are already looped; just scale/pad/fps
+                v_filter = (
+                    f"[{i}:v]trim=duration={dur:.3f},setpts=PTS-STARTPTS,"
+                    f"{crop_filter}scale={project.width}:{project.height}:force_original_aspect_ratio=decrease,"
+                    f"pad={project.width}:{project.height}:(ow-iw)/2:(oh-ih)/2:black,"
+                    f"setsar=1,fps={project.fps},format=yuv420p[v{i}]"
+                )
+            else:
+                # Video: input seeking has already applied the source in-point
+                in_pt = 0.0
+                v_filter = (
+                    f"[{i}:v]trim=start={in_pt:.3f}:duration={dur:.3f},setpts=PTS-STARTPTS,"
+                    f"{crop_filter}scale={project.width}:{project.height}:force_original_aspect_ratio=decrease,"
+                    f"pad={project.width}:{project.height}:(ow-iw)/2:(oh-ih)/2:black,"
+                    f"setsar=1,fps={project.fps}[v{i}]"
+                )
             filter_chains.append(v_filter)
 
-            # Standardize audio stream
-            a_filter = (
-                f"[{i}:a]atrim=start={in_pt:.3f}:duration={dur:.3f},asetpts=PTS-STARTPTS,"
-                f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a{i}]"
-            )
-            if not clip.has_audio:
+            # Standardize audio stream (images always use anullsrc)
+            if clip.media_type == "image" or not clip.has_audio:
                 a_filter = f"anullsrc=r=44100:cl=stereo,atrim=duration={dur:.3f},asetpts=PTS-STARTPTS[a{i}]"
+            else:
+                in_pt = 0.0
+                a_filter = (
+                    f"[{i}:a]atrim=start={in_pt:.3f}:duration={dur:.3f},asetpts=PTS-STARTPTS,"
+                    f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a{i}]"
+                )
             filter_chains.append(a_filter)
 
         # 3. Transitions between clips

@@ -15,6 +15,13 @@ VIDEO_EXTS = {".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv", ".wmv", "
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif", ".jxl"}
 AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".opus", ".ogg", ".wma", ".aiff", ".aif", ".mka"}
 SUBTITLE_EXTS = {".srt", ".ass", ".ssa", ".vtt", ".webvtt"}
+MONTAGE_MEDIA_EXTS = VIDEO_EXTS | IMAGE_EXTS
+MONTAGE_MEDIA_FILTER = (
+    "Media Files (" + " ".join(f"*{e}" for e in sorted(MONTAGE_MEDIA_EXTS)) + ");;"
+    "Video (" + " ".join(f"*{e}" for e in sorted(VIDEO_EXTS)) + ");;"
+    "Images (" + " ".join(f"*{e}" for e in sorted(IMAGE_EXTS)) + ");;"
+    "All Files (*)"
+)
 TEXT_EXTS = {
     ".txt",
     ".md",

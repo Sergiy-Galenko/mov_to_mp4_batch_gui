@@ -417,7 +417,16 @@ ApplicationWindow {
         qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
         engine = QQmlApplicationEngine()
         engine.addImportPath(str(qml_dir))
-        for name in ("ABCompareSlider", "TimelineTrimSlider", "CropOverlay", "InOutMarker", "Timeline"):
+        for name in (
+            "ABCompareSlider",
+            "TimelineTrimSlider",
+            "CropOverlay",
+            "InOutMarker",
+            "Timeline",
+            "MontageAudioMeter",
+            "MontageMediaPool",
+            "MontageDualTimeline",
+        ):
             with self.subTest(component=name):
                 component = QQmlComponent(engine, QUrl.fromLocalFile(str(qml_dir / "components" / f"{name}.qml")))
                 self.assertFalse(component.isError(), "\n".join(error.toString() for error in component.errors()))
