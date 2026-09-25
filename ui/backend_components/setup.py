@@ -4,6 +4,10 @@ BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
     def montageEditing(self):
         return self._montage_editing
 
+    @QtCore.Property(QtCore.QObject, constant=True)
+    def telegramNote(self):
+        return self._telegram_note_service
+
     dependencySetupChanged = QtCore.Signal()
 
     @QtCore.Property(bool, notify=dependencySetupChanged)

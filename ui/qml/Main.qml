@@ -214,6 +214,7 @@ ApplicationWindow {
     property var navigationItems: [
         { title: "nav_queue", icon: "queue", tint: "#007AFF", page: 0, target: "", group: "nav_workspace" },
         { title: "nav_montage", icon: "film", tint: "#AF52DE", page: 0, target: "montage", group: "nav_workspace" },
+        { title: "nav_telegram_note", icon: "telegram", tint: "#2AABEE", page: 6, target: "", group: "nav_workspace" },
         { title: "nav_downloads", icon: "download", tint: "#34C759", page: 4, target: "", group: "nav_workspace" },
         { title: "nav_presets", icon: "sliders", tint: "#AF52DE", page: 2, target: "", group: "nav_workspace" },
         { title: "nav_analytics", icon: "chart", tint: "#FF9500", page: 1, target: "", group: "nav_workspace" },
@@ -911,6 +912,7 @@ ApplicationWindow {
 
                     }
                 }
+                AppScreens.TelegramNoteScreen { id: telegramNoteScreen; appRoot: root }
             }
         }
 
@@ -3158,7 +3160,7 @@ ApplicationWindow {
         else if (action === "toggle_beginner_mode") backend.beginnerMode = !backend.beginnerMode
         else if (action === "paste_paths") backend.pasteFromClipboard()
         else {
-            var pages = { nav_queue: 0, nav_analytics: 1, nav_presets: 2, nav_ffmpeg: 3, nav_youtube: 4, nav_settings: 5 }
+            var pages = { nav_queue: 0, nav_analytics: 1, nav_presets: 2, nav_ffmpeg: 3, nav_youtube: 4, nav_settings: 5, nav_telegram_note: 6 }
             if (pages[action] !== undefined) openSidebarSection(pages[action], "", -1)
         }
     }

@@ -53,6 +53,7 @@ from services.smart_convert_service import recommend_settings
 from services.system_profile import SystemProfile
 from services.system_tray_service import SystemTrayService
 from services.taskbar_service import TaskbarService
+from services.telegram_note_service import TelegramNoteService
 from services.theme_manager import ThemeManager
 from services.watch_service import WatchService
 from services.whisper_model_manager import WhisperModelManager
@@ -122,6 +123,7 @@ __all__ = [
     "TaskItem",
     "TaskStatus",
     "TaskbarService",
+    "TelegramNoteService",
     "ThemeManager",
     "ThreadPoolExecutor",
     "UiEventQueue",

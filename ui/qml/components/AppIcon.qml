@@ -182,6 +182,10 @@ Canvas {
             ctx.restore()
         } else if (name === "history") {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 8 * u, Math.PI * .72, Math.PI * 2.15); ctx.stroke(); line(12, 7, 12, 12); line(12, 12, 16, 14); line(4, 7, 4, 12); line(4, 7, 8, 7)
+        } else if (name === "telegram") {
+            ctx.beginPath(); ctx.arc(pt(12), pt(12), 9 * u, 0, Math.PI * 2); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(pt(7), pt(11.5)); ctx.lineTo(pt(17.5), pt(7)); ctx.lineTo(pt(13.5), pt(17.5)); ctx.lineTo(pt(11), pt(13.5)); ctx.closePath(); ctx.stroke()
+            line(11, 13.5, 17.5, 7)
         } else {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 2 * u, 0, Math.PI * 2); ctx.fill()
         }
