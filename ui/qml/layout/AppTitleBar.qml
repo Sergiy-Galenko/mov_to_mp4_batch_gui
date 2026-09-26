@@ -101,7 +101,7 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: 20
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 12
+        spacing: root.width > 960 ? 12 : 8
         AppIconButton {
             visible: Theme.isMac && appRoot && appRoot.sidebarCollapsed
             iconName: "sidebar"
@@ -149,7 +149,7 @@ Item {
         }
         SystemStatusBar {
             id: systemStatusBar
-            visible: root.width > 1120
+            visible: root.width > 1280
             appRoot: root.appRoot
         }
         HistoryButtons {
@@ -169,7 +169,8 @@ Item {
             Row {
                 id: actionButtons
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: root.width > 960 ? 8 : 4
+                DependencySetupButton {}
                 ToolbarIconButton {
                     objectName: "notificationsButton"
                     iconName: "bell"

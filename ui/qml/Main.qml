@@ -858,8 +858,6 @@ ApplicationWindow {
 
         Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.borderMuted }
 
-        DependencySetupBar { Layout.fillWidth: true }
-
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
