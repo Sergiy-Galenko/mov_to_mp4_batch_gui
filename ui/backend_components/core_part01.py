@@ -72,7 +72,12 @@ BODY = r"""    logAdded = QtCore.Signal(str, str)
         self.ffmpeg_service.ffprobe_path = find_ffprobe(self.ffmpeg_service.ffmpeg_path)
         self.montage_service = MontageService(self.ffmpeg_service.ffmpeg_path, self.ffmpeg_service.ffprobe_path)
         self._montage_editing = MontageEditing(self)
+        from services.editor_project import EditorProject
+        from services.editor_render_service import EditorRenderService
+        self._editor_project = EditorProject(self)
+        self._editor_render = EditorRenderService(self)
         self._telegram_note_service = TelegramNoteService(self)
+        self._archive_backend = ArchiveBackend(self)
         self._converter_service = None
         self._runner = None
         self._media_analysis = None

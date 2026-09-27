@@ -38,7 +38,7 @@ BODY = r"""            return
             self.montageWaveformReady.emit(str(path), wf)
 
         threading.Thread(target=_bg, daemon=True).start()
-        return self.montage_service.get_audio_waveform(path)
+        return ""
 
     @QtCore.Slot(str, "QVariantMap")
     def saveMontageSession(self, path_text: str, session_map: Dict[str, Any]) -> None:

@@ -2,403 +2,124 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import App 1.0
-
+import "../editor"
 Rectangle {
     id: root
-
-    property string mainFilePath: ""
-    property string mainFileName: ""
-    property real mainDuration: 0.0
-    property int mainWidth: 1920
-    property int mainHeight: 1080
-    property real mainFps: 30.0
-    property var timelineClips: []
-    property string bgMusicPath: ""
-
-    signal clipActivated(string path, string type)
-    signal clipAddRequested(string path, string type)
-    signal importRequested()
-
-    property int activeFilter: 0 // 0: All, 1: Video, 2: Audio, 3: Titles
+    property var editor
+    property int activeFilter: 0
     property string searchQuery: ""
     property bool isGridView: true
-
-    implicitWidth: 320
-    implicitHeight: 320
-    color: "#161618"
-    radius: Theme.radiusMd
-    border.width: 1
-    border.color: "#27272a"
-    clip: true
-
-    function formatTime(secs) {
-        if (isNaN(secs) || secs < 0) secs = 0
-        var m = Math.floor(secs / 60)
-        var s = Math.floor(secs % 60)
-        return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s
+    property string selectedMedia: ""
+    property var menuItem: ({})
+    readonly property var mediaItems: editor ? editor.doc.media.filter(function(item) {
+        return (root.activeFilter === 0 || item.media_type === ["", "video", "audio", "image"][root.activeFilter])
+            && item.name.toLowerCase().indexOf(root.searchQuery.toLowerCase()) >= 0
+    }) : []
+    color: EditorTheme.panel; clip: true
+    function details(item) {
+        var duration = item.duration || 0, mins = Math.floor(duration/60), seconds = Math.floor(duration%60)
+        return mins + ":" + ("0" + seconds).slice(-2) + (item.media_type === "audio" ? " · Audio" : " · " + item.width + "×" + item.height + (item.media_type === "video" ? " · " + item.fps + " fps" : ""))
     }
-
-    function fileNameOf(path) {
-        if (!path) return ""
-        var slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
-        return slash >= 0 ? path.slice(slash + 1) : path
-    }
-
-    // Consolidated media items
-    readonly property var mediaItems: {
-        function isImage(p) {
-            if (!p) return false
-            var ext = p.slice(p.lastIndexOf(".")).toLowerCase()
-            return [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif", ".jxl"].indexOf(ext) >= 0
-        }
-
-        var items = []
-        if (root.mainFilePath) {
-            var mainIsImg = isImage(root.mainFilePath)
-            items.push({
-                id: "main",
-                title: root.mainFileName || fileNameOf(root.mainFilePath),
-                path: root.mainFilePath,
-                type: mainIsImg ? "image" : "video",
-                duration: root.mainDuration,
-                resolution: (root.mainHeight >= 2160 ? "4K" : root.mainHeight >= 1080 ? "1080p" : "720p"),
-                fps: mainIsImg ? 0 : root.mainFps,
-                tagColor: mainIsImg ? "#06b6d4" : "#3b82f6" // Cyan for photos, Blue for videos
-            })
-        }
-        for (var i = 0; i < root.timelineClips.length; i++) {
-            var c = root.timelineClips[i]
-            var p = c.source_path || ""
-            var clipIsImg = isImage(p) || (c.media_type === "image")
-            items.push({
-                id: "clip_" + i,
-                title: fileNameOf(p),
-                path: p,
-                type: clipIsImg ? "image" : "video",
-                duration: (c.out_point || (clipIsImg ? 5 : 10)) - (c.in_point || 0),
-                resolution: "1080p",
-                fps: clipIsImg ? 0 : 30.0,
-                tagColor: clipIsImg ? "#06b6d4" : "#f97316"
-            })
-        }
-        if (root.bgMusicPath) {
-            items.push({
-                id: "bgm",
-                title: fileNameOf(root.bgMusicPath),
-                path: root.bgMusicPath,
-                type: "audio",
-                duration: 180,
-                resolution: "Stereo",
-                fps: 0,
-                tagColor: "#10b981" // Green
-            })
-        }
-        // Template title cards
-        items.push({
-            id: "title_lower_third",
-            title: "Нижня плашка (Lower Third)",
-            path: "template:lower_third",
-            type: "title",
-            duration: 5,
-            resolution: "Overlay",
-            fps: 0,
-            tagColor: "#a855f7" // Purple
-        })
-        items.push({
-            id: "title_cinematic",
-            title: "Кінематографічний вступ",
-            path: "template:cinematic_intro",
-            type: "title",
-            duration: 8,
-            resolution: "Overlay",
-            fps: 0,
-            tagColor: "#a855f7"
-        })
-
-        // Filtering
-        var filtered = []
-        for (var k = 0; k < items.length; k++) {
-            var it = items[k]
-            if (root.activeFilter === 1 && it.type !== "video") continue
-            if (root.activeFilter === 1 && it.type !== "video" && it.type !== "image") continue
-            if (root.activeFilter === 2 && it.type !== "audio") continue
-            if (root.activeFilter === 3 && it.type !== "title") continue
-            if (root.searchQuery.trim().length > 0) {
-                if (it.title.toLowerCase().indexOf(root.searchQuery.toLowerCase()) < 0) continue
-            }
-            filtered.push(it)
-        }
-        return filtered
-    }
-
-    ColumnLayout {
+    DropArea {
         anchors.fill: parent
-        anchors.margins: 8
-        spacing: 6
-
-        // Header: Title & Filter Tabs
+        onDropped: function(drop) { if (drop.hasUrls) { editor.project.importMedia(drop.urls.map(function(url) { return String(url) }), false); drop.acceptProposedAction() } }
+    }
+    ColumnLayout {
+        anchors.fill: parent; anchors.margins: 12; spacing: 10
         RowLayout {
             Layout.fillWidth: true
-            spacing: 6
-
-            AppIcon {
-                name: "folder"
-                Layout.preferredWidth: 16
-                Layout.preferredHeight: 16
-                iconColor: "#f59e0b"
-            }
-
-            Label {
-                text: "Media Pool"
-                font.family: Theme.displayFont
-                font.pixelSize: Theme.fontSizeSm
-                font.bold: true
-                color: Theme.textPrimary
-            }
-
-            Item { Layout.fillWidth: true }
-
-            SecondaryButton {
-                text: "+ Import"
-                Layout.preferredHeight: 24
-                font.pixelSize: 11
-                onClicked: root.importRequested()
-            }
+            Label { Layout.fillWidth: true; text: I18n.t(editor.libraryPage === 1 ? "editor.titles" : editor.libraryPage === 2 ? "editor.transitions" : "editor.media_pool"); color: EditorTheme.text; font.pixelSize: EditorTheme.fontSize + 1; font.bold: true; elide: Text.ElideRight }
+            EditorButton { iconName: "add"; iconOnly: true; text: I18n.t("editor.import_media"); enabled: !editor.project || !editor.project.importer.busy; onClicked: editor.project.chooseMedia() }
         }
-
-        // Category Filter Tabs & View Toggle
         RowLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            Repeater {
-                model: ["Все", "Відео", "Аудіо", "Титри"]
-                delegate: Rectangle {
-                    required property int index
-                    required property string modelData
-                    Layout.preferredHeight: 22
-                    Layout.preferredWidth: filterLabel.implicitWidth + 12
-                    radius: 4
-                    color: root.activeFilter === index ? "#3f3f46" : "#27272a"
-                    border.width: 1
-                    border.color: root.activeFilter === index ? "#71717a" : "transparent"
-
-                    Label {
-                        id: filterLabel
-                        anchors.centerIn: parent
-                        text: modelData
-                        font.pixelSize: 10
-                        font.weight: root.activeFilter === index ? Font.DemiBold : Font.Normal
-                        color: root.activeFilter === index ? "#ffffff" : "#a1a1aa"
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.activeFilter = index
+            Layout.fillWidth: true; visible: editor.libraryPage === 0; spacing: 3
+            Repeater { model: ["all","video","audio","images"]; EditorButton { required property int index; required property string modelData; Layout.fillWidth: true; text: I18n.t("editor." + modelData); checked: root.activeFilter === index; onClicked: root.activeFilter = index; font.pixelSize: EditorTheme.smallSize; implicitWidth: 40 } }
+        }
+        EditorField { Layout.fillWidth: true; placeholderText: I18n.t("editor.search"); onTextChanged: root.searchQuery = text; visible: editor.libraryPage !== 1 }
+        RowLayout {
+            Layout.fillWidth: true; visible: editor.libraryPage === 0
+            Label { Layout.fillWidth: true; text: root.mediaItems.length + " " + I18n.t("editor.items"); color: EditorTheme.muted; font.pixelSize: EditorTheme.smallSize }
+            EditorButton { text: I18n.t("editor.grid"); iconName: "grid"; iconOnly: true; checked: root.isGridView; onClicked: root.isGridView = true }
+            EditorButton { text: I18n.t("editor.list"); iconName: "list"; iconOnly: true; checked: !root.isGridView; onClicked: root.isGridView = false }
+        }
+        ProgressBar { Layout.fillWidth: true; visible: editor.project && editor.project.importer.busy; from: 0; to: 100; value: editor.project ? editor.project.importer.progress : 0 }
+        StackLayout {
+            Layout.fillWidth: true; Layout.fillHeight: true; currentIndex: editor.libraryPage
+            Item {
+                GridView {
+                    id: mediaGrid; objectName: "editorMediaGrid"; anchors.fill: parent; clip: true
+                    model: root.mediaItems
+                    cellWidth: root.isGridView ? width / Math.max(1, Math.floor(width / 150)) : width
+                    cellHeight: root.isGridView ? 156 : 74
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: Item {
+                        id: mediaCard
+                        required property var modelData
+                        width: mediaGrid.cellWidth; height: mediaGrid.cellHeight
+                        Rectangle { anchors.fill: parent; anchors.margins: 3; radius: 5; color: cardMouse.containsMouse ? EditorTheme.hover : EditorTheme.raised; border.width: root.selectedMedia === modelData.id ? 2 : 1; border.color: root.selectedMedia === modelData.id ? EditorTheme.accent : EditorTheme.border }
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 10; spacing: 5
+                            Item {
+                                visible: root.isGridView; Layout.fillWidth: true; Layout.fillHeight: true
+                                Image { anchors.fill: parent; source: modelData.thumbnail || ""; fillMode: Image.PreserveAspectFit; asynchronous: true }
+                                AppIcon { anchors.centerIn: parent; width: 28; height: 28; name: modelData.media_type === "audio" ? "audio" : "film"; visible: !modelData.thumbnail; iconColor: EditorTheme.secondary }
+                            }
+                            Label { Layout.fillWidth: true; text: modelData.name; color: EditorTheme.text; font.pixelSize: EditorTheme.fontSize; elide: Text.ElideMiddle }
+                            Label { Layout.fillWidth: true; text: root.details(modelData); color: EditorTheme.secondary; font.pixelSize: EditorTheme.smallSize; elide: Text.ElideRight }
+                        }
+                        Item { id: dragProxy; property string mediaId: modelData.id; width: 1; height: 1; Drag.active: cardMouse.drag.active; Drag.keys: ["editor-media"]; Drag.source: dragProxy; Drag.hotSpot.x: 0; Drag.hotSpot.y: 0 }
+                        MouseArea {
+                            id: cardMouse; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            drag.target: dragProxy
+                            onClicked: function(mouse) { root.selectedMedia = modelData.id; if (mouse.button === Qt.RightButton) { root.menuItem = modelData; mediaMenu.popup() } }
+                            onDoubleClicked: editor.project.addToTimeline(modelData.id)
+                            onReleased: { dragProxy.Drag.drop(); dragProxy.x = 0; dragProxy.y = 0 }
+                            ToolTip.visible: containsMouse; ToolTip.delay: 750; ToolTip.text: modelData.path + "\n" + I18n.t("editor.double_click_add")
+                        }
                     }
                 }
+                ColumnLayout {
+                    anchors.centerIn: parent; width: parent.width - 16; visible: root.mediaItems.length === 0; spacing: 12
+                    AppIcon { name: "folder"; iconColor: EditorTheme.muted; Layout.preferredWidth: 38; Layout.preferredHeight: 38; Layout.alignment: Qt.AlignHCenter }
+                    Label { Layout.fillWidth: true; text: I18n.t("editor.drop_media"); color: EditorTheme.secondary; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter }
+                    EditorButton { text: I18n.t("editor.import_media"); primary: true; Layout.alignment: Qt.AlignHCenter; onClicked: editor.project.chooseMedia() }
+                    Label { Layout.fillWidth: true; text: "MOV, MP4, MKV, MP3, WAV, PNG, JPG"; color: EditorTheme.muted; font.pixelSize: EditorTheme.smallSize; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter }
+                }
             }
-
-            Item { Layout.fillWidth: true }
-
-            AppIconButton {
-                iconName: root.isGridView ? "grid" : "queue"
-                accessibleLabel: "Вигляд сіткою / списком"
-                Layout.preferredWidth: 24
-                Layout.preferredHeight: 24
-                onClicked: root.isGridView = !root.isGridView
+            ColumnLayout {
+                spacing: 12
+                Label { Layout.fillWidth: true; text: I18n.t("editor.title_hint"); wrapMode: Text.Wrap; color: EditorTheme.secondary }
+                EditorButton { Layout.fillWidth: true; text: I18n.t("editor.add_title"); iconName: "text"; primary: true; onClicked: { editor.project.addTitle(editor.playhead); editor.inspectorVisible = true; editor.inspectorTab = 2 } }
+                EditorButton { Layout.fillWidth: true; text: I18n.t("editor.import_subtitles"); iconName: "text"; onClicked: editor.project.importSubtitles() }
+                EditorButton { Layout.fillWidth: true; text: I18n.t("studio.title"); enabled: !!editor.filePath; onClicked: editor.openTools() }
+                Item { Layout.fillHeight: true }
             }
-        }
-
-        // Search Box
-        AppTextField {
-            Layout.fillWidth: true
-            placeholderText: "Пошук медіафайлів..."
-            search: true
-            text: root.searchQuery
-            onTextChanged: root.searchQuery = text
-        }
-
-        // Grid / List View of Clips
-        ScrollView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-            GridView {
-                id: grid
-                anchors.fill: parent
-                cellWidth: root.isGridView ? 144 : width
-                cellHeight: root.isGridView ? 116 : 46
-                model: root.mediaItems
-
-                delegate: Rectangle {
-                    id: card
-                    required property var modelData
-                    required property int index
-                    width: root.isGridView ? 138 : grid.width - 8
-                    height: root.isGridView ? 110 : 40
-                    radius: 6
-                    color: cardMouse.containsMouse ? "#27272a" : "#1e1e22"
-                    border.width: 1
-                    border.color: cardMouse.containsMouse ? "#52525b" : "#2d2d32"
-
-                    MouseArea {
-                        id: cardMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onDoubleClicked: root.clipAddRequested(card.modelData.path, card.modelData.type)
-                        onClicked: root.clipActivated(card.modelData.path, card.modelData.type)
-                    }
-
-                    // Grid layout card
-                    ColumnLayout {
-                        visible: root.isGridView
-                        anchors.fill: parent
-                        anchors.margins: 4
-                        spacing: 2
-
-                        // Thumbnail Box
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            radius: 4
-                            color: "#121214"
-                            clip: true
-
-                            // Video / photo snapshot if available
-                            Image {
-                                anchors.fill: parent
-                                source: card.modelData.path && (card.modelData.type === "video" || card.modelData.type === "image") && !card.modelData.path.startsWith("template:") ? ("file://" + card.modelData.path) : ""
-                                fillMode: Image.PreserveAspectCrop
-                                asynchronous: true
-                                visible: status === Image.Ready
-                            }
-
-                            // Center Icon for Audio/Titles or when no snapshot
-                            AppIcon {
-                                anchors.centerIn: parent
-                                name: card.modelData.type === "video" ? "film" : card.modelData.type === "image" ? "image" : card.modelData.type === "audio" ? "audio" : "text"
-                                width: 22
-                                height: 22
-                                iconColor: card.modelData.tagColor
-                                visible: card.modelData.type === "audio" || card.modelData.type === "title"
-                            }
-
-                            // Type tag indicator (Top Left)
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.margins: 4
-                                width: 6; height: 6; radius: 3
-                                color: card.modelData.tagColor
-                            }
-
-                            // Duration badge (Bottom Right)
-                            Rectangle {
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                anchors.margins: 3
-                                width: durLabel.implicitWidth + 6
-                                height: 14
-                                radius: 2
-                                color: "#cc000000"
-
-                                Label {
-                                    id: durLabel
-                                    anchors.centerIn: parent
-                                    text: root.formatTime(card.modelData.duration)
-                                    font.pixelSize: 8
-                                    font.family: Theme.monoFont
-                                    color: "#ffffff"
-                                }
-                            }
-
-                            // Resolution badge (Bottom Left)
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.bottom: parent.bottom
-                                anchors.margins: 3
-                                width: resLabel.implicitWidth + 6
-                                height: 14
-                                radius: 2
-                                color: "#cc000000"
-
-                                Label {
-                                    id: resLabel
-                                    anchors.centerIn: parent
-                                    text: card.modelData.resolution
-                                    font.pixelSize: 8
-                                    color: "#a1a1aa"
-                                }
-                            }
-                        }
-
-                        // Title Text
-                        Label {
-                            Layout.fillWidth: true
-                            text: card.modelData.title
-                            font.pixelSize: 10
-                            font.weight: Font.Medium
-                            color: Theme.textPrimary
-                            elide: Text.ElideMiddle
-                        }
-                    }
-
-                    // List layout row
-                    RowLayout {
-                        visible: !root.isGridView
-                        anchors.fill: parent
-                        anchors.margins: 6
-                        spacing: 8
-
-                        Rectangle {
-                            width: 6; height: 6; radius: 3
-                            color: card.modelData.tagColor
-                        }
-
-                        AppIcon {
-                            name: card.modelData.type === "video" ? "film" : card.modelData.type === "image" ? "image" : card.modelData.type === "audio" ? "audio" : "text"
-                            Layout.preferredWidth: 16
-                            Layout.preferredHeight: 16
-                            iconColor: card.modelData.tagColor
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: card.modelData.title
-                            font.pixelSize: 11
-                            color: Theme.textPrimary
-                            elide: Text.ElideMiddle
-                        }
-
-                        Label {
-                            text: card.modelData.resolution
-                            font.pixelSize: 9
-                            color: "#71717a"
-                        }
-
-                        Label {
-                            text: root.formatTime(card.modelData.duration)
-                            font.family: Theme.monoFont
-                            font.pixelSize: 10
-                            color: "#a1a1aa"
-                        }
-
-                        AppButton {
-                            text: "+"
-                            Layout.preferredHeight: 22
-                            Layout.preferredWidth: 22
-                            font.pixelSize: 12
-                            onClicked: root.clipAddRequested(card.modelData.path, card.modelData.type)
-                        }
+            ColumnLayout {
+                Label { Layout.fillWidth: true; text: I18n.t("editor.transition_hint"); wrapMode: Text.Wrap; color: EditorTheme.secondary }
+                ListView {
+                    Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 6
+                    model: [{id:"none",name:"Cut"},{id:"fade",name:"Cross Fade"},{id:"dissolve",name:"Dissolve"},{id:"wipeleft",name:"Wipe Left"},{id:"wiperight",name:"Wipe Right"},{id:"slideup",name:"Slide Up"},{id:"slidedown",name:"Slide Down"},{id:"circlecrop",name:"Circle"}].filter(function(t) { return t.name.toLowerCase().indexOf(root.searchQuery.toLowerCase()) >= 0 })
+                    delegate: EditorButton {
+                        required property var modelData; width: ListView.view.width; text: modelData.name; iconName: "sliders"
+                        enabled: editor.selected.kind === "video"; checked: editor.selected.transition_to_next === modelData.id
+                        onClicked: editor.project.editSelected({transition_to_next: modelData.id})
                     }
                 }
             }
         }
+    }
+    Menu {
+        id: mediaMenu
+        MenuItem { text: I18n.t("editor.add_timeline"); onTriggered: editor.project.addToTimeline(root.menuItem.id) }
+        MenuItem { text: I18n.t("editor.reveal"); onTriggered: editor.project.reveal(root.menuItem.path) }
+        MenuItem { text: I18n.t("editor.rename"); onTriggered: { renameField.text = root.menuItem.name; renameDialog.open() } }
+        MenuItem { text: I18n.t("editor.properties"); onTriggered: editor.message = root.menuItem.path + " · " + root.details(root.menuItem) }
+        MenuItem { text: I18n.t("editor.remove_media"); onTriggered: editor.project.removeMedia(root.menuItem.id) }
+    }
+    EditorDialog {
+        id: renameDialog; parent: editor.contentItem; anchors.centerIn: parent; width: 360; title: I18n.t("editor.rename")
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        contentItem: EditorField { id: renameField }
+        onAccepted: editor.project.renameMedia(root.menuItem.id, renameField.text)
     }
 }
-

@@ -1,6 +1,28 @@
 Source-Available Non-Commercial License
 
+Media Converter
+Repository: https://github.com/Sergiy-Galenko/mov_to_mp4_batch_gui
+
 Copyright (c) 2026 Serhii. All rights reserved.
+
+READING GUIDE (NON-BINDING)
+
+- Personal, educational, research, testing, and other non-commercial use:
+  see Section 1.
+- Business, paid-service, and other commercial use: a separate purchased
+  commercial license is required; see Section 2.
+- Sharing copies or modifications: retain this license and the copyright
+  notice, and identify modifications; see Section 3.
+- Third-party libraries, tools, and codecs: see Section 6.
+- Warranty, liability, and termination: see Sections 7 through 9.
+
+This guide is for convenience only. The scope statement and numbered terms
+below govern; the guide does not expand or replace them. A Ukrainian-language
+explanation is provided in README.md. For commercial licensing, contact the
+copyright holder through the repository maintainer profile:
+https://github.com/Sergiy-Galenko
+
+TERMS AND CONDITIONS
 
 This license governs use of the software, source code, binaries,
 documentation, assets, and related materials distributed with this project

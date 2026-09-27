@@ -215,6 +215,7 @@ ApplicationWindow {
         { title: "nav_queue", icon: "queue", tint: "#007AFF", page: 0, target: "", group: "nav_workspace" },
         { title: "nav_montage", icon: "film", tint: "#AF52DE", page: 0, target: "montage", group: "nav_workspace" },
         { title: "nav_telegram_note", icon: "telegram", tint: "#2AABEE", page: 6, target: "", group: "nav_workspace" },
+        { title: "nav_archive", icon: "archive", tint: "#FF9500", page: 7, target: "", group: "nav_workspace" },
         { title: "nav_downloads", icon: "download", tint: "#34C759", page: 4, target: "", group: "nav_workspace" },
         { title: "nav_presets", icon: "sliders", tint: "#AF52DE", page: 2, target: "", group: "nav_workspace" },
         { title: "nav_analytics", icon: "chart", tint: "#FF9500", page: 1, target: "", group: "nav_workspace" },
@@ -388,6 +389,10 @@ ApplicationWindow {
         }
         backend.folderTypeFilter = mediaType
         backend.addFolderFiltered()
+    }
+
+    function openArchive() {
+        root.openSidebarSection(7, "", root.navIndexFor(7, ""))
     }
 
     function openSelectedSettings() {
@@ -873,6 +878,7 @@ ApplicationWindow {
                 onSectionRequested: function(pageIndex, target, navIndex) { root.openSidebarSection(pageIndex, target, navIndex) }
                 onAddFilesRequested: root.addFilesForWorkspace()
                 onAddFolderRequested: root.addFolderForWorkspace()
+                onArchiveRequested: root.openArchive()
                 onDedupeRequested: backend && backend.deduplicateQueueByHash()
             }
 
@@ -911,6 +917,11 @@ ApplicationWindow {
                     }
                 }
                 AppScreens.TelegramNoteScreen { id: telegramNoteScreen; appRoot: root }
+                AppScreens.ArchiveScreen {
+                    id: archiveScreen
+                    objectName: "archiveScreen"
+                    appRoot: root
+                }
             }
         }
 
@@ -1232,7 +1243,7 @@ ApplicationWindow {
 
             Panel {
                 title: I18n.t("presets")
-                AppComboBox { id: presetScreenCombo; model: backend ? backend.presetsModel : null }
+                AppComboBox { id: presetScreenCombo; model: backend ? backend.presetsModel : null; textRole: "display" }
                 RowLayout {
                     Layout.fillWidth: true
                     SecondaryButton { iconName: "folder"; text: I18n.t("load"); onClicked: { root.selectedPreset = presetScreenCombo.currentText; backend && backend.loadPreset(presetScreenCombo.currentText) } }
@@ -2179,7 +2190,7 @@ ApplicationWindow {
             iconName: "sliders"
             iconTint: "#AF52DE"
             title: I18n.t("presets")
-            AppComboBox { id: savedPresetCombo; model: backend ? backend.presetsModel : null }
+            AppComboBox { id: savedPresetCombo; model: backend ? backend.presetsModel : null; textRole: "display" }
             Flow {
                 Layout.fillWidth: true
                 spacing: Theme.space2

@@ -14,6 +14,7 @@ Rectangle {
     signal sectionRequested(int pageIndex, string target, int navIndex)
     signal addFilesRequested()
     signal addFolderRequested()
+    signal archiveRequested()
     signal dedupeRequested()
 
     Layout.preferredWidth: collapsed ? 62 : Theme.sidebarWidth
@@ -205,6 +206,13 @@ Rectangle {
                 iconName: "folder"
                 accessibleLabel: I18n.t("add_folder")
                 onClicked: root.addFolderRequested()
+            }
+            AppIconButton {
+                objectName: "sidebarArchiveButton"
+                iconName: "archive"
+                accessibleLabel: I18n.t("nav_archive")
+                ToolTip.text: I18n.t("nav_archive")
+                onClicked: root.archiveRequested()
             }
         }
     }

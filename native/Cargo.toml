@@ -2,7 +2,7 @@
 name = "media-converter-native"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license-file = "../LICENSE"
 
 [lib]
 name = "media_converter_native"

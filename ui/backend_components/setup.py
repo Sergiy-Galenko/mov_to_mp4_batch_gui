@@ -1,12 +1,24 @@
 from __future__ import annotations
 
 BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
+    def editorProject(self):
+        return self._editor_project
+
+    @QtCore.Property(QtCore.QObject, constant=True)
+    def editorRender(self):
+        return self._editor_render
+
+    @QtCore.Property(QtCore.QObject, constant=True)
     def montageEditing(self):
         return self._montage_editing
 
     @QtCore.Property(QtCore.QObject, constant=True)
     def telegramNote(self):
         return self._telegram_note_service
+
+    @QtCore.Property(QtCore.QObject, constant=True)
+    def archive(self):
+        return self._archive_backend
 
     dependencySetupChanged = QtCore.Signal()
 

@@ -92,6 +92,7 @@ BODY = r"""        self._youtube_history = self.settings_manager.youtube_history
     @QtCore.Slot()
     def shutdown(self) -> None:
         self._timer.stop()
+        self._archive_backend.shutdown()
         self._watch_timer.stop()
         self._scheduler_timer.stop()
         self._resource_timer.stop()
@@ -105,6 +106,8 @@ BODY = r"""        self._youtube_history = self.settings_manager.youtube_history
         self.watch_service.stop()
         self.whisper_model_manager.shutdown()
         self._montage_editing.shutdown()
+        self._editor_project.shutdown()
+        self._editor_render.shutdown()
         self._system_profile.shutdown()
         self._whisper_setup.shutdown()
         self._probe_executor.shutdown(wait=False, cancel_futures=True)

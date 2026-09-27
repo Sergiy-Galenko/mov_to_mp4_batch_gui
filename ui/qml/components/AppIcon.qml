@@ -186,6 +186,11 @@ Canvas {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 9 * u, 0, Math.PI * 2); ctx.stroke()
             ctx.beginPath(); ctx.moveTo(pt(7), pt(11.5)); ctx.lineTo(pt(17.5), pt(7)); ctx.lineTo(pt(13.5), pt(17.5)); ctx.lineTo(pt(11), pt(13.5)); ctx.closePath(); ctx.stroke()
             line(11, 13.5, 17.5, 7)
+        } else if (name === "archive" || name === "box" || name === "zip") {
+            rect(3, 8, 18, 13, 2)
+            rect(2, 4, 20, 4.5, 1.5)
+            line(10, 13, 14, 13)
+            line(12, 4, 12, 8.5)
         } else {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 2 * u, 0, Math.PI * 2); ctx.fill()
         }

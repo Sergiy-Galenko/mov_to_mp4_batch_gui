@@ -32,6 +32,7 @@ def main() -> None:
 
         sys.exit(cli_main(sys.argv[1:]))
 
+    os.environ["QML_DISABLE_DISK_CACHE"] = "1"
     from PySide6 import QtCore, QtGui, QtQml, QtWidgets
     from PySide6.QtQuickControls2 import QQuickStyle
 

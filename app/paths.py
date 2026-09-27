@@ -96,3 +96,31 @@ def find_ffprobe(ffmpeg_path: str | None) -> str | None:
         if candidate.exists() and candidate.is_file():
             return str(candidate)
     return _find_binary(exe)
+
+
+def find_7z() -> str | None:
+    """Find a locally installed 7-Zip executable without changing PATH."""
+    explicit = os.environ.get("MEDIA_CONVERTER_7Z", "").strip()
+    names = ("7z.exe", "7za.exe", "7zr.exe") if os.name == "nt" else ("7z", "7za", "7zr")
+    for name in names:
+        found = _find_binary(name, explicit)
+        if found:
+            return found
+        path_value = shutil.which(name)
+        if path_value and Path(path_value).is_file():
+            return str(Path(path_value).resolve())
+    return None
+
+
+def find_rar() -> str | None:
+    """Find the WinRAR command-line tool used to create RAR archives."""
+    explicit = os.environ.get("MEDIA_CONVERTER_RAR", "").strip()
+    names = ("rar.exe",) if os.name == "nt" else ("rar",)
+    for name in names:
+        found = _find_binary(name, explicit)
+        if found:
+            return found
+        path_value = shutil.which(name)
+        if path_value and Path(path_value).is_file():
+            return str(Path(path_value).resolve())
+    return None

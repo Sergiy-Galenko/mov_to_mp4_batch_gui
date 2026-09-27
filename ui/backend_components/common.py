@@ -31,6 +31,7 @@ from app.paths import find_ffmpeg, find_ffprobe
 from app.performance_profiles import prediction_factor
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.batch_workflow_service import DEFAULT_FOLDER_RULES, BatchWorkflowService
+from services.archive_backend import ArchiveBackend
 from services.display_service import DisplayService
 from services.event_queue import UiEventQueue
 from services.ffmpeg_auto_installer import FfmpegAutoInstaller, FfmpegAutoInstallResult
@@ -73,6 +74,7 @@ List = list
 
 __all__ = [
     "ANALYTICS_EMIT_INTERVAL_SEC",
+    "ArchiveBackend",
     "APP_TITLE",
     "APP_VERSION",
     "DEFAULT_FOLDER_RULES",
