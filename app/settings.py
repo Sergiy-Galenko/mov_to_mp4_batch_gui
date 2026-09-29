@@ -15,7 +15,6 @@ from app.constants import (
     VIDEO_CODEC_MAP,
     VIDEO_CODEC_OPTIONS,
 )
-from app.device_profiles import DEVICE_PROFILE_NAMES, apply_device_profile
 from app.models import ConversionSettings
 from app.performance_profiles import apply_performance_profile, normalize_profile
 from utils.formatting import parse_float, parse_int, parse_time_to_seconds
@@ -343,10 +342,6 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.meta_year = str(settings_map.get("meta_year", settings.meta_year))
     settings.meta_track = str(settings_map.get("meta_track", settings.meta_track))
 
-    device_profile = str(settings_map.get("device_profile") or "").strip()
-    if device_profile in DEVICE_PROFILE_NAMES:
-        settings.device_profile = "" if device_profile == "None" else device_profile
-
     settings.privacy_blur_regions = str(settings_map.get("privacy_blur_regions") or settings.privacy_blur_regions).strip()
     settings.ai_blur_enabled = _coerce_bool(settings_map.get("ai_blur_enabled"), settings.ai_blur_enabled)
     checksum_algorithm = str(settings_map.get("checksum_algorithm") or settings.checksum_algorithm).strip().lower()
@@ -377,8 +372,6 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
         _apply_video_codec(settings, settings_map.get("codec"))
     if _has_setting_value(settings_map, "hw"):
         _apply_hw_encoder(settings, settings_map.get("hw"))
-    if settings.device_profile:
-        settings = apply_device_profile(settings, settings.device_profile)
     return settings
 
 

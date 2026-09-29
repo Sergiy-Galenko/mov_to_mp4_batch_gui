@@ -42,6 +42,71 @@ BODY = r'''    def setupSystemTray(self) -> None:
     def _on_tray_quit(self) -> None:
         QtWidgets.QApplication.quit()
 
+    @QtCore.Property(bool, notify=sourceUpdateChanged)
+    def sourceUpdateChecking(self) -> bool:
+        return self._source_update_checking
+
+    @QtCore.Property(bool, notify=sourceUpdateChanged)
+    def sourceUpdateAvailable(self) -> bool:
+        return self._source_update_available
+
+    @QtCore.Property(bool, notify=sourceUpdateChanged)
+    def sourceUpdateRestartRequired(self) -> bool:
+        return self._source_update_restart_required
+
+    @QtCore.Property(str, notify=sourceUpdateChanged)
+    def sourceUpdateStatus(self) -> str:
+        return self._source_update_status
+
+    @QtCore.Property(str, notify=sourceUpdateChanged)
+    def sourceUpdateCurrentCommit(self) -> str:
+        return self._source_update_local_commit
+
+    @QtCore.Property(str, notify=sourceUpdateChanged)
+    def sourceUpdateRemoteCommit(self) -> str:
+        return self._source_update_remote_commit
+
+    @QtCore.Slot()
+    def checkSourceUpdate(self) -> None:
+        if self._source_update_checking:
+            return
+        self._source_update_checking = True
+        self._source_update_available = False
+        self._source_update_restart_required = False
+        self._source_update_status = "Перевіряємо main у GitHub…"
+        self.sourceUpdateChanged.emit()
+        threading.Thread(target=lambda: self.event_queue.put(("source_update_done", self.source_update_service.check())), daemon=True).start()
+
+    @QtCore.Slot()
+    def applySourceUpdate(self) -> None:
+        if self._source_update_checking or not self._source_update_available:
+            return
+        self._source_update_checking = True
+        self._source_update_status = "Завантажуємо оновлення…"
+        self.sourceUpdateChanged.emit()
+        threading.Thread(target=lambda: self.event_queue.put(("source_update_done", self.source_update_service.apply())), daemon=True).start()
+
+    def _apply_source_update_result(self, info: SourceUpdateInfo) -> None:
+        self._source_update_checking = False
+        self._source_update_available = bool(info.available)
+        self._source_update_restart_required = bool(info.restart_required)
+        self._source_update_status = info.message
+        self._source_update_local_commit = info.local_commit
+        self._source_update_remote_commit = info.remote_commit
+        self.sourceUpdateChanged.emit()
+        self._append_log("OK" if info.available or info.restart_required else "INFO", f"Source update: {info.message}")
+        self.toastRequested.emit(info.message)
+
+    @QtCore.Slot()
+    def restartAfterSourceUpdate(self) -> None:
+        if not self._source_update_restart_required:
+            return
+        if QtCore.QProcess.startDetached(sys.executable, list(sys.argv)):
+            QtWidgets.QApplication.quit()
+        else:
+            self._source_update_status = "Оновлення завантажено. Закрийте й запустіть застосунок вручну."
+            self.sourceUpdateChanged.emit()
+
     def _send_push_notification(self, title: str, message: str, level: str = "info") -> None:
         if not self._push_notifications_enabled:
             return

@@ -51,6 +51,7 @@ from services.resource_monitor import ResourceMonitor
 from services.settings_manager import SettingsManager
 from services.shortcut_manager import ShortcutManager
 from services.smart_convert_service import recommend_settings
+from services.source_update_service import SourceUpdateInfo, SourceUpdateService
 from services.system_profile import SystemProfile
 from services.system_tray_service import SystemTrayService
 from services.taskbar_service import TaskbarService
@@ -120,6 +121,8 @@ __all__ = [
     "ResourceMonitor",
     "SettingsManager",
     "ShortcutManager",
+    "SourceUpdateInfo",
+    "SourceUpdateService",
     "SystemProfile",
     "SystemTrayService",
     "TaskItem",

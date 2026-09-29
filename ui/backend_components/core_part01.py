@@ -52,6 +52,7 @@ BODY = r"""    logAdded = QtCore.Signal(str, str)
     notificationChannelsChanged = QtCore.Signal()
     licenseChanged = QtCore.Signal()
     paidUpdateChanged = QtCore.Signal()
+    sourceUpdateChanged = QtCore.Signal()
     queueViewModeChanged = QtCore.Signal()
     concurrencyLimitChanged = QtCore.Signal()
     outputTemplateChanged = QtCore.Signal()
@@ -111,6 +112,7 @@ BODY = r"""    logAdded = QtCore.Signal(str, str)
         self.notification_service = NotificationService()
         self.license_service = LicenseService()
         self.paid_update_service = PaidUpdateService()
+        self.source_update_service = SourceUpdateService()
         self.system_tray = SystemTrayService(parent=self, app_title=APP_TITLE)
         self.taskbar = TaskbarService()
         self.display_service = DisplayService(parent=self)
@@ -130,6 +132,12 @@ BODY = r"""    logAdded = QtCore.Signal(str, str)
         self._paid_update_status = "Paid update check has not run."
         self._paid_update_download_url = ""
         self._paid_update_available = False
+        self._source_update_checking = False
+        self._source_update_available = False
+        self._source_update_restart_required = False
+        self._source_update_status = "Оновлення ще не перевірялися."
+        self._source_update_local_commit = ""
+        self._source_update_remote_commit = ""
         self._tray_enabled = self.settings_manager.tray_enabled()
         self._push_notifications_enabled = self.settings_manager.push_notifications_enabled()
         self._watch_auto_convert_enabled = self.settings_manager.watch_auto_convert_enabled()

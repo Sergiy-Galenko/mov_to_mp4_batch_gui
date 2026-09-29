@@ -92,6 +92,10 @@ ApplicationWindow {
                 }
             }
         }
+        function onSourceUpdateChanged() {
+            if (backend && root.pendingSettingsTarget !== "app_update" && (backend.sourceUpdateAvailable || backend.sourceUpdateRestartRequired))
+                sourceUpdateDialog.open()
+        }
     }
 
     property bool hasBackend: backend !== null
@@ -226,7 +230,6 @@ ApplicationWindow {
         { title: "nav_images_sheets", icon: "image", tint: "#34C759", page: 5, target: "images_sheets", group: "nav_conversion" },
         { title: "nav_watermark_text", icon: "text", tint: "#32ADE6", page: 5, target: "watermark_text", group: "nav_conversion" },
         { title: "nav_smart_convert", icon: "sparkles", tint: "#AF52DE", page: 5, target: "smart_convert", group: "nav_advanced" },
-        { title: "nav_device_profiles", icon: "devices", tint: "#5856D6", page: 5, target: "device_profiles", group: "nav_advanced" },
         { title: "nav_video_editor", icon: "crop", tint: "#FF9500", page: 5, target: "video_editor", group: "nav_advanced" },
         { title: "nav_subtitle_tools", icon: "subtitle", tint: "#007AFF", page: 5, target: "subtitle_tools", group: "nav_advanced" },
         { title: "nav_privacy_security", icon: "lock", tint: "#007AFF", page: 5, target: "privacy_security", group: "nav_advanced" },
@@ -234,6 +237,7 @@ ApplicationWindow {
         { title: "nav_ffmpeg_watch", icon: "clock", tint: "#5856D6", page: 5, target: "ffmpeg_watch", group: "nav_automation" },
         { title: "nav_cloud_integration", icon: "cloud", tint: "#32ADE6", page: 5, target: "cloud_integration", group: "nav_automation" },
         { title: "nav_metadata_hooks", icon: "file", tint: "#8E8E93", page: 5, target: "metadata_hooks", group: "nav_automation" },
+        { title: "nav_app_update", icon: "refresh", tint: "#007AFF", page: 5, target: "app_update", group: "nav_application" },
         { title: "nav_commercial_license", icon: "key", tint: "#FF9500", page: 5, target: "commercial_license", group: "nav_application" }
     ]
 
@@ -250,7 +254,6 @@ ApplicationWindow {
     property var smartQualityMetrics: ["none", "ssim", "vmaf"]
     property var hwOptions: ["auto", "cpu", "Apple (VideoToolbox)", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"]
     property var performanceProfiles: ["Quality", "Balanced", "Fast", "Small file"]
-    property var deviceProfiles: ["None", "iPhone 14/15/16", "iPad Pro", "Apple TV 4K HDR", "Android H.264 baseline", "Samsung TV", "PlayStation 5", "Xbox Series X", "Chromecast / Fire TV", "GoPro import", "DJI Drone import", "Steam Deck", "DVD compatible", "Blu-ray compatible"]
     property var rotateCanonicalOptions: ["0", "90° вправо", "90° вліво", "180°"]
     property var rotateOptions: ["0", I18n.t("rotate_right"), I18n.t("rotate_left"), "180°"]
     property var portraitCanonicalOptions: ["Вимкнено", "9:16 (1080x1920) - crop", "9:16 (1080x1920) - blur", "9:16 (720x1280) - crop", "9:16 (720x1280) - blur"]
@@ -393,6 +396,12 @@ ApplicationWindow {
 
     function openArchive() {
         root.openSidebarSection(7, "", root.navIndexFor(7, ""))
+    }
+
+    function checkSourceUpdate() {
+        sourceUpdateDialog.open()
+        if (backend)
+            backend.checkSourceUpdate()
     }
 
     function openSelectedSettings() {
@@ -707,7 +716,7 @@ ApplicationWindow {
             return { kind: I18n.t(item.group), title: I18n.t(item.title), detail: I18n.t(item.group), page: item.page, target: item.target }
         })
         globalSearchResults = sections.concat(backend ? backend.globalSearch(globalSearchText) : [])
-        if (globalSearchText.length >= 2)
+        if (needle.length >= 2 && globalSearchResults.length > 0)
             globalSearchPopup.open()
         else
             globalSearchPopup.close()
@@ -717,6 +726,9 @@ ApplicationWindow {
         if (!result)
             return
         openSidebarSection(Number(result.page || 0), String(result.target || ""), -1)
+        globalSearchText = ""
+        if (appSidebar && appSidebar.searchField)
+            appSidebar.searchField.clear()
         globalSearchPopup.close()
     }
 
@@ -879,6 +891,7 @@ ApplicationWindow {
                 onAddFilesRequested: root.addFilesForWorkspace()
                 onAddFolderRequested: root.addFolderForWorkspace()
                 onArchiveRequested: root.openArchive()
+                onUpdateRequested: root.checkSourceUpdate()
                 onDedupeRequested: backend && backend.deduplicateQueueByHash()
             }
 
@@ -963,8 +976,10 @@ ApplicationWindow {
         z: 1100
         modal: false
         focus: false
-        width: Math.min(520, root.width - 24)
-        height: Math.min(420, root.height - Theme.titlebarHeight - 100, searchResultsList.contentHeight + 24)
+        width: appSidebar && appSidebar.searchField
+            ? Math.min(360, appSidebar.searchField.width)
+            : Math.min(360, root.width - 24)
+        height: Math.min(260, Math.max(68, root.globalSearchResults.length * 58 + 16), Math.max(0, root.height - y - 12))
         x: Math.max(12, Math.min(root.width - width - 12, appSidebar.searchField.mapToItem(root.contentItem, 0, 0).x))
         y: appSidebar.searchField.mapToItem(root.contentItem, 0, appSidebar.searchField.height + 8).y
         padding: 8
@@ -1176,7 +1191,7 @@ ApplicationWindow {
                 spacing: 8
 
                 SecondaryButton {
-                    text: I18n.t("cancel")
+                    text: I18n.t("close")
                     onClicked: quickConvertPopup.close()
                 }
                 SecondaryButton {
@@ -1954,7 +1969,6 @@ ApplicationWindow {
             metaGenreField.text = preset.meta_genre || ""
             metaYearField.text = preset.meta_year || ""
             metaTrackField.text = preset.meta_track || ""
-            if (preset.device_profile) root.setComboText(deviceProfileCombo, preset.device_profile)
             privacyBlurRegionsField.text = preset.privacy_blur_regions || ""
             aiBlurCheck.checked = !!preset.ai_blur_enabled
             checksumCombo.currentIndex = Math.max(0, checksumCombo.find(preset.checksum_algorithm || "none"))
@@ -2101,7 +2115,6 @@ ApplicationWindow {
                 meta_genre: metaGenreField.text,
                 meta_year: metaYearField.text,
                 meta_track: metaTrackField.text,
-                device_profile: deviceProfileCombo.currentText,
                 privacy_blur_regions: privacyBlurRegionsField.text,
                 ai_blur_enabled: aiBlurCheck.checked,
                 sanitize_metadata: stripMetadataCheck.checked,
@@ -2246,24 +2259,6 @@ ApplicationWindow {
         }
 
         Panel {
-            id: deviceProfilesPanel
-            objectName: "settingsPage_device_profiles"
-            visible: settingsRoot.page === "device_profiles"
-            iconName: "devices"
-            iconTint: "#5856D6"
-            title: I18n.t("device_profiles")
-            FieldLabel { text: I18n.t("device_profile") }
-            AppComboBox { id: deviceProfileCombo; model: root.deviceProfiles; currentIndex: 0; onActivated: scheduleSettingsSync() }
-            Label {
-                Layout.fillWidth: true
-                text: I18n.t("device_profile_hint")
-                color: Theme.textMuted
-                font.pixelSize: Theme.fontMeta
-                wrapMode: Text.WordWrap
-            }
-        }
-
-        Panel {
             id: corePanel
             objectName: "settingsPage_core"
             visible: settingsRoot.page === "core"
@@ -2383,7 +2378,7 @@ ApplicationWindow {
             id: advancedToolsSection
             Layout.fillWidth: true
             spacing: Theme.space5
-            visible: ["core", "run", "output", "smart_convert", "device_profiles"].indexOf(settingsRoot.page) < 0
+            visible: ["core", "run", "output", "smart_convert"].indexOf(settingsRoot.page) < 0
 
         Panel {
             id: videoPanel
@@ -2748,6 +2743,64 @@ ApplicationWindow {
         }
 
         Panel {
+            id: appUpdatePanel
+            objectName: "settingsPage_app_update"
+            visible: settingsRoot.page === "app_update"
+            iconName: "refresh"
+            iconTint: "#007AFF"
+            title: I18n.t("app_update")
+
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("app_update_hint")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontSizeSm
+                wrapMode: Text.Wrap
+            }
+            BusyIndicator {
+                Layout.alignment: Qt.AlignHCenter
+                running: backend && backend.sourceUpdateChecking
+                visible: running
+            }
+            Label {
+                Layout.fillWidth: true
+                text: backend ? backend.sourceUpdateStatus : ""
+                color: backend && backend.sourceUpdateAvailable ? Theme.statusSuccess : Theme.textSecondary
+                font.pixelSize: Theme.fontSizeSm
+                wrapMode: Text.Wrap
+            }
+            Label {
+                Layout.fillWidth: true
+                visible: backend && backend.sourceUpdateCurrentCommit.length > 0 && backend.sourceUpdateRemoteCommit.length > 0
+                text: backend ? backend.sourceUpdateCurrentCommit.slice(0, 7) + " → " + backend.sourceUpdateRemoteCommit.slice(0, 7) : ""
+                color: Theme.textDisabled
+                font.family: Theme.monoFont
+                font.pixelSize: Theme.fontMeta
+            }
+            Flow {
+                Layout.fillWidth: true
+                spacing: Theme.space2
+                SecondaryButton {
+                    iconName: "refresh"
+                    text: I18n.t("check_update")
+                    enabled: backend && !backend.sourceUpdateChecking
+                    onClicked: backend.checkSourceUpdate()
+                }
+                PrimaryButton {
+                    text: I18n.t("apply_update")
+                    visible: backend && backend.sourceUpdateAvailable
+                    enabled: backend && !backend.sourceUpdateChecking
+                    onClicked: backend.applySourceUpdate()
+                }
+                PrimaryButton {
+                    text: I18n.t("restart_app")
+                    visible: backend && backend.sourceUpdateRestartRequired
+                    onClicked: backend.restartAfterSourceUpdate()
+                }
+            }
+        }
+
+        Panel {
             id: commercialLicensePanel
             objectName: "settingsPage_commercial_license"
             visible: settingsRoot.page === "commercial_license"
@@ -3088,6 +3141,84 @@ ApplicationWindow {
                 SecondaryButton { iconName: "share"; text: I18n.t("export"); onClicked: backend && backend.exportProject(collectSettings()) }
             }
         }
+        }
+    }
+
+    Dialog {
+        id: sourceUpdateDialog
+        objectName: "sourceUpdateDialog"
+        parent: Overlay.overlay
+        modal: true
+        focus: true
+        width: Math.min(520, root.width - Theme.space6 * 2)
+        title: "Оновлення застосунку"
+        standardButtons: Dialog.NoButton
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: Theme.panelBackground
+            radius: Theme.radiusMd
+            border.width: 1
+            border.color: Theme.borderDefault
+        }
+
+        contentItem: ColumnLayout {
+            spacing: Theme.space3
+
+            Label {
+                Layout.fillWidth: true
+                text: backend && backend.sourceUpdateRestartRequired
+                    ? "Оновлення вже завантажено"
+                    : backend && backend.sourceUpdateAvailable
+                        ? "Доступна нова версія з гілки main"
+                        : "Перевірка оновлень"
+                color: Theme.textPrimary
+                font.pixelSize: Theme.fontSizeMd
+                font.weight: Font.DemiBold
+                wrapMode: Text.Wrap
+            }
+            BusyIndicator {
+                Layout.alignment: Qt.AlignHCenter
+                running: backend && backend.sourceUpdateChecking
+                visible: running
+            }
+            Label {
+                Layout.fillWidth: true
+                text: backend ? backend.sourceUpdateStatus : "Підключення до GitHub…"
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontSizeSm
+                wrapMode: Text.Wrap
+            }
+            Label {
+                Layout.fillWidth: true
+                visible: backend && backend.sourceUpdateCurrentCommit.length > 0 && backend.sourceUpdateRemoteCommit.length > 0
+                text: backend ? backend.sourceUpdateCurrentCommit.slice(0, 7) + " → " + backend.sourceUpdateRemoteCommit.slice(0, 7) : ""
+                color: Theme.textDisabled
+                font.family: Theme.monoFont
+                font.pixelSize: Theme.fontMeta
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.space2
+                Item { Layout.fillWidth: true }
+                SecondaryButton {
+                    text: I18n.t("cancel")
+                    visible: !(backend && backend.sourceUpdateRestartRequired)
+                    enabled: !(backend && backend.sourceUpdateChecking)
+                    onClicked: sourceUpdateDialog.close()
+                }
+                PrimaryButton {
+                    text: "Оновити"
+                    visible: backend && backend.sourceUpdateAvailable
+                    enabled: backend && !backend.sourceUpdateChecking
+                    onClicked: backend.applySourceUpdate()
+                }
+                PrimaryButton {
+                    text: "Перезапустити"
+                    visible: backend && backend.sourceUpdateRestartRequired
+                    onClicked: backend.restartAfterSourceUpdate()
+                }
+            }
         }
     }
 

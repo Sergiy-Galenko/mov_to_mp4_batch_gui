@@ -33,29 +33,6 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(settings.crf, 28)
         self.assertEqual(settings.preset, "slow")
 
-    def test_device_profile_applies_container_video_and_audio_defaults(self) -> None:
-        settings = settings_map_to_model(
-            {
-                "device_profile": "Samsung TV",
-                "performance_profile": "Balanced",
-                "codec": "VP9 (WebM)",
-                "audio_codec": "aac",
-            },
-            defaults=ConversionSettings(),
-        )
-
-        self.assertEqual(settings.device_profile, "Samsung TV")
-        self.assertEqual(settings.out_video_format, "mkv")
-        self.assertEqual(settings.video_codec, "H.264 (AVC)")
-        self.assertEqual(settings.audio_codec, "ac3")
-        self.assertEqual(settings.audio_bitrate, "384k")
-
-        android = settings_map_to_model(
-            {"device_profile": "Android H.264 baseline"},
-            defaults=ConversionSettings(),
-        )
-        self.assertEqual(android.video_profile, "baseline")
-
     def test_extended_settings_are_parsed_and_clamped(self) -> None:
         settings = settings_map_to_model(
             {

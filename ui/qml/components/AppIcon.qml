@@ -55,8 +55,6 @@ Canvas {
             line(15, 5, 8, 12); line(8, 12, 15, 19)
         } else if (name === "sidebar") {
             rect(3, 4, 18, 16, 2); line(10, 4, 10, 20); line(5, 8, 8, 8); line(5, 12, 8, 12)
-        } else if (name === "devices") {
-            rect(2, 3, 14, 12, 2); line(9, 15, 9, 19); line(5, 20, 12, 20); rect(15, 9, 7, 13, 1); line(17, 19, 20, 19)
         } else if (name === "share") {
             line(12, 3, 12, 15); line(8, 7, 12, 3); line(16, 7, 12, 3); line(5, 11, 5, 21); line(5, 21, 19, 21); line(19, 21, 19, 11)
         } else if (name === "queue") {

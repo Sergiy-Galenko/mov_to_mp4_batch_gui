@@ -15,6 +15,7 @@ Rectangle {
     signal addFilesRequested()
     signal addFolderRequested()
     signal archiveRequested()
+    signal updateRequested()
     signal dedupeRequested()
 
     Layout.preferredWidth: collapsed ? 62 : Theme.sidebarWidth
@@ -190,6 +191,15 @@ Rectangle {
             Layout.preferredHeight: 1
             color: Theme.borderMuted
         }
+        AppButton {
+            objectName: "sidebarUpdateButton"
+            visible: !root.collapsed
+            Layout.fillWidth: true
+            Layout.leftMargin: 12; Layout.rightMargin: 12
+            text: I18n.t("check_update")
+            iconName: "refresh"
+            onClicked: root.updateRequested()
+        }
         RowLayout {
             Layout.fillWidth: true
             Layout.leftMargin: 12; Layout.rightMargin: 12
@@ -213,6 +223,14 @@ Rectangle {
                 accessibleLabel: I18n.t("nav_archive")
                 ToolTip.text: I18n.t("nav_archive")
                 onClicked: root.archiveRequested()
+            }
+            AppIconButton {
+                objectName: "sidebarUpdateIconButton"
+                visible: root.collapsed
+                iconName: "refresh"
+                accessibleLabel: I18n.t("check_update")
+                ToolTip.text: I18n.t("check_update")
+                onClicked: root.updateRequested()
             }
         }
     }

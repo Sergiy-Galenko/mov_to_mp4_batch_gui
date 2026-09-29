@@ -70,6 +70,9 @@ BODY = r"""                        self.speedHistoryChanged.emit(list(self._spee
                 elif etype == "paid_update_done":
                     _, info = event
                     self._apply_paid_update_result(info)
+                elif etype == "source_update_done":
+                    _, info = event
+                    self._apply_source_update_result(info)
                 elif etype == "dedupe_hash_done":
                     _, unique, removed, log_lines = event
                     self.queue_model.set_items(unique)

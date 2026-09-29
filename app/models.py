@@ -229,8 +229,6 @@ class ConversionSettings:
     meta_year: str = ""
     meta_track: str = ""
 
-    device_profile: str = ""
-
     privacy_blur_regions: str = ""
     ai_blur_enabled: bool = False
     checksum_algorithm: str = "none"

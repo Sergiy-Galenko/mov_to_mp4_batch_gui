@@ -366,7 +366,6 @@ ApplicationWindow {
                     "metadata_hooks",
                     "privacy_security",
                     "cloud_integration",
-                    "device_profiles",
                     "ffmpeg_watch",
                     "commercial_license",
                 ]
@@ -521,4 +520,3 @@ ApplicationWindow {
 
 if __name__ == "__main__":
     unittest.main()
-
