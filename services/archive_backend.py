@@ -42,6 +42,7 @@ class ArchiveBackend(BackgroundJob):
 
     isBusyChanged = QtCore.Signal()
     progressDetailsChanged = QtCore.Signal()
+    toolsChanged = QtCore.Signal()
     archiveFinished = QtCore.Signal(bool, str, dict)
     extractFinished = QtCore.Signal(bool, str, dict)
     archiveContentsReady = QtCore.Signal(str, list, int, int)
@@ -50,7 +51,10 @@ class ArchiveBackend(BackgroundJob):
 
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
-        self._service = ArchiveService()
+        self._tool_settings = QtCore.QSettings()
+        seven_zip_path = str(self._tool_settings.value("archive/7z_path", "") or "")
+        rar_path = str(self._tool_settings.value("archive/rar_path", "") or "")
+        self._service = ArchiveService(seven_zip_bin=seven_zip_path or None, rar_bin=rar_path or None)
         self._current_file = ""
         self._files_done = 0
         self._files_total = 0
@@ -95,15 +99,23 @@ class ArchiveBackend(BackgroundJob):
     def elapsedText(self) -> str:
         return _format_time(self._elapsed_seconds)
 
-    @QtCore.Property(bool, constant=True)
+    @QtCore.Property(bool, notify=toolsChanged)
     def has7z(self) -> bool:
         return self._service.has_7z
 
-    @QtCore.Property(bool, constant=True)
+    @QtCore.Property(bool, notify=toolsChanged)
     def hasRar(self) -> bool:
         return self._service.has_rar
 
-    @QtCore.Property(list, constant=True)
+    @QtCore.Property(str, notify=toolsChanged)
+    def sevenZipPath(self) -> str:
+        return str(self._service._7z_path or "")
+
+    @QtCore.Property(str, notify=toolsChanged)
+    def rarPath(self) -> str:
+        return str(self._service._rar_path or "")
+
+    @QtCore.Property(list, notify=toolsChanged)
     def supportedCreateFormats(self) -> list[dict[str, Any]]:
         formats = self._service.get_supported_formats()
         return [
@@ -123,7 +135,7 @@ class ArchiveBackend(BackgroundJob):
             if f.can_create
         ]
 
-    @QtCore.Property(list, constant=True)
+    @QtCore.Property(list, notify=toolsChanged)
     def supportedExtractFormats(self) -> list[dict[str, Any]]:
         formats = self._service.get_supported_formats()
         return [
@@ -150,6 +162,26 @@ class ArchiveBackend(BackgroundJob):
     # -------------------------------------------------------------------------
     # Slots callable from QML
     # -------------------------------------------------------------------------
+
+    @QtCore.Slot()
+    def pick7Zip(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            None, "Вкажіть 7-Zip", "", "7-Zip (7z 7za 7zr);;All Files (*)"
+        )
+        if path:
+            self._service._7z_path = path
+            self._tool_settings.setValue("archive/7z_path", path)
+            self.toolsChanged.emit()
+
+    @QtCore.Slot()
+    def pickRar(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            None, "Вкажіть WinRAR CLI", "", "RAR (rar);;All Files (*)"
+        )
+        if path:
+            self._service._rar_path = path
+            self._tool_settings.setValue("archive/rar_path", path)
+            self.toolsChanged.emit()
 
     @QtCore.Slot(list, result="QVariantMap")
     def analyzeSources(self, sources: list[str]) -> dict[str, Any]:
@@ -186,7 +218,7 @@ class ArchiveBackend(BackgroundJob):
             return str(Path.home())
         first = str(sources[0]).replace("file://", "").strip()
         p = Path(first)
-        return str(p.parent if p.is_file() else p.parent)
+        return str(p.parent)
 
     @QtCore.Slot(str, int, result="QVariantMap")
     def checkFreeDiskSpace(self, target_folder: str, required_bytes: int) -> dict[str, Any]:

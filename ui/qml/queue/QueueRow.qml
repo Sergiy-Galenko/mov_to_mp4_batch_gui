@@ -31,7 +31,7 @@ Rectangle {
     signal openOutputRequested(string path)
 
     implicitHeight: compact ? 56 : 64
-    color: selected ? Theme.selectionBackground : mouse.containsMouse ? Theme.overlayHover : Theme.panelBackground
+    color: selected ? Theme.selectionBackground : status === "failed" ? Theme.dangerSoft : mouse.containsMouse ? Theme.overlayHover : Theme.panelBackground
     activeFocusOnTab: true
     Accessible.role: Accessible.ListItem
     Accessible.name: fileName + ", " + statusLabel()
@@ -175,7 +175,15 @@ Rectangle {
             Layout.fillWidth: false
             spacing: 3
             AppProgressBar { Layout.fillWidth: true; value: Math.max(0, Math.min(1, root.progress)) }
-            Label { Layout.fillWidth: true; text: root.speedText || Math.round(root.progress * 100) + "%"; color: Theme.textMuted; font.family: Theme.monoFont; font.pixelSize: 10; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight }
+            Label {
+                Layout.fillWidth: true
+                text: (root.speedText || Math.round(root.progress * 100) + "%") + (root.etaText ? " · " + root.etaText : "")
+                color: Theme.textMuted
+                font.family: Theme.monoFont
+                font.pixelSize: 10
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+            }
         }
 
         Rectangle {
@@ -183,13 +191,30 @@ Rectangle {
             Layout.preferredWidth: 42
             Layout.preferredHeight: 24
             color: Theme.transparent
-            Label { anchors.centerIn: parent; text: Math.round(root.progress * 100) + "%"; color: Theme.textSecondary; font.pixelSize: Theme.fontMeta }
+            Label { anchors.centerIn: parent; text: Math.round(root.progress * 100) + "%" + (root.etaText ? "\n" + root.etaText : ""); color: Theme.textSecondary; font.pixelSize: Theme.fontMeta; horizontalAlignment: Text.AlignHCenter }
         }
 
         StatusBadge {
             Layout.preferredWidth: 112
             status: root.status
             label: root.statusLabel()
+            detail: root.errorText.length > 0 ? root.errorText : root.outputPath
+        }
+
+        AppIconButton {
+            visible: root.status === "success" && root.outputPath.length > 0
+            iconName: "folder"
+            accessibleLabel: I18n.t("open_output")
+            ToolTip.text: root.outputPath
+            onClicked: root.openOutputRequested(root.filePath)
+        }
+
+        AppIconButton {
+            visible: root.status === "failed" || root.status === "cancelled"
+            iconName: "refresh"
+            accessibleLabel: I18n.t("retry")
+            ToolTip.text: root.errorText || I18n.t("retry")
+            onClicked: root.retryRequested(root.filePath)
         }
 
         AppIconButton {

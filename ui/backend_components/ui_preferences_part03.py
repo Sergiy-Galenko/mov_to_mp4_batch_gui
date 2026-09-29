@@ -73,7 +73,7 @@ BODY = r'''    def setupSystemTray(self) -> None:
         self._source_update_checking = True
         self._source_update_available = False
         self._source_update_restart_required = False
-        self._source_update_status = "Перевіряємо main у GitHub…"
+        self._source_update_status = "Перевіряємо оновлення у GitHub…"
         self.sourceUpdateChanged.emit()
         threading.Thread(target=lambda: self.event_queue.put(("source_update_done", self.source_update_service.check())), daemon=True).start()
 
@@ -93,6 +93,8 @@ BODY = r'''    def setupSystemTray(self) -> None:
         self._source_update_status = info.message
         self._source_update_local_commit = info.local_commit
         self._source_update_remote_commit = info.remote_commit
+        if info.downloaded_path:
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(info.downloaded_path))
         self.sourceUpdateChanged.emit()
         self._append_log("OK" if info.available or info.restart_required else "INFO", f"Source update: {info.message}")
         self.toastRequested.emit(info.message)

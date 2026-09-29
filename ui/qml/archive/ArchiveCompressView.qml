@@ -257,7 +257,11 @@ Rectangle {
                         width: fileList.width
                         height: 34
                         radius: Theme.radiusSm
-                        color: index % 2 === 0 ? Theme.surfaceBackground : "transparent"
+                        // `surfaceBackground` is not a Theme token.  Its undefined value
+                        // was rendered as white by Qt, making filenames unreadable.
+                        color: index % 2 === 0 ? Theme.panelSecondary : Theme.panelBackground
+                        border.width: 1
+                        border.color: Theme.borderMuted
 
                         RowLayout {
                             anchors.fill: parent
@@ -284,10 +288,12 @@ Rectangle {
                                 elide: Text.ElideMiddle
                             }
 
-                            AppIconButton {
-                                iconName: "close"
-                                implicitWidth: 20
-                                implicitHeight: 20
+                            AppButton {
+                                text: I18n.t("remove")
+                                iconName: "trash"
+                                variant: "ghost"
+                                implicitWidth: 102
+                                implicitHeight: 28
                                 onClicked: root.removePath(index)
                             }
                         }
@@ -331,6 +337,7 @@ Rectangle {
             // Format Selector
             // -------------------------------------------------------------
             ColumnLayout {
+                visible: root.selectedSources.length > 0
                 Layout.fillWidth: true
                 spacing: Theme.space1
 
@@ -380,6 +387,7 @@ Rectangle {
             // Compression Preset
             // -------------------------------------------------------------
             ColumnLayout {
+                visible: root.selectedSources.length > 0
                 Layout.fillWidth: true
                 spacing: Theme.space1
 
@@ -432,6 +440,7 @@ Rectangle {
             // Archive Name
             // -------------------------------------------------------------
             ColumnLayout {
+                visible: root.selectedSources.length > 0
                 Layout.fillWidth: true
                 spacing: Theme.space1
 
@@ -467,6 +476,7 @@ Rectangle {
             // Output Location
             // -------------------------------------------------------------
             ColumnLayout {
+                visible: root.selectedSources.length > 0
                 Layout.fillWidth: true
                 spacing: Theme.space1
 
@@ -514,6 +524,7 @@ Rectangle {
             // Simple Password Encryption
             // -------------------------------------------------------------
             ColumnLayout {
+                visible: root.selectedSources.length > 0
                 Layout.fillWidth: true
                 spacing: Theme.space2
 
@@ -592,6 +603,7 @@ Rectangle {
             // Collapsible Advanced Settings
             // -------------------------------------------------------------
             ColumnLayout {
+                visible: root.selectedSources.length > 0
                 Layout.fillWidth: true
                 spacing: Theme.space2
 
@@ -671,6 +683,7 @@ Rectangle {
             // Main Action Button
             // -------------------------------------------------------------
             PrimaryButton {
+                visible: root.selectedSources.length > 0
                 Layout.fillWidth: true
                 implicitHeight: 40
                 text: I18n.t("archive.create_archive")
@@ -683,7 +696,9 @@ Rectangle {
     // Dialogs
     FileDialog {
         id: fileDialog
+        objectName: "archiveSourceFilesDialog"
         title: I18n.t("archive.select_files")
+        fileMode: FileDialog.OpenFiles
         onAccepted: {
             var urls = []
             for (var i = 0; i < selectedFiles.length; ++i) {
@@ -695,6 +710,7 @@ Rectangle {
 
     FolderDialog {
         id: folderDialog
+        objectName: "archiveSourceFolderDialog"
         title: I18n.t("archive.select_folder")
         onAccepted: root.addPaths([selectedFolder])
     }

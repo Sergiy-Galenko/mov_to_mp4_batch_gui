@@ -316,7 +316,9 @@ Rectangle {
                         width: previewList.width
                         height: 32
                         radius: Theme.radiusSm
-                        color: index % 2 === 0 ? Theme.surfaceBackground : "transparent"
+                        color: index % 2 === 0 ? Theme.panelSecondary : Theme.panelBackground
+                        border.width: 1
+                        border.color: Theme.borderMuted
 
                         RowLayout {
                             anchors.fill: parent

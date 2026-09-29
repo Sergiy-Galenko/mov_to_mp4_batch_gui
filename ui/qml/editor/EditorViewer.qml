@@ -145,7 +145,7 @@ Rectangle {
                     EditorButton { iconName: "skip-back"; iconOnly: true; text: I18n.t("editor.go_start"); onClicked: { root.pause(); editor.seek(0) } }
                     EditorButton { iconName: "back"; iconOnly: true; text: I18n.t("editor.previous_frame"); onClicked: root.nextFrame(-1) }
                     EditorButton { iconName: root.playing ? "pause" : "play"; iconOnly: true; primary: true; text: I18n.t("studio.play"); enabled: editor.duration > 0; onClicked: root.togglePlayback() }
-                    EditorButton { iconName: "chevron"; iconOnly: true; text: I18n.t("editor.next_frame"); onClicked: root.nextFrame(1) }
+                    EditorButton { iconName: "chevron-right"; iconOnly: true; text: I18n.t("editor.next_frame"); onClicked: root.nextFrame(1) }
                     EditorButton { iconName: "skip-forward"; iconOnly: true; text: I18n.t("editor.go_end"); onClicked: { root.pause(); editor.seek(editor.duration) } }
                     EditorButton { iconName: "refresh"; iconOnly: true; text: I18n.t("editor.loop"); checked: editor.loopEnabled; onClicked: editor.loopEnabled = !editor.loopEnabled }
                     Item { Layout.fillWidth: true }

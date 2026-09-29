@@ -66,3 +66,25 @@ def test_apply_fast_forwards_and_requires_restart(tmp_path):
 
     assert info.restart_required is True
     assert ("merge", "--ff-only", "FETCH_HEAD") in fake_git.calls
+
+
+def test_packaged_app_downloads_the_platform_release(tmp_path, monkeypatch):
+    monkeypatch.setattr("services.source_update_service.Path.home", lambda: tmp_path)
+    release = {
+        "tag_name": "v2.1.0",
+        "assets": [{"name": "MediaConverter-mac.dmg", "browser_download_url": "https://example.test/MediaConverter-mac.dmg"}],
+    }
+    downloaded: list[tuple[str, Path]] = []
+
+    def download(url: str, target: Path) -> None:
+        downloaded.append((url, target))
+        target.write_bytes(b"installer")
+
+    service = SourceUpdateService(tmp_path, frozen=True, version="2.0.0", fetch_release=lambda: release, download=download)
+    available = service.check()
+    result = service.apply()
+
+    assert available.available is True
+    assert available.package_url.endswith(".dmg")
+    assert downloaded[0][0] == available.package_url
+    assert Path(result.downloaded_path).read_bytes() == b"installer"

@@ -6,6 +6,7 @@ import App 1.0
 TextField {
     id: control
     property bool invalid: false
+    property string errorText: ""
     property bool search: false
     font.pixelSize: Theme.fontSizeSm
     color: Theme.text
@@ -21,8 +22,12 @@ TextField {
     verticalAlignment: TextInput.AlignVCenter
     selectByMouse: true
     Accessible.name: placeholderText
+    Accessible.description: errorText
     clip: true
     hoverEnabled: true
+    ToolTip.visible: errorText.length > 0 && (activeFocus || hovered)
+    ToolTip.delay: 300
+    ToolTip.text: errorText
 
     background: Rectangle {
         radius: control.search && Theme.isMac ? height / 2 : Theme.radiusInput

@@ -10,6 +10,7 @@ Rectangle {
     property bool collapsed: false
     property int activeIndex: 0
     property var navigationItems: []
+    property bool moreExpanded: false
     property alias searchField: navigationSearch
     signal sectionRequested(int pageIndex, string target, int navIndex)
     signal addFilesRequested()
@@ -25,7 +26,11 @@ Rectangle {
 
     onCollapsedChanged: if (appRoot && appRoot.sidebarCollapsed !== collapsed) appRoot.sidebarCollapsed = collapsed
 
-    onActiveIndexChanged: revealActiveTimer.restart()
+    onActiveIndexChanged: {
+        if (!root.collapsed && root.activeIndex >= 0 && root.activeIndex < root.navigationItems.length && !root.navigationItems[root.activeIndex].primary)
+            root.moreExpanded = true
+        revealActiveTimer.restart()
+    }
     onHeightChanged: revealActiveTimer.restart()
     Component.onCompleted: revealActiveTimer.restart()
     Timer { id: revealActiveTimer; interval: 50; onTriggered: root.ensureActiveVisible() }
@@ -40,9 +45,20 @@ Rectangle {
             viewport.contentY = Math.min(bottom - viewport.height, Math.max(0, viewport.contentHeight - viewport.height))
     }
 
+    function navigationItemVisible(index) {
+        if (index < 0 || index >= root.navigationItems.length)
+            return false
+        return root.collapsed || root.moreExpanded || !!root.navigationItems[index].primary
+    }
+
     function groupVisible(index) {
-        if (root.collapsed || index < 0 || index >= root.navigationItems.length) return false
-        return index === 0 || root.navigationItems[index - 1].group !== root.navigationItems[index].group
+        if (root.collapsed || !root.navigationItemVisible(index))
+            return false
+        for (var previous = index - 1; previous >= 0; --previous) {
+            if (root.navigationItemVisible(previous))
+                return root.navigationItems[previous].group !== root.navigationItems[index].group
+        }
+        return true
     }
 
     ColumnLayout {
@@ -62,9 +78,14 @@ Rectangle {
             text: appRoot ? appRoot.globalSearchText : ""
             onTextChanged: if (appRoot) appRoot.runGlobalSearch(text)
             Keys.onReturnPressed: {
-                if (appRoot && appRoot.globalSearchResults.length) appRoot.activateSearchResult(appRoot.globalSearchResults[0])
+                if (appRoot) appRoot.activateSelectedSearchResult()
             }
-            Keys.onEscapePressed: clear()
+            Keys.onDownPressed: if (appRoot) appRoot.moveGlobalSearchSelection(1)
+            Keys.onUpPressed: if (appRoot) appRoot.moveGlobalSearchSelection(-1)
+            Keys.onEscapePressed: {
+                clear()
+                if (appRoot) appRoot.runGlobalSearch("")
+            }
         }
 
         RowLayout {
@@ -115,7 +136,7 @@ Rectangle {
                         required property int index
                         required property var modelData
                         width: parent.width
-                        height: (root.groupVisible(index) ? 27 : 0) + Theme.navigationHeight
+                        height: root.navigationItemVisible(index) ? (root.groupVisible(index) ? 27 : 0) + Theme.navigationHeight : 0
                         Label {
                             visible: root.groupVisible(index)
                             anchors.left: parent.left; anchors.right: parent.right
@@ -183,6 +204,14 @@ Rectangle {
                         }
                     }
                 }
+                AppButton {
+                    visible: !root.collapsed
+                    width: parent.width - 16
+                    x: 8
+                    text: root.moreExpanded ? I18n.t("show_less") : I18n.t("show_more")
+                    iconName: root.moreExpanded ? "close" : "plus"
+                    onClicked: root.moreExpanded = !root.moreExpanded
+                }
             }
         }
         Rectangle {
@@ -190,15 +219,6 @@ Rectangle {
             Layout.leftMargin: 16; Layout.rightMargin: 16
             Layout.preferredHeight: 1
             color: Theme.borderMuted
-        }
-        AppButton {
-            objectName: "sidebarUpdateButton"
-            visible: !root.collapsed
-            Layout.fillWidth: true
-            Layout.leftMargin: 12; Layout.rightMargin: 12
-            text: I18n.t("check_update")
-            iconName: "refresh"
-            onClicked: root.updateRequested()
         }
         RowLayout {
             Layout.fillWidth: true
@@ -226,7 +246,6 @@ Rectangle {
             }
             AppIconButton {
                 objectName: "sidebarUpdateIconButton"
-                visible: root.collapsed
                 iconName: "refresh"
                 accessibleLabel: I18n.t("check_update")
                 ToolTip.text: I18n.t("check_update")

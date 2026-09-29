@@ -118,6 +118,31 @@ Rectangle {
             color: Theme.borderMuted
         }
 
+        Rectangle {
+            visible: !!archiveBackend
+            Layout.fillWidth: true
+            implicitHeight: toolStatusRow.implicitHeight + Theme.space2 * 2
+            radius: Theme.radiusSm
+            color: (archiveBackend && archiveBackend.has7z && archiveBackend.hasRar) ? Theme.successSoft : Theme.warningSoft
+            border.width: 1
+            border.color: (archiveBackend && archiveBackend.has7z && archiveBackend.hasRar) ? Theme.statusSuccess : Theme.accentWarn
+
+            RowLayout {
+                id: toolStatusRow
+                anchors.fill: parent
+                anchors.margins: Theme.space2
+                spacing: Theme.space3
+                Label { text: "7-Zip: " + (archiveBackend && archiveBackend.has7z ? I18n.t("tool_ready") : I18n.t("tool_missing")); color: archiveBackend && archiveBackend.has7z ? Theme.statusSuccess : Theme.accentWarn; font.pixelSize: Theme.fontMeta }
+                Label { text: "RAR: " + (archiveBackend && archiveBackend.hasRar ? I18n.t("tool_ready") : I18n.t("tool_missing")); color: archiveBackend && archiveBackend.hasRar ? Theme.statusSuccess : Theme.accentWarn; font.pixelSize: Theme.fontMeta }
+                Item { Layout.fillWidth: true }
+                SecondaryButton {
+                    text: I18n.t("configure")
+                    implicitHeight: 28
+                    onClicked: root.appRoot && root.appRoot.openSidebarSection(5, "app_update", root.appRoot.navIndexFor(5, "app_update"))
+                }
+            }
+        }
+
         // -------------------------------------------------------------
         // Error banner if any
         // -------------------------------------------------------------

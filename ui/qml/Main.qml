@@ -105,6 +105,7 @@ ApplicationWindow {
     property int activeSection: 0
     property string globalSearchText: ""
     property var globalSearchResults: []
+    property int globalSearchIndex: 0
     property var toastHistory: []
     property bool logErrorsOnly: false
     property var validationResult: ({ ok: true, errors: {}, warnings: [], summary: "OK" })
@@ -216,15 +217,15 @@ ApplicationWindow {
         }
     }
     property var navigationItems: [
-        { title: "nav_queue", icon: "queue", tint: "#007AFF", page: 0, target: "", group: "nav_workspace" },
+        { title: "nav_queue", icon: "queue", tint: "#007AFF", page: 0, target: "", group: "nav_workspace", primary: true },
         { title: "nav_montage", icon: "film", tint: "#AF52DE", page: 0, target: "montage", group: "nav_workspace" },
         { title: "nav_telegram_note", icon: "telegram", tint: "#2AABEE", page: 6, target: "", group: "nav_workspace" },
-        { title: "nav_archive", icon: "archive", tint: "#FF9500", page: 7, target: "", group: "nav_workspace" },
-        { title: "nav_downloads", icon: "download", tint: "#34C759", page: 4, target: "", group: "nav_workspace" },
+        { title: "nav_archive", icon: "archive", tint: "#FF9500", page: 7, target: "", group: "nav_workspace", primary: true },
+        { title: "nav_downloads", icon: "download", tint: "#34C759", page: 4, target: "", group: "nav_workspace", primary: true },
         { title: "nav_presets", icon: "sliders", tint: "#AF52DE", page: 2, target: "", group: "nav_workspace" },
         { title: "nav_analytics", icon: "chart", tint: "#FF9500", page: 1, target: "", group: "nav_workspace" },
-        { title: "nav_core", icon: "settings", tint: "#8E8E93", page: 5, target: "core", group: "nav_conversion" },
-        { title: "nav_output", icon: "folder", tint: "#007AFF", page: 5, target: "output", group: "nav_conversion" },
+        { title: "nav_core", icon: "settings", tint: "#8E8E93", page: 5, target: "core", group: "nav_conversion", primary: true },
+        { title: "nav_output", icon: "folder", tint: "#007AFF", page: 5, target: "output", group: "nav_conversion", primary: true },
         { title: "nav_video", icon: "video", tint: "#AF52DE", page: 5, target: "video", group: "nav_conversion" },
         { title: "nav_audio_subtitles", icon: "audio", tint: "#FF2D55", page: 5, target: "audio_subtitles", group: "nav_conversion" },
         { title: "nav_images_sheets", icon: "image", tint: "#34C759", page: 5, target: "images_sheets", group: "nav_conversion" },
@@ -292,6 +293,11 @@ ApplicationWindow {
         validationResult = backend.validateSettings(collectSettings())
         formValid = !!validationResult.ok
         return formValid
+    }
+
+    function fieldError(name) {
+        return validationResult && validationResult.errors && validationResult.errors[name]
+            ? String(validationResult.errors[name]) : ""
     }
 
     function startIfValid() {
@@ -716,6 +722,7 @@ ApplicationWindow {
             return { kind: I18n.t(item.group), title: I18n.t(item.title), detail: I18n.t(item.group), page: item.page, target: item.target }
         })
         globalSearchResults = sections.concat(backend ? backend.globalSearch(globalSearchText) : [])
+        globalSearchIndex = 0
         if (needle.length >= 2 && globalSearchResults.length > 0)
             globalSearchPopup.open()
         else
@@ -730,6 +737,18 @@ ApplicationWindow {
         if (appSidebar && appSidebar.searchField)
             appSidebar.searchField.clear()
         globalSearchPopup.close()
+    }
+
+    function moveGlobalSearchSelection(delta) {
+        if (!globalSearchResults.length)
+            return
+        globalSearchIndex = (globalSearchIndex + delta + globalSearchResults.length) % globalSearchResults.length
+        globalSearchPopup.open()
+    }
+
+    function activateSelectedSearchResult() {
+        if (globalSearchResults.length)
+            activateSearchResult(globalSearchResults[globalSearchIndex])
     }
 
     function queueItemMatches(name, path, mediaType, status) {
@@ -1003,7 +1022,7 @@ ApplicationWindow {
                 onClicked: root.activateSearchResult(modelData)
                 background: Rectangle {
                     radius: Theme.radiusSm
-                    color: parent.hovered ? Theme.overlayHover : Theme.transparent
+                    color: parent.hovered || index === root.globalSearchIndex ? Theme.overlayHover : Theme.transparent
                 }
                 contentItem: ColumnLayout {
                     spacing: 2
@@ -1392,6 +1411,7 @@ ApplicationWindow {
         }
 
         RowLayout {
+            visible: String(youtubeUrlField.text).trim().length > 0 || (backend && backend.youtubeDownloadHistory.length > 0)
             Layout.fillWidth: true
             spacing: 8
             AppButton {
@@ -1419,6 +1439,7 @@ ApplicationWindow {
         }
 
         RowLayout {
+            visible: backend && backend.youtubeDownloadHistory.length > 0
             Layout.fillWidth: true
             AppComboBox {
                 id: youtubeHistoryCombo
@@ -1434,6 +1455,7 @@ ApplicationWindow {
             }
         }
         RowLayout {
+            visible: String(youtubeUrlField.text).trim().length > 0 || (backend && backend.youtubeDownloadHistory.length > 0)
             Layout.fillWidth: true
             spacing: 8
             SecondaryButton {
@@ -1519,7 +1541,16 @@ ApplicationWindow {
                 }
             }
         }
+        Label {
+            visible: String(youtubeUrlField.text).trim().length === 0
+            Layout.fillWidth: true
+            text: I18n.t("youtube_empty_prompt")
+            color: Theme.textSecondary
+            font.pixelSize: Theme.fontSizeSm
+            wrapMode: Text.WordWrap
+        }
         GridLayout {
+            visible: String(youtubeUrlField.text).trim().length > 0
             Layout.fillWidth: true
             columns: 2
             rowSpacing: 8
@@ -1559,13 +1590,15 @@ ApplicationWindow {
             }
         }
         Label {
+            visible: String(youtubeUrlField.text).trim().length > 0
             Layout.fillWidth: true
-                text: backend ? backend.youtubeCookiesStatus : "Cookies: --"
+            text: backend ? backend.youtubeCookiesStatus : "Cookies: --"
             color: backend && backend.youtubeCookiesStatus.indexOf("Cookies: підключено") >= 0 ? Theme.statusSuccess : Theme.textMuted
             font.pixelSize: Theme.fontMeta
             elide: Text.ElideRight
         }
         RowLayout {
+            visible: String(youtubeUrlField.text).trim().length > 0
             Layout.fillWidth: true
             AppCheckBox {
                 id: youtubePlaylistCheck
@@ -1850,6 +1883,7 @@ ApplicationWindow {
         id: settingsRoot
         spacing: Theme.space5
         readonly property string page: root.pendingSettingsTarget || "core"
+        readonly property bool compactFields: width < 720
         property string subtitleDevice: "auto"
 
         WhisperModelManagerModal {
@@ -2223,7 +2257,7 @@ ApplicationWindow {
             AppSwitch { id: smartConvertCheck; objectName: "smartConvertSwitch"; text: I18n.t("smart_convert_enabled"); onToggled: scheduleSettingsSync() }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("smart_content_type") }
@@ -2269,7 +2303,7 @@ ApplicationWindow {
             AppComboBox { id: operationCombo; model: root.operationOptions; onActivated: scheduleSettingsSync() }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("video") }
@@ -2288,15 +2322,15 @@ ApplicationWindow {
                 AppComboBox { id: hwCombo; model: root.hwOptions; currentIndex: 0; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("performance_profile") }
                 AppComboBox { id: performanceProfileCombo; model: root.performanceProfiles; currentIndex: 1; onActivated: scheduleSettingsSync() }
-                FieldLabel { text: I18n.t("target_size_mb") }
-                AppTextField { id: targetSizeField; objectName: "targetSizeField"; placeholderText: I18n.t("target_size_hint"); onEditingFinished: scheduleSettingsSync() }
-                FieldLabel { text: I18n.t("cpu_load_limit") }
+                FieldLabel { text: I18n.t("target_size_mb"); helpText: I18n.t("target_size_hint") }
+                AppTextField { id: targetSizeField; objectName: "targetSizeField"; placeholderText: I18n.t("target_size_hint"); invalid: root.fieldError("target_size_mb").length > 0; errorText: root.fieldError("target_size_mb"); onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("cpu_load_limit"); helpText: I18n.t("settings_hint_limits") }
                 AppSpinBox { id: cpuLimitSpin; from: 1; to: 100; value: 95; onValueModified: backend.autoTuneEnabled = false; onValueChanged: scheduleSettingsSync() }
-                FieldLabel { text: I18n.t("gpu_load_limit") }
+                FieldLabel { text: I18n.t("gpu_load_limit"); helpText: I18n.t("settings_hint_limits") }
                 AppSpinBox { id: gpuLimitSpin; from: 1; to: 100; value: 98; onValueModified: backend.autoTuneEnabled = false; onValueChanged: scheduleSettingsSync() }
-                FieldLabel { text: "Disk reserve (MiB)" }
+                FieldLabel { text: I18n.t("disk_reserve"); helpText: I18n.t("settings_hint_disk_reserve") }
                 AppSpinBox { id: diskSafetyMarginSpin; from: 0; to: 10240; value: 512; onValueChanged: scheduleSettingsSync() }
-                FieldLabel { text: "CRF" }
+                FieldLabel { text: "CRF"; helpText: I18n.t("settings_hint_crf") }
                 AppSpinBox { id: crfSpin; from: 0; to: 51; value: 23; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("preset") }
                 AppComboBox { id: presetCombo; model: ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"]; currentIndex: 5; onActivated: scheduleSettingsSync() }
@@ -2325,7 +2359,7 @@ ApplicationWindow {
             iconName: "folder"
             iconTint: "#007AFF"
             title: I18n.t("output")
-            AppTextField { id: outputDirField; text: backend ? backend.outputDir : ""; placeholderText: I18n.t("output_folder_required"); onEditingFinished: { if (backend) backend.outputDir = text; scheduleSettingsSync() } }
+            AppTextField { id: outputDirField; text: backend ? backend.outputDir : ""; placeholderText: I18n.t("output_folder_required"); invalid: root.fieldError("output_dir").length > 0; errorText: root.fieldError("output_dir"); onEditingFinished: { if (backend) backend.outputDir = text; scheduleSettingsSync() } }
             Flow {
                 Layout.fillWidth: true
                 spacing: Theme.space2
@@ -2389,7 +2423,7 @@ ApplicationWindow {
             title: I18n.t("video")
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("portrait") }
@@ -2410,10 +2444,10 @@ ApplicationWindow {
                 AppComboBox { id: rotateCombo; model: root.rotateOptions; currentIndex: 0; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("speed") }
                 AppTextField { id: speedField; onEditingFinished: scheduleSettingsSync() }
-                FieldLabel { text: I18n.t("trim_start") }
-                AppTextField { id: trimStartField; placeholderText: "00:00:00"; onEditingFinished: scheduleSettingsSync() }
-                FieldLabel { text: I18n.t("trim_end") }
-                AppTextField { id: trimEndField; placeholderText: "00:00:10"; onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("trim_start"); helpText: I18n.t("settings_hint_timecode") }
+                AppTextField { id: trimStartField; placeholderText: "00:00:00"; invalid: root.fieldError("trim_start").length > 0; errorText: root.fieldError("trim_start"); onEditingFinished: scheduleSettingsSync() }
+                FieldLabel { text: I18n.t("trim_end"); helpText: I18n.t("settings_hint_timecode") }
+                AppTextField { id: trimEndField; placeholderText: "00:00:10"; invalid: root.fieldError("trim_end").length > 0; errorText: root.fieldError("trim_end"); onEditingFinished: scheduleSettingsSync() }
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -2443,7 +2477,7 @@ ApplicationWindow {
             }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("editor_denoise") }
@@ -2470,7 +2504,7 @@ ApplicationWindow {
             title: I18n.t("audio_subtitles")
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("bitrate") }
@@ -2556,7 +2590,7 @@ ApplicationWindow {
             title: I18n.t("subtitle_tools")
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("subtitle_sync_ms") }
@@ -2586,7 +2620,7 @@ ApplicationWindow {
             title: I18n.t("images_sheets")
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 FieldLabel { text: I18n.t("image_quality") }
                 AppSpinBox { id: imgQualitySpin; from: 1; to: 100; value: 90; onValueChanged: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("thumbnail_time") }
@@ -2616,7 +2650,7 @@ ApplicationWindow {
             }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 FieldLabel { text: I18n.t("position") }
                 AppComboBox { id: wmPosCombo; model: root.positionOptions; currentIndex: 3; onActivated: scheduleSettingsSync() }
                 FieldLabel { text: I18n.t("opacity") }
@@ -2685,7 +2719,7 @@ ApplicationWindow {
             }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("checksum_algorithm") }
@@ -2723,7 +2757,7 @@ ApplicationWindow {
             }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("cloud_provider") }
@@ -2798,6 +2832,50 @@ ApplicationWindow {
                     onClicked: backend.restartAfterSourceUpdate()
                 }
             }
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: toolsLayout.implicitHeight + Theme.space3 * 2
+                radius: Theme.radiusSm
+                color: Theme.panelSecondary
+                border.width: 1
+                border.color: Theme.borderMuted
+
+                ColumnLayout {
+                    id: toolsLayout
+                    anchors.fill: parent
+                    anchors.margins: Theme.space3
+                    spacing: Theme.space2
+                    Label { text: I18n.t("external_tools"); color: Theme.textPrimary; font.pixelSize: Theme.fontSizeSm; font.weight: Font.DemiBold }
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: settingsRoot.compactFields ? 1 : 2
+                        rowSpacing: Theme.space2
+                        columnSpacing: Theme.space3
+                        FieldLabel { text: "FFmpeg" }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label { Layout.fillWidth: true; text: backend && backend.ffmpegPath.length > 0 ? I18n.t("tool_ready") : I18n.t("tool_missing"); color: backend && backend.ffmpegPath.length > 0 ? Theme.statusSuccess : Theme.accentWarn; font.pixelSize: Theme.fontMeta }
+                            SecondaryButton { text: I18n.t("configure"); implicitHeight: 28; onClicked: backend && backend.pickFfmpeg() }
+                            SecondaryButton { iconName: "download"; text: I18n.t("install"); implicitHeight: 28; onClicked: backend && backend.updateFfmpeg() }
+                        }
+                        FieldLabel { text: "7-Zip" }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label { Layout.fillWidth: true; text: backend && backend.archive && backend.archive.has7z ? I18n.t("tool_ready") : I18n.t("tool_missing"); color: backend && backend.archive && backend.archive.has7z ? Theme.statusSuccess : Theme.accentWarn; font.pixelSize: Theme.fontMeta }
+                            SecondaryButton { text: I18n.t("configure"); implicitHeight: 28; onClicked: backend && backend.archive && backend.archive.pick7Zip() }
+                            SecondaryButton { iconName: "download"; text: I18n.t("install"); implicitHeight: 28; onClicked: Qt.openUrlExternally("https://www.7-zip.org/") }
+                        }
+                        FieldLabel { text: "WinRAR CLI" }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label { Layout.fillWidth: true; text: backend && backend.archive && backend.archive.hasRar ? I18n.t("tool_ready") : I18n.t("tool_missing"); color: backend && backend.archive && backend.archive.hasRar ? Theme.statusSuccess : Theme.accentWarn; font.pixelSize: Theme.fontMeta }
+                            SecondaryButton { text: I18n.t("configure"); implicitHeight: 28; onClicked: backend && backend.archive && backend.archive.pickRar() }
+                            SecondaryButton { iconName: "download"; text: I18n.t("install"); implicitHeight: 28; onClicked: Qt.openUrlExternally("https://www.rarlab.com/") }
+                        }
+                    }
+                    Label { Layout.fillWidth: true; text: I18n.t("archive_tools_hint"); color: Theme.textMuted; font.pixelSize: Theme.fontMeta; wrapMode: Text.Wrap }
+                }
+            }
         }
 
         Panel {
@@ -2816,7 +2894,7 @@ ApplicationWindow {
             }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("license_plan") }
@@ -3026,7 +3104,7 @@ ApplicationWindow {
             }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 FieldLabel { text: I18n.t("scheduler_cpu") }
@@ -3107,7 +3185,7 @@ ApplicationWindow {
             }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: settingsRoot.compactFields ? 1 : 2
                 rowSpacing: 8
                 columnSpacing: 8
                 AppTextField {

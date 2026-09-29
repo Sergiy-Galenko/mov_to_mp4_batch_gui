@@ -7,6 +7,7 @@ Rectangle {
     id: root
     property string status: "queued"
     property string label: ""
+    property string detail: ""
 
     function canonicalStatus() {
         if (status === "success")
@@ -33,6 +34,15 @@ Rectangle {
     color: Theme.statusFill(canonicalStatus())
     border.width: 1
     border.color: Theme.statusColor(canonicalStatus())
+
+    MouseArea {
+        id: hoverArea
+        anchors.fill: parent
+        hoverEnabled: root.detail.length > 0
+    }
+    ToolTip.visible: hoverArea.containsMouse && root.detail.length > 0
+    ToolTip.delay: 350
+    ToolTip.text: root.detail
 
     RowLayout {
         id: badgeRow

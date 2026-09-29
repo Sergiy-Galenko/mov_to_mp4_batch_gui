@@ -51,8 +51,18 @@ Canvas {
             ctx.beginPath(); ctx.moveTo(pt(19), pt(5)); ctx.lineTo(pt(8), pt(12)); ctx.lineTo(pt(19), pt(19)); ctx.closePath(); ctx.fill(); line(5, 5, 5, 19)
         } else if (name === "skip" || name === "skip-forward") {
             ctx.beginPath(); ctx.moveTo(pt(5), pt(5)); ctx.lineTo(pt(16), pt(12)); ctx.lineTo(pt(5), pt(19)); ctx.closePath(); ctx.fill(); line(19, 5, 19, 19)
-        } else if (name === "back") {
+        } else if (name === "back" || name === "chevron-left") {
             line(15, 5, 8, 12); line(8, 12, 15, 19)
+        } else if (name === "chevron" || name === "chevron-right") {
+            line(8, 5, 15, 12); line(15, 12, 8, 19)
+        } else if (name === "chevron-down") {
+            line(5, 8, 12, 15); line(12, 15, 19, 8)
+        } else if (name === "chevron-up") {
+            line(5, 15, 12, 8); line(12, 8, 19, 15)
+        } else if (name === "arrow-left") {
+            line(20, 12, 5, 12); line(5, 12, 11, 6); line(5, 12, 11, 18)
+        } else if (name === "arrow-right") {
+            line(4, 12, 19, 12); line(19, 12, 13, 6); line(19, 12, 13, 18)
         } else if (name === "sidebar") {
             rect(3, 4, 18, 16, 2); line(10, 4, 10, 20); line(5, 8, 8, 8); line(5, 12, 8, 12)
         } else if (name === "share") {
@@ -135,10 +145,29 @@ Canvas {
             ctx.beginPath(); ctx.ellipse(pt(12), pt(12), 3.5 * u, 8 * u, 0, 0, Math.PI * 2); ctx.stroke()
         } else if (name === "more") {
             for (var i = 0; i < 3; ++i) { ctx.beginPath(); ctx.arc(pt(6 + i * 6), pt(12), 1.35 * u, 0, Math.PI * 2); ctx.fill() }
-        } else if (name === "plus") {
+        } else if (name === "plus" || name === "add") {
             line(12, 5, 12, 19); line(5, 12, 19, 12)
-        } else if (name === "chevron") {
-            line(8, 5, 15, 12); line(15, 12, 8, 19)
+        } else if (name === "minus") {
+            line(5, 12, 19, 12)
+        } else if (name === "list") {
+            line(8, 6, 20, 6); line(8, 12, 20, 12); line(8, 18, 20, 18)
+            ctx.beginPath(); ctx.arc(pt(4), pt(6), 1 * u, 0, Math.PI * 2); ctx.fill()
+            ctx.beginPath(); ctx.arc(pt(4), pt(12), 1 * u, 0, Math.PI * 2); ctx.fill()
+            ctx.beginPath(); ctx.arc(pt(4), pt(18), 1 * u, 0, Math.PI * 2); ctx.fill()
+        } else if (name === "expand") {
+            line(4, 9, 4, 4); line(4, 4, 9, 4); line(15, 4, 20, 4); line(20, 4, 20, 9)
+            line(20, 15, 20, 20); line(20, 20, 15, 20); line(9, 20, 4, 20); line(4, 20, 4, 15)
+        } else if (name === "safe-area") {
+            rect(3, 3, 18, 18, 2); rect(7, 7, 10, 10, 1)
+        } else if (name === "cursor") {
+            ctx.beginPath(); ctx.moveTo(pt(5), pt(3)); ctx.lineTo(pt(5), pt(18)); ctx.lineTo(pt(9), pt(14)); ctx.lineTo(pt(13), pt(21)); ctx.lineTo(pt(16), pt(19)); ctx.lineTo(pt(12), pt(12)); ctx.lineTo(pt(19), pt(12)); ctx.closePath(); ctx.fill()
+        } else if (name === "cut") {
+            ctx.beginPath(); ctx.arc(pt(7), pt(17), 3 * u, 0, Math.PI * 2); ctx.stroke()
+            ctx.beginPath(); ctx.arc(pt(7), pt(7), 3 * u, 0, Math.PI * 2); ctx.stroke()
+            line(9, 9, 20, 20); line(9, 15, 20, 4)
+        } else if (name === "magnet") {
+            ctx.beginPath(); ctx.moveTo(pt(6), pt(4)); ctx.lineTo(pt(10), pt(4)); ctx.lineTo(pt(10), pt(13)); ctx.arc(pt(12), pt(13), 6 * u, Math.PI, 0); ctx.lineTo(pt(14), pt(4)); ctx.lineTo(pt(18), pt(4)); ctx.lineTo(pt(18), pt(13)); ctx.arc(pt(12), pt(13), 6 * u, 0, Math.PI); ctx.closePath(); ctx.stroke()
+            line(6, 8, 10, 8); line(14, 8, 18, 8)
         } else if (name === "play") {
             ctx.beginPath(); ctx.moveTo(pt(8), pt(5)); ctx.lineTo(pt(19), pt(12)); ctx.lineTo(pt(8), pt(19)); ctx.closePath(); ctx.fill()
         } else if (name === "pause") {

@@ -121,7 +121,7 @@ Item {
                     objectName: "navigationBack"
                     width: 33; height: 30
                     enabled: appRoot && appRoot.canNavigateBack
-                    iconName: "back"
+                    iconName: "arrow-left"
                     accessibleLabel: I18n.t("design.back")
                     onClicked: appRoot.navigateHistory(-1)
                 }
@@ -130,7 +130,7 @@ Item {
                     objectName: "navigationForward"
                     width: 33; height: 30
                     enabled: appRoot && appRoot.canNavigateForward
-                    iconName: "chevron"
+                    iconName: "arrow-right"
                     accessibleLabel: I18n.t("design.forward")
                     onClicked: appRoot.navigateHistory(1)
                 }
