@@ -18,7 +18,7 @@ Rectangle {
     color: EditorTheme.panel; clip: true
     function details(item) {
         var duration = item.duration || 0, mins = Math.floor(duration/60), seconds = Math.floor(duration%60)
-        return mins + ":" + ("0" + seconds).slice(-2) + (item.media_type === "audio" ? " · Audio" : " · " + item.width + "×" + item.height + (item.media_type === "video" ? " · " + item.fps + " fps" : ""))
+        return mins + ":" + ("0" + seconds).slice(-2) + (item.media_type === "audio" ? " · " + I18n.t("editor.audio") : " · " + item.width + "×" + item.height + (item.media_type === "video" ? " · " + item.fps + " fps" : ""))
     }
     DropArea {
         anchors.fill: parent
@@ -28,8 +28,8 @@ Rectangle {
         anchors.fill: parent; anchors.margins: 12; spacing: 10
         RowLayout {
             Layout.fillWidth: true
-            Label { Layout.fillWidth: true; text: I18n.t(editor.libraryPage === 1 ? "editor.titles" : editor.libraryPage === 2 ? "editor.transitions" : "editor.media_pool"); color: EditorTheme.text; font.pixelSize: EditorTheme.fontSize + 1; font.bold: true; elide: Text.ElideRight }
-            EditorButton { iconName: "add"; iconOnly: true; text: I18n.t("editor.import_media"); enabled: !editor.project || !editor.project.importer.busy; onClicked: editor.project.chooseMedia() }
+            Label { Layout.fillWidth: true; text: I18n.t(editor.libraryPage === 1 ? "editor.titles" : editor.libraryPage === 2 ? "editor.transitions" : "editor.media_library"); color: EditorTheme.text; font.pixelSize: EditorTheme.headingSize; font.bold: true; elide: Text.ElideRight }
+            EditorButton { visible: editor.libraryPage !== 0 || root.mediaItems.length > 0; iconName: "add"; iconOnly: true; variant: "icon"; text: I18n.t("editor.import_media"); shortcut: "Ctrl+I"; enabled: !editor.project || !editor.project.importer.busy; onClicked: editor.project.chooseMedia() }
         }
         RowLayout {
             Layout.fillWidth: true; visible: editor.libraryPage === 0; spacing: 3
@@ -79,11 +79,11 @@ Rectangle {
                     }
                 }
                 ColumnLayout {
-                    anchors.centerIn: parent; width: parent.width - 16; visible: root.mediaItems.length === 0; spacing: 12
-                    AppIcon { name: "folder"; iconColor: EditorTheme.muted; Layout.preferredWidth: 38; Layout.preferredHeight: 38; Layout.alignment: Qt.AlignHCenter }
+                    anchors.centerIn: parent; width: parent.width - 16; visible: root.mediaItems.length === 0; spacing: EditorTheme.space2
+                    AppIcon { name: "folder"; iconColor: EditorTheme.muted; Layout.preferredWidth: 32; Layout.preferredHeight: 32; Layout.alignment: Qt.AlignHCenter }
                     Label { Layout.fillWidth: true; text: I18n.t("editor.drop_media"); color: EditorTheme.secondary; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter }
-                    EditorButton { text: I18n.t("editor.import_media"); primary: true; Layout.alignment: Qt.AlignHCenter; onClicked: editor.project.chooseMedia() }
-                    Label { Layout.fillWidth: true; text: "MOV, MP4, MKV, MP3, WAV, PNG, JPG"; color: EditorTheme.muted; font.pixelSize: EditorTheme.smallSize; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter }
+                    EditorButton { text: I18n.t("add_files"); primary: true; Layout.alignment: Qt.AlignHCenter; onClicked: editor.project.chooseMedia() }
+                    Label { Layout.fillWidth: true; visible: parent.parent.height >= 240; text: "MOV, MP4, MKV, MP3, WAV, PNG, JPG"; color: EditorTheme.muted; font.pixelSize: EditorTheme.smallSize; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter }
                 }
             }
             ColumnLayout {
@@ -98,9 +98,9 @@ Rectangle {
                 Label { Layout.fillWidth: true; text: I18n.t("editor.transition_hint"); wrapMode: Text.Wrap; color: EditorTheme.secondary }
                 ListView {
                     Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 6
-                    model: [{id:"none",name:"Cut"},{id:"fade",name:"Cross Fade"},{id:"dissolve",name:"Dissolve"},{id:"wipeleft",name:"Wipe Left"},{id:"wiperight",name:"Wipe Right"},{id:"slideup",name:"Slide Up"},{id:"slidedown",name:"Slide Down"},{id:"circlecrop",name:"Circle"}].filter(function(t) { return t.name.toLowerCase().indexOf(root.searchQuery.toLowerCase()) >= 0 })
+                    model: [{id:"none",key:"editor.transition_cut"},{id:"fade",key:"editor.transition_fade"},{id:"dissolve",key:"editor.transition_dissolve"},{id:"wipeleft",key:"editor.transition_wipe_left"},{id:"wiperight",key:"editor.transition_wipe_right"},{id:"slideup",key:"editor.transition_slide_up"},{id:"slidedown",key:"editor.transition_slide_down"},{id:"circlecrop",key:"editor.transition_circle"}].filter(function(t) { return I18n.t(t.key).toLowerCase().indexOf(root.searchQuery.toLowerCase()) >= 0 })
                     delegate: EditorButton {
-                        required property var modelData; width: ListView.view.width; text: modelData.name; iconName: "sliders"
+                        required property var modelData; width: ListView.view.width; text: I18n.t(modelData.key); iconName: "sliders"
                         enabled: editor.selected.kind === "video"; checked: editor.selected.transition_to_next === modelData.id
                         onClicked: editor.project.editSelected({transition_to_next: modelData.id})
                     }

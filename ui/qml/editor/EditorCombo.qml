@@ -47,7 +47,7 @@ ComboBox {
     }
     background: Rectangle {
         color: EditorTheme.raised
-        radius: 4
+        radius: EditorTheme.radiusControl
         border.width: control.activeFocus || control.popup.visible ? 2 : 1
         border.color: control.activeFocus || control.popup.visible ? EditorTheme.accent : EditorTheme.border
     }
@@ -76,7 +76,7 @@ ComboBox {
         }
         background: Rectangle {
             color: option.down ? EditorTheme.raised : option.highlighted || option.hovered ? EditorTheme.hover : EditorTheme.panel
-            radius: 3
+            radius: EditorTheme.radiusControl
         }
     }
 
@@ -101,7 +101,7 @@ ComboBox {
             color: EditorTheme.panel
             border.width: 1
             border.color: EditorTheme.border
-            radius: 5
+            radius: EditorTheme.radiusControl
         }
         contentItem: ListView {
             id: optionList

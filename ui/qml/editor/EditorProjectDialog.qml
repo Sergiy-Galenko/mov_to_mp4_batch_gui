@@ -40,7 +40,7 @@ EditorDialog {
             Label { text: I18n.t("editor.autosave"); color: EditorTheme.secondary }
             Switch { id: automatic; checked: true; palette.highlight: EditorTheme.accent }
             Label { text: I18n.t("editor.interval"); color: EditorTheme.secondary }
-            EditorCombo { id: interval; enabled: automatic.checked; model: ["1 min","2 min","5 min","10 min","15 min"]; currentIndex: 2; Layout.fillWidth: true }
+            EditorCombo { id: interval; enabled: automatic.checked; model: ["1 " + I18n.t("editor.minutes_short"), "2 " + I18n.t("editor.minutes_short"), "5 " + I18n.t("editor.minutes_short"), "10 " + I18n.t("editor.minutes_short"), "15 " + I18n.t("editor.minutes_short")]; currentIndex: 2; Layout.fillWidth: true }
         }
         Label { Layout.fillWidth: true; wrapMode: Text.Wrap; text: I18n.t("editor.autosave_hint"); color: EditorTheme.muted; font.pixelSize: EditorTheme.smallSize }
         RowLayout {

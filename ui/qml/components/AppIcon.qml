@@ -100,6 +100,9 @@ Canvas {
         } else if (name === "image") {
             rect(3, 4, 18, 16, 2); line(4, 18, 10, 11); line(10, 11, 15, 17); line(15, 17, 18, 13); line(18, 13, 21, 17)
             ctx.beginPath(); ctx.arc(pt(16), pt(8), 1.5 * u, 0, Math.PI * 2); ctx.stroke()
+        } else if (name === "eye") {
+            ctx.beginPath(); ctx.moveTo(pt(3), pt(12)); ctx.bezierCurveTo(pt(6), pt(6), pt(9), pt(4), pt(12), pt(4)); ctx.bezierCurveTo(pt(15), pt(4), pt(18), pt(6), pt(21), pt(12)); ctx.bezierCurveTo(pt(18), pt(18), pt(15), pt(20), pt(12), pt(20)); ctx.bezierCurveTo(pt(9), pt(20), pt(6), pt(18), pt(3), pt(12)); ctx.closePath(); ctx.stroke()
+            ctx.beginPath(); ctx.arc(pt(12), pt(12), 3 * u, 0, Math.PI * 2); ctx.stroke()
         } else if (name === "music" || name === "audio") {
             line(10, 17, 10, 5); line(10, 5, 20, 3); line(20, 3, 20, 15)
             ctx.beginPath(); ctx.arc(pt(7), pt(18), 3 * u, 0, Math.PI * 2); ctx.stroke()

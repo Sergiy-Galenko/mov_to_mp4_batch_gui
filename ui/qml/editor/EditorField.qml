@@ -7,11 +7,16 @@ TextField {
     implicitWidth: 100
     color: enabled ? EditorTheme.text : EditorTheme.muted
     placeholderTextColor: EditorTheme.muted
-    selectedTextColor: "white"
+    selectedTextColor: EditorTheme.textPrimary
     selectionColor: EditorTheme.accent
     font.family: Theme.bodyFont
     font.pixelSize: EditorTheme.fontSize
     padding: 7
     selectByMouse: true
-    background: Rectangle { radius: 4; color: EditorTheme.background; border.width: 1; border.color: control.activeFocus ? EditorTheme.accent : EditorTheme.border }
+    background: Rectangle {
+        radius: EditorTheme.radiusControl
+        color: EditorTheme.bgApp
+        border.width: control.activeFocus ? 2 : 1
+        border.color: control.activeFocus ? EditorTheme.accent : EditorTheme.borderSubtle
+    }
 }

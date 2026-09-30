@@ -7,7 +7,7 @@ import "../editor"
 
 Window {
     id: root
-    title: (project ? project.data.project_name : I18n.t("editor.untitled")) + (project && project.dirty ? " *" : "") + " — " + I18n.t("nav_montage")
+    title: displayProjectName + (project && project.dirty ? " *" : "") + " — " + I18n.t("nav_montage")
     width: 1440; height: 900
     minimumWidth: 980; minimumHeight: 680
     color: EditorTheme.background
@@ -16,6 +16,7 @@ Window {
     readonly property var project: backend ? backend.editorProject : null
     readonly property var render: backend ? backend.editorRender : null
     readonly property var doc: project ? project.data : ({project_name: "", project_settings: {width: 1920, height: 1080, fps: 30}, timeline: {clips: [], audio_tracks: []}, media: [], titles: [], subtitles: [], tracks: {}, export_settings: {}, editing_documents: {}})
+    readonly property string displayProjectName: !doc.project_name || doc.project_name === "Untitled Project" ? I18n.t("editor.untitled") : doc.project_name
     readonly property var selected: project ? project.selected : ({})
     property bool syncing: false
     property bool allowClose: false
@@ -23,8 +24,11 @@ Window {
     property string pendingPath: ""
     property bool mediaPoolVisible: true
     property bool inspectorVisible: true
+    readonly property bool compactLayout: width < 1180
+    property bool compactInspectorMode: false
     property bool viewerMaximized: false
     property int activeWorkspacePage: 2
+    property string activeWorkspace: "edit"
     property int libraryPage: 0
     property int inspectorTab: 0
     property real playhead: 0
@@ -119,17 +123,28 @@ Window {
         project.select(id)
         for (var i = 0; i < clipLayout.length; i++) if (clipLayout[i].id === id) { seek(clipLayout[i].start); break }
         inspectorVisible = true
+        if (compactLayout) compactInspectorMode = true
     }
     function splitAtPlayhead() { editHistory.begin(); project.split(playhead); editHistory.end() }
     function markIn() { if (selected.kind === "video") inPoint = Math.min(outPoint - 1/fps, viewer.sourcePosition) }
     function markOut() { if (selected.kind === "video") outPoint = Math.max(inPoint + 1/fps, viewer.sourcePosition) }
     function togglePlayback() { viewer.togglePlayback() }
-    function chooseWorkspace(index) {
-        activeWorkspacePage = index
-        if (index === 0) { mediaPoolVisible = true; libraryPage = 0 }
-        else if (index === 1) { mediaPoolVisible = false; inspectorVisible = true; inspectorTab = 0 }
-        else if (index === 2) { mediaPoolVisible = true; inspectorVisible = true; inspectorTab = 0 }
-        else { inspectorVisible = true; inspectorTab = index === 3 ? 3 : index === 4 ? 1 : 4 }
+    function chooseWorkspace(workspace) {
+        var key = typeof workspace === "number"
+            ? ["media", "titles", "edit", "color", "audio", "deliver"][workspace]
+            : workspace
+        activeWorkspace = key || "edit"
+        activeWorkspacePage = ["media", "titles", "edit", "color", "audio", "deliver"].indexOf(activeWorkspace)
+        if (activeWorkspace === "media") {
+            mediaPoolVisible = true; libraryPage = 0; compactInspectorMode = false
+        } else if (activeWorkspace === "titles") {
+            mediaPoolVisible = true; libraryPage = 1; inspectorVisible = true; inspectorTab = 2; compactInspectorMode = false
+        } else if (activeWorkspace === "edit") {
+            mediaPoolVisible = true; libraryPage = 0; inspectorVisible = true; inspectorTab = 0; compactInspectorMode = false
+        } else {
+            mediaPoolVisible = false; inspectorVisible = true; compactInspectorMode = true
+            inspectorTab = activeWorkspace === "color" ? 3 : activeWorkspace === "audio" ? 1 : 4
+        }
     }
     function openTools() {
         if (!filePath || backend.montageEditing.busy) return
@@ -236,7 +251,12 @@ Window {
     Shortcut { sequence: "Space"; enabled: root.active && !root.textEditing; onActivated: root.togglePlayback() }
     Shortcut { sequence: "B"; enabled: root.active && !root.textEditing; onActivated: root.bladeTool = true }
     Shortcut { sequence: "A"; enabled: root.active && !root.textEditing; onActivated: root.bladeTool = false }
+    Shortcut { sequence: "C"; enabled: root.active && !root.textEditing; onActivated: root.bladeTool = true }
+    Shortcut { sequence: "V"; enabled: root.active && !root.textEditing; onActivated: root.bladeTool = false }
     Shortcut { sequence: "Delete"; enabled: root.active && !root.textEditing; onActivated: project.deleteSelected() }
+    Shortcut { sequence: "+"; enabled: root.active && !root.textEditing; onActivated: timelineZoom = Math.min(8, timelineZoom * 1.3) }
+    Shortcut { sequence: "-"; enabled: root.active && !root.textEditing; onActivated: timelineZoom = Math.max(.5, timelineZoom / 1.3) }
+    Shortcut { sequence: "?"; enabled: root.active && !root.textEditing; onActivated: shortcutsDialog.open() }
     Shortcut { sequences: [StandardKey.Copy]; enabled: root.active && !root.textEditing; onActivated: root.copyClip() }
     Shortcut { sequences: [StandardKey.Paste]; enabled: root.active && !root.textEditing; onActivated: root.pasteClip() }
 
@@ -253,14 +273,14 @@ Window {
                 handle: Rectangle { implicitWidth: 5; color: SplitHandle.hovered || SplitHandle.pressed ? EditorTheme.accent : EditorTheme.background }
                 MontageMediaPool {
                     id: mediaPool; objectName: "editorMediaPool"; editor: root
-                    visible: root.mediaPoolVisible && !root.viewerMaximized
+                    visible: root.mediaPoolVisible && !root.viewerMaximized && (!root.compactLayout || !root.compactInspectorMode)
                     SplitView.minimumWidth: 210; SplitView.preferredWidth: workspaceSettings.mediaWidth; SplitView.maximumWidth: 480
                     onWidthChanged: if (upperSplit.resizing) workspaceSettings.mediaWidth = width
                 }
                 EditorViewer { id: viewer; objectName: "editorViewer"; editor: root; SplitView.fillWidth: true; SplitView.minimumWidth: 350 }
                 EditorInspector {
                     objectName: "editorInspector"; editor: root
-                    visible: root.inspectorVisible && !root.viewerMaximized
+                    visible: root.inspectorVisible && !root.viewerMaximized && (!root.compactLayout || root.compactInspectorMode)
                     SplitView.minimumWidth: 260; SplitView.preferredWidth: workspaceSettings.inspectorWidth; SplitView.maximumWidth: 440
                     onWidthChanged: if (upperSplit.resizing) workspaceSettings.inspectorWidth = width
                 }
@@ -281,16 +301,66 @@ Window {
     }
     EditorProjectDialog { id: projectDialog; editor: root }
     EditorExportDialog { id: exportDialog; editor: root }
-    Dialog {
-        id: unsavedDialog; parent: root.contentItem; modal: true; anchors.centerIn: parent; width: Math.min(460, root.width - 32)
-        title: I18n.t("editor.save_changes") + " «" + root.doc.project_name + "»?"
-        standardButtons: Dialog.NoButton
-        background: Rectangle { color: EditorTheme.panel; border.color: EditorTheme.border; radius: 8 }
+    EditorComponentGallery { id: componentGallery }
+    EditorDialog {
+        id: shortcutsDialog
+        parent: root.contentItem
+        anchors.centerIn: parent
+        width: Math.min(500, root.width - 32)
+        title: I18n.t("editor.shortcuts")
+        standardButtons: Dialog.Close
         contentItem: ColumnLayout {
-            Label { Layout.fillWidth: true; text: I18n.t("editor.unsaved_hint"); wrapMode: Text.Wrap; color: EditorTheme.text }
-            Flow {
-                Layout.fillWidth: true; spacing: 8
-                EditorButton { text: I18n.t("editor.dont_save"); onClicked: { unsavedDialog.close(); project.discardAutosave(); root.performPending() } }
+            spacing: EditorTheme.space2
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("editor.shortcuts_hint")
+                color: EditorTheme.textSecondary
+                font.pixelSize: EditorTheme.fontSize
+                wrapMode: Text.Wrap
+            }
+            Repeater {
+                model: [
+                    { key: "Space", label: "studio.play" },
+                    { key: "C", label: "editor.split" },
+                    { key: "V", label: "editor.selection_tool" },
+                    { key: "Delete", label: "editor.delete" },
+                    { key: "Ctrl+Z", label: "history.undo" },
+                    { key: "Ctrl+Shift+Z", label: "history.redo" },
+                    { key: "+ / −", label: "editor.zoom" }
+                ]
+                RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: EditorTheme.space3
+                    Label {
+                        text: modelData.key
+                        color: EditorTheme.textPrimary
+                        font.family: "monospace"
+                        font.pixelSize: EditorTheme.fontSize
+                        horizontalAlignment: Text.AlignHCenter
+                        Layout.preferredWidth: 112
+                    }
+                    Label {
+                        text: I18n.t(modelData.label)
+                        color: EditorTheme.textSecondary
+                        font.pixelSize: EditorTheme.fontSize
+                        Layout.fillWidth: true
+                    }
+                }
+            }
+        }
+    }
+    EditorDialog {
+        id: unsavedDialog; parent: root.contentItem; anchors.centerIn: parent; width: Math.min(460, root.width - 32)
+        title: I18n.t("editor.save_changes")
+        standardButtons: Dialog.NoButton
+        contentItem: ColumnLayout {
+            spacing: EditorTheme.space4
+            Label { Layout.fillWidth: true; text: I18n.t("editor.unsaved_hint"); wrapMode: Text.Wrap; color: EditorTheme.textPrimary; font.pixelSize: EditorTheme.fontSize }
+            RowLayout {
+                Layout.fillWidth: true; spacing: EditorTheme.space2
+                EditorButton { text: I18n.t("editor.dont_save"); variant: "danger"; onClicked: { unsavedDialog.close(); project.discardAutosave(); root.performPending() } }
+                Item { Layout.fillWidth: true }
                 EditorButton { text: I18n.t("cancel"); onClicked: { unsavedDialog.close(); root.pendingAction = "" } }
                 EditorButton { text: I18n.t("editor.save"); primary: true; onClicked: { unsavedDialog.close(); if (!project.save()) root.pendingAction = "" } }
             }
@@ -313,4 +383,5 @@ Window {
         }
     }
     function editProjectSettings() { projectDialog.openSettings() }
+    function openComponentGallery() { componentGallery.show(); componentGallery.raise(); componentGallery.requestActivate() }
 }

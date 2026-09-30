@@ -6,6 +6,8 @@ import "../components"
 Rectangle {
     id: root; property var editor
     readonly property var item: editor.selected
+    readonly property var cropAspectValues: ["free", "16:9", "9:16", "4:3", "1:1", "21:9"]
+    readonly property var transitionValues: ["none", "fade", "dissolve", "wipeleft", "wiperight", "slideup", "slidedown", "circlecrop"]
     color: EditorTheme.panel; clip: true
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 12; spacing: 10
@@ -14,9 +16,28 @@ Rectangle {
             Label { Layout.fillWidth: true; text: I18n.t(editor.inspectorTab === 4 ? "editor.deliver" : "editor.inspector"); color: EditorTheme.text; font.pixelSize: EditorTheme.fontSize+1; font.bold: true }
             EditorButton { iconOnly: true; iconName: "close"; text: I18n.t("close"); onClicked: editor.inspectorVisible = false }
         }
-        RowLayout {
-            Layout.fillWidth: true; visible: editor.inspectorTab < 3
-            Repeater { model: ["video","audio","title"]; EditorButton { required property int index; required property string modelData; Layout.fillWidth: true; text: I18n.t("editor." + modelData); checked: editor.inspectorTab === index; onClicked: editor.inspectorTab = index } }
+        Rectangle {
+            Layout.fillWidth: true; Layout.preferredHeight: EditorTheme.controlHeight + EditorTheme.space1 * 2
+            visible: editor.inspectorTab < 3
+            radius: EditorTheme.radiusControl
+            color: EditorTheme.bgElevated
+            border.width: 1
+            border.color: EditorTheme.borderSubtle
+            RowLayout {
+                anchors.fill: parent; anchors.margins: EditorTheme.space1; spacing: EditorTheme.space1
+                Repeater {
+                    model: ["video", "audio", "title"]
+                    EditorButton {
+                        required property int index
+                        required property string modelData
+                        Layout.fillWidth: true
+                        text: I18n.t("editor." + modelData)
+                        variant: "segmented"
+                        checked: editor.inspectorTab === index
+                        onClicked: editor.inspectorTab = index
+                    }
+                }
+            }
         }
         Label { Layout.fillWidth: true; text: item.name || item.text || ""; elide: Text.ElideMiddle; color: EditorTheme.secondary; font.pixelSize: EditorTheme.smallSize; visible: !!item.id && editor.inspectorTab < 3 }
         ScrollView {
@@ -52,7 +73,7 @@ Rectangle {
                             Label { Layout.fillWidth: true; text: I18n.t("editor.enabled"); color: EditorTheme.secondary }
                             Switch { checked: editor.cropEnabled; onToggled: editor.cropEnabled = checked }
                         }
-                        EditorCombo { Layout.fillWidth: true; model: ["free", "16:9", "9:16", "4:3", "1:1", "21:9"]; currentIndex: Math.max(0, model.indexOf(editor.cropAspect)); onActivated: { editor.cropAspect = currentText; editor.cropOverlayVisible = true } }
+                        EditorCombo { Layout.fillWidth: true; model: [I18n.t("editor.free"), "16:9", "9:16", "4:3", "1:1", "21:9"]; currentIndex: Math.max(0, root.cropAspectValues.indexOf(editor.cropAspect)); onActivated: { editor.cropAspect = root.cropAspectValues[currentIndex]; editor.cropOverlayVisible = true } }
                         GridLayout {
                             columns: 4; Layout.fillWidth: true; columnSpacing: 8; rowSpacing: 8
                             Label { text: "X"; color: EditorTheme.secondary }
@@ -68,7 +89,7 @@ Rectangle {
                     }
                     InspectorSection {
                         title: I18n.t("editor.transitions"); expanded: false
-                        EditorCombo { Layout.fillWidth: true; model: ["none","fade","dissolve","wipeleft","wiperight","slideup","slidedown","circlecrop"]; currentIndex: Math.max(0, model.indexOf(item.transition_to_next)); onActivated: editor.project.editSelected({transition_to_next: currentText}) }
+                        EditorCombo { Layout.fillWidth: true; model: [I18n.t("editor.transition_cut"), I18n.t("editor.transition_fade"), I18n.t("editor.transition_dissolve"), I18n.t("editor.transition_wipe_left"), I18n.t("editor.transition_wipe_right"), I18n.t("editor.transition_slide_up"), I18n.t("editor.transition_slide_down"), I18n.t("editor.transition_circle")]; currentIndex: Math.max(0, root.transitionValues.indexOf(item.transition_to_next)); onActivated: editor.project.editSelected({transition_to_next: root.transitionValues[currentIndex]}) }
                         RowLayout { Layout.fillWidth: true; Label { Layout.fillWidth: true; text: I18n.t("editor.duration"); color: EditorTheme.secondary } EditorNumber { value: item.transition_duration || .5; decimals: 2; minimum: .05; maximum: Math.min(5, (editor.outPoint-editor.inPoint)/2); onEdited: function(number) { editor.project.editSelected({transition_duration: number}) } } }
                     }
                     InspectorSection {
@@ -90,7 +111,7 @@ Rectangle {
                     InspectorSection {
                         title: I18n.t("editor.audio")
                         RowLayout { Layout.fillWidth: true; Label { Layout.fillWidth: true; text: I18n.t("editor.enabled"); color: EditorTheme.secondary } Switch { checked: item.kind === "audio" ? !editor.doc.tracks.music_muted : editor.audioEnabled; onToggled: item.kind === "audio" ? editor.project.updateSection("tracks", {music_muted: !checked}) : editor.audioEnabled = checked } }
-                        Label { Layout.fillWidth: true; text: item.kind === "audio" ? item.name || "Audio" : I18n.t("editor.original_audio"); color: EditorTheme.secondary; elide: Text.ElideMiddle }
+                        Label { Layout.fillWidth: true; text: item.kind === "audio" ? item.name || I18n.t("editor.audio") : I18n.t("editor.original_audio"); color: EditorTheme.secondary; elide: Text.ElideMiddle }
                         ColumnLayout {
                             Layout.fillWidth: true; visible: item.kind === "audio"
                             RowLayout { Layout.fillWidth: true; Label { text: I18n.t("editor.volume"); color: EditorTheme.secondary } Slider { Layout.fillWidth: true; from: 0; to: 2; value: item.volume === undefined ? 1 : item.volume; onMoved: editor.project.editSelected({volume: value}) } Label { text: Math.round((item.volume || 0)*100)+"%"; color: EditorTheme.text } }

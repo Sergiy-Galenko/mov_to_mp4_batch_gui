@@ -75,16 +75,16 @@ Rectangle {
             RowLayout {
                 anchors.fill: parent; anchors.margins: 6; spacing: 4
                 Label { Layout.fillWidth: true; text: editor.fileName || I18n.t("editor.viewer"); color: EditorTheme.secondary; elide: Text.ElideMiddle; font.pixelSize: EditorTheme.smallSize }
-                EditorCombo { model: ["Fit", "100%", "200%"]; implicitWidth: 78; onActivated: root.zoomFactor = currentIndex === 0 ? 1 : currentIndex === 1 ? 1.5 : 2 }
-                EditorButton { iconName: "crop"; iconOnly: true; text: I18n.t("editor.crop_overlay"); checked: editor.cropOverlayVisible; enabled: editor.selected.kind === "video"; onClicked: editor.cropOverlayVisible = !editor.cropOverlayVisible }
-                EditorButton { iconName: "grid"; iconOnly: true; text: I18n.t("editor.guides"); checked: root.guides; onClicked: root.guides = !root.guides }
-                EditorButton { iconName: "safe-area"; iconOnly: true; text: I18n.t("editor.safe_area"); checked: root.safeArea; onClicked: root.safeArea = !root.safeArea }
-                EditorButton { iconName: "expand"; iconOnly: true; text: I18n.t("editor.maximize_viewer"); checked: editor.viewerMaximized; onClicked: editor.viewerMaximized = !editor.viewerMaximized }
+                EditorCombo { model: [I18n.t("editor.fit"), "100%", "200%"]; implicitWidth: 98; onActivated: root.zoomFactor = currentIndex === 0 ? 1 : currentIndex === 1 ? 1.5 : 2 }
+                EditorButton { iconName: "crop"; iconOnly: true; variant: "icon"; text: I18n.t("editor.crop_overlay"); checked: editor.cropOverlayVisible; enabled: editor.selected.kind === "video"; onClicked: editor.cropOverlayVisible = !editor.cropOverlayVisible }
+                EditorButton { iconName: "grid"; iconOnly: true; variant: "icon"; text: I18n.t("editor.guides"); checked: root.guides; onClicked: root.guides = !root.guides }
+                EditorButton { iconName: "safe-area"; iconOnly: true; variant: "icon"; text: I18n.t("editor.safe_area"); checked: root.safeArea; onClicked: root.safeArea = !root.safeArea }
+                EditorButton { iconName: "expand"; iconOnly: true; variant: "icon"; text: I18n.t("editor.maximize_viewer"); checked: editor.viewerMaximized; onClicked: editor.viewerMaximized = !editor.viewerMaximized }
             }
         }
         Item {
             id: stage; Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 100; clip: true
-            Rectangle { anchors.fill: parent; color: "#090b0e" }
+            Rectangle { anchors.fill: parent; color: EditorTheme.bgPreview }
             Item {
                 id: frame
                 anchors.centerIn: parent
@@ -100,21 +100,21 @@ Rectangle {
                         required property var modelData
                         visible: editor.playhead >= modelData.start && editor.playhead < modelData.end
                         text: modelData.text; textFormat: Text.PlainText; font.family: modelData.font; font.pixelSize: Math.max(8, modelData.size * frame.width / editor.doc.project_settings.width); font.bold: modelData.bold
-                        color: modelData.color; opacity: modelData.opacity; style: Text.Outline; styleColor: "black"
+                        color: modelData.color; opacity: modelData.opacity; style: Text.Outline; styleColor: EditorTheme.textOutline
                         width: Math.min(implicitWidth, frame.width * .9); wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter
                         x: frame.width * modelData.x - width / 2; y: frame.height * modelData.y - height
-                        background: Rectangle { visible: modelData.background; color: "#b0000000" }
+                        background: Rectangle { visible: modelData.background; color: EditorTheme.overlayTitleBg }
                     }
                 }
                 Label {
                     anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottomMargin: parent.height * .05
-                    width: parent.width * .9; color: "white"; style: Text.Outline; styleColor: "black"; textFormat: Text.PlainText
+                    width: parent.width * .9; color: EditorTheme.textOnMedia; style: Text.Outline; styleColor: EditorTheme.textOutline; textFormat: Text.PlainText
                     horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; font.pixelSize: Math.max(12, 42 * frame.width / editor.doc.project_settings.width)
                     text: { var cue = editor.doc.subtitles.find(function(c) { return c.start <= editor.playhead && c.end > editor.playhead }); return cue ? cue.text : "" }
                 }
-                Rectangle { anchors.fill: parent; anchors.margins: parent.width * .05; visible: root.safeArea; color: "transparent"; border.color: "#8099aacc" }
-                Repeater { model: root.guides ? 2 : 0; Rectangle { required property int index; x: frame.width*(index+1)/3; width: 1; height: frame.height; color: "#7099aacc" } }
-                Repeater { model: root.guides ? 2 : 0; Rectangle { required property int index; y: frame.height*(index+1)/3; height: 1; width: frame.width; color: "#7099aacc" } }
+                Rectangle { anchors.fill: parent; anchors.margins: parent.width * .05; visible: root.safeArea; color: "transparent"; border.color: EditorTheme.safeArea }
+                Repeater { model: root.guides ? 2 : 0; Rectangle { required property int index; x: frame.width*(index+1)/3; width: 1; height: frame.height; color: EditorTheme.guide } }
+                Repeater { model: root.guides ? 2 : 0; Rectangle { required property int index; y: frame.height*(index+1)/3; height: 1; width: frame.width; color: EditorTheme.guide } }
                 CropOverlay {
                     id: cropOverlay; active: editor.cropOverlayVisible && editor.selected.kind === "video" && editor.selected.id === editor.previewClip.id
                     nativeWidth: editor.nativeWidth; nativeHeight: editor.nativeHeight; aspectRatioPreset: editor.cropAspect
@@ -127,9 +127,8 @@ Rectangle {
             ColumnLayout {
                 anchors.centerIn: parent; width: Math.min(420, parent.width - 32); visible: !editor.filePath; spacing: 12
                 AppIcon { name: "film"; Layout.preferredWidth: 48; Layout.preferredHeight: 48; Layout.alignment: Qt.AlignHCenter; iconColor: EditorTheme.muted }
-                Label { Layout.fillWidth: true; text: I18n.t("editor.first_edit"); color: EditorTheme.text; font.pixelSize: EditorTheme.fontSize + 5; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap }
+                Label { Layout.fillWidth: true; text: I18n.t("editor.viewer_empty_title"); color: EditorTheme.text; font.pixelSize: EditorTheme.headingSize; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap }
                 Label { Layout.fillWidth: true; text: I18n.t("editor.viewer_empty"); color: EditorTheme.secondary; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap }
-                EditorButton { text: I18n.t("editor.import_media"); primary: true; iconName: "add"; Layout.alignment: Qt.AlignHCenter; onClicked: editor.project.chooseMedia() }
             }
             Label { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 8; color: EditorTheme.muted; font.pixelSize: EditorTheme.smallSize; text: root.proxyBusy ? I18n.t("editor.proxy_building") : I18n.t("editor.source_preview"); visible: !!editor.filePath }
             Label { anchors.centerIn: parent; width: parent.width - 32; visible: root.playbackError.length > 0; text: root.playbackError; wrapMode: Text.Wrap; color: EditorTheme.danger }
@@ -154,7 +153,7 @@ Rectangle {
                     Layout.fillWidth: true; spacing: 6
                     Label { text: editor.timecode(editor.playhead); color: EditorTheme.text; font.family: Theme.monoFont; font.pixelSize: EditorTheme.smallSize }
                     Slider { Layout.fillWidth: true; from: 0; to: Math.max(1, editor.duration); value: editor.playhead; onMoved: { root.pause(); editor.seek(value) } }
-                    EditorCombo { model: ["Full", "1/2", "1/4"]; implicitWidth: 72; enabled: !!editor.filePath && !editor.isImage; onActivated: { root.quality = currentIndex; root.requestQuality() } }
+                    EditorCombo { model: [I18n.t("editor.full_quality"), "1/2", "1/4"]; implicitWidth: 110; enabled: !!editor.filePath && !editor.isImage; onActivated: { root.quality = currentIndex; root.requestQuality() } }
                     Slider { visible: root.width > 550; Layout.preferredWidth: 65; from: 0; to: 1; value: root.volume; onMoved: root.volume = value; ToolTip.visible: hovered; ToolTip.text: I18n.t("editor.volume") }
                 }
             }

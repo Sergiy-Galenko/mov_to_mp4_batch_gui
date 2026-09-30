@@ -6,6 +6,9 @@ ColumnLayout {
     id: root; property var editor
     property bool showExport: true
     readonly property var options: editor.doc.export_settings
+    readonly property var resolutionValues: ["timeline", "1920x1080", "3840x2160", "1280x720", "1080x1920"]
+    readonly property var fpsValues: [0, 24, 25, 30, 50, 60]
+    readonly property var qualityValues: ["auto", "low", "medium", "high"]
     spacing: 10
     function update(values) { editor.project.updateSection("export_settings", values) }
     GridLayout {
@@ -15,14 +18,14 @@ ColumnLayout {
         Label { text: I18n.t("editor.codec"); color: EditorTheme.secondary }
         EditorCombo { Layout.fillWidth: true; model: ["h264","h265","prores","copy"]; currentIndex: Math.max(0, model.indexOf(root.options.codec)); onActivated: root.update({codec: currentText, fast_copy: currentText === "copy"}) }
         Label { text: I18n.t("editor.resolution"); color: EditorTheme.secondary }
-        EditorCombo { Layout.fillWidth: true; model: ["timeline","1920x1080","3840x2160","1280x720","1080x1920"]; currentIndex: Math.max(0, model.indexOf(root.options.resolution)); onActivated: root.update({resolution: currentText}) }
+        EditorCombo { Layout.fillWidth: true; model: [I18n.t("editor.timeline"), "1920x1080", "3840x2160", "1280x720", "1080x1920"]; currentIndex: Math.max(0, root.resolutionValues.indexOf(root.options.resolution)); onActivated: root.update({resolution: root.resolutionValues[currentIndex]}) }
         Label { text: I18n.t("editor.frame_rate"); color: EditorTheme.secondary }
-        EditorCombo { Layout.fillWidth: true; model: ["Timeline","24","25","30","50","60"]; currentIndex: Math.max(0, model.indexOf(String(root.options.fps))); onActivated: root.update({fps: currentIndex ? Number(currentText) : 0}) }
+        EditorCombo { Layout.fillWidth: true; model: [I18n.t("editor.timeline"), "24", "25", "30", "50", "60"]; currentIndex: Math.max(0, root.fpsValues.indexOf(Number(root.options.fps))); onActivated: root.update({fps: root.fpsValues[currentIndex]}) }
         Label { text: I18n.t("editor.quality"); color: EditorTheme.secondary }
-        EditorCombo { Layout.fillWidth: true; model: ["auto","low","medium","high"]; currentIndex: Math.max(0, model.indexOf(root.options.quality)); onActivated: root.update({quality: currentText}) }
+        EditorCombo { Layout.fillWidth: true; model: [I18n.t("editor.quality_auto"), I18n.t("editor.quality_low"), I18n.t("editor.quality_medium"), I18n.t("editor.quality_high")]; currentIndex: Math.max(0, root.qualityValues.indexOf(root.options.quality)); onActivated: root.update({quality: root.qualityValues[currentIndex]}) }
         Label { text: "kbps"; color: EditorTheme.secondary }
         EditorNumber { Layout.fillWidth: true; maximum: 200000; value: root.options.bitrate || 0; onEdited: function(number) { root.update({bitrate: number}) } }
-        Label { text: "Fast Copy"; color: EditorTheme.secondary }
+        Label { text: I18n.t("editor.fast_copy"); color: EditorTheme.secondary }
         Switch { checked: !!root.options.fast_copy; onToggled: root.update({fast_copy: checked, codec: checked ? "copy" : "h264"}) }
     }
     Label { Layout.fillWidth: true; text: I18n.t("editor.copy_hint"); visible: !!root.options.fast_copy; color: EditorTheme.muted; wrapMode: Text.Wrap; font.pixelSize: EditorTheme.smallSize }
