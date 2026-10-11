@@ -215,7 +215,7 @@
   "platform_profile": "Профіль платформи",
   "performance_profile": "Профіль продуктивності",
   "target_size_mb": "Цільовий розмір, MB",
-  "target_size_hint": "Порожньо = автоматично. Target size: два проходи H.264 на CPU, із запасом 6% для контейнера.",
+  "target_size_hint": "MB = 1 000 000 байтів. Два проходи H.264 на CPU; перевірка розміру й до двох повторів.",
   "cpu_load_limit": "Ліміт CPU, %",
   "gpu_load_limit": "Ліміт GPU, %",
   "quality": "Якість",
@@ -1044,5 +1044,13 @@
   "inspector": "Інспектор",
   "preset_name": "Назва пресету",
   "presets_import": "Імпорт JSON",
-  "presets_export": "Експорт JSON"
+  "presets_export": "Експорт JSON",
+  "presets_builtin": "Вбудовані",
+  "presets_custom": "Користувацькі",
+  "presets_save_as": "Зберегти як",
+  "presets_conflicts": "Збігаються назви: {names}.\nТак — замінити користувацькі пресети; вбудовані імпортувати як копії.\nНі — залишити наявні. Скасувати — припинити імпорт.",
+  "target_size_estimate": "Відео: {video} кбіт/с · Аудіо: {audio} кбіт/с · Мінімум: {minimum} MB",
+  "target_size_probe_hint": "Додай відео й дочекайся визначення тривалості для розрахунку бітрейту.",
+  "target_size_resize": "Малий бітрейт: зменшити кадр до {width}×{height}",
+  "presets_copy": "Копія"
 }

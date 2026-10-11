@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-BODY = r"""    @QtCore.Property(str, notify=themeChanged)
+from .common import Dict, List, Path, QtCore, QtGui, QtWidgets, load_json_file, save_json_file
+from .core import CoreMixin
+
+
+class ThemePreferencesMixin:
+    @QtCore.Property(str, notify=CoreMixin.themeChanged)
     def platformName(self) -> str:
         return self.theme_manager.platform_name
 
-    @QtCore.Property("QVariantMap", notify=themeChanged)
+    @QtCore.Property("QVariantMap", notify=CoreMixin.themeChanged)
     def themePalette(self) -> Dict[str, str]:
         return self.theme_manager.palette(self.effectiveThemeMode)
 
-    @QtCore.Property("QVariantMap", notify=themeChanged)
+    @QtCore.Property("QVariantMap", notify=CoreMixin.themeChanged)
     def themeColorOverrides(self) -> Dict[str, str]:
         return self.theme_manager.color_overrides(self.effectiveThemeMode)
 
@@ -16,7 +21,7 @@ BODY = r"""    @QtCore.Property(str, notify=themeChanged)
     def themeColorDefinitions(self) -> List[Dict[str, str]]:
         return self.theme_manager.color_definitions()
 
-    @QtCore.Property("QVariantList", notify=themeChanged)
+    @QtCore.Property("QVariantList", notify=CoreMixin.themeChanged)
     def savedThemeNames(self) -> List[str]:
         return self.theme_manager.saved_themes()
 
@@ -106,21 +111,36 @@ BODY = r"""    @QtCore.Property(str, notify=themeChanged)
         colors = self.themePalette
         palette = QtGui.QPalette()
         roles = {
-            "Window": "panelBackground", "WindowText": "textPrimary", "Base": "input",
-            "AlternateBase": "panelSecondary", "ToolTipBase": "panelSecondary", "ToolTipText": "textPrimary",
-            "Text": "textPrimary", "Button": "panelSecondary", "ButtonText": "textPrimary",
-            "BrightText": "textOnAccent", "Highlight": "accent", "HighlightedText": "textOnAccent",
-            "Link": "accent", "LinkVisited": "accentHover", "PlaceholderText": "textDisabled",
-            "Light": "borderDefault", "Midlight": "panelHover", "Mid": "borderMuted",
-            "Dark": "input", "Shadow": "windowBackground", "Accent": "accent",
+            "Window": "panelBackground",
+            "WindowText": "textPrimary",
+            "Base": "input",
+            "AlternateBase": "panelSecondary",
+            "ToolTipBase": "panelSecondary",
+            "ToolTipText": "textPrimary",
+            "Text": "textPrimary",
+            "Button": "panelSecondary",
+            "ButtonText": "textPrimary",
+            "BrightText": "textOnAccent",
+            "Highlight": "accent",
+            "HighlightedText": "textOnAccent",
+            "Link": "accent",
+            "LinkVisited": "accentHover",
+            "PlaceholderText": "textDisabled",
+            "Light": "borderDefault",
+            "Midlight": "panelHover",
+            "Mid": "borderMuted",
+            "Dark": "input",
+            "Shadow": "windowBackground",
+            "Accent": "accent",
         }
         for role, key in roles.items():
             palette.setColor(getattr(QtGui.QPalette.ColorRole, role), QtGui.QColor(colors[key]))
         for role in ("WindowText", "Text", "ButtonText", "PlaceholderText"):
-            palette.setColor(QtGui.QPalette.ColorGroup.Disabled, getattr(QtGui.QPalette.ColorRole, role), QtGui.QColor(colors["textDisabled"]))
+            palette.setColor(
+                QtGui.QPalette.ColorGroup.Disabled, getattr(QtGui.QPalette.ColorRole, role), QtGui.QColor(colors["textDisabled"])
+            )
         application.setPalette(palette)
 
     def _on_system_theme_changed(self, *_args) -> None:
         if self.themeMode == "auto":
             self.themeChanged.emit()
-"""

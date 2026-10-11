@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from PySide6.QtCore import Q_ARG, QEvent, QMetaObject, QObject, QPointF, QSettings, Qt, QUrl
+from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QEvent, QMetaObject, QObject, QPointF, QSettings, Qt, QUrl
 from PySide6.QtGui import QColor, QMouseEvent, QPalette
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtQuick import QQuickItem
@@ -30,6 +30,66 @@ class QmlLoadTest(unittest.TestCase):
         import tempfile
 
         QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, tempfile.gettempdir())
+
+    def test_presets_full_form_and_target_size_estimate(self):
+        from app.models import MediaInfo
+        from services.preset_manager import PresetManager
+
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        with tempfile.TemporaryDirectory() as temporary:
+            backend = Backend()
+            backend.settings_manager.save = Mock()
+            backend.preset_manager = PresetManager(Path(temporary) / "presets.json")
+            source = Path(temporary) / "demo.mp4"
+            source.write_bytes(b"demo")
+            backend.queue_model.set_items(
+                [TaskItem(source, "video", probe_data=MediaInfo(duration=180, width=1920, height=1080, audio_streams=1, fps=30))]
+            )
+            engine = QQmlApplicationEngine()
+            engine.addImportPath(str(qml_dir))
+            engine.rootContext().setContextProperty("backend", backend)
+            warnings = []
+            engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
+            try:
+                engine.load(QUrl.fromLocalFile(str(qml_dir / "Main.qml")))
+                self.assertTrue(engine.rootObjects(), warnings)
+                window = engine.rootObjects()[0]
+                QMetaObject.invokeMethod(
+                    window, "openSidebarSection", Q_ARG("QVariant", 5), Q_ARG("QVariant", "core"), Q_ARG("QVariant", -1)
+                )
+                QTest.qWait(100)
+                field = window.findChild(QObject, "targetSizeField")
+                field.setProperty("text", "8")
+                QMetaObject.invokeMethod(field, "editingFinished")
+                QTest.qWait(200)
+                settings = QMetaObject.invokeMethod(window, "collectSettings", Q_RETURN_ARG("QVariant"))
+                if hasattr(settings, "toVariant"):
+                    settings = settings.toVariant()
+                backend.preset_manager.save("Full form", settings)
+                backend._refresh_presets()
+                self.assertIn("Full form", backend.customPresetNames)
+                self.assertNotIn("Full form", backend.builtinPresetNames)
+                saved = backend.preset_manager.get("Full form")
+                self.assertEqual(saved["target_size_mb"], 8)
+                self.assertEqual(saved["editor_brightness"], "")
+                label = window.findChild(QObject, "targetSizeEstimateLabel")
+                for _ in range(20):
+                    if "142" in label.property("text"):
+                        break
+                    QTest.qWait(50)
+                self.assertIn("142", label.property("text"))
+                button = window.findChild(QObject, "targetSizeResizeButton")
+                self.assertTrue(button.property("visible"))
+                self.assertTrue(QMetaObject.invokeMethod(button, "clicked"))
+                settings = QMetaObject.invokeMethod(window, "collectSettings", Q_RETURN_ARG("QVariant"))
+                if hasattr(settings, "toVariant"):
+                    settings = settings.toVariant()
+                self.assertEqual(settings["resize_w"], "640")
+                self.assertEqual(settings["resize_h"], "360")
+                self.assertFalse([warning for warning in warnings if "ReferenceError" in warning or "TypeError" in warning])
+                self.assertEqual(backend.targetSizeEstimate({"target_size_mb": "inf"}), {})
+            finally:
+                backend.shutdown()
 
     def test_main_qml_loads(self):
         project_root = Path(__file__).resolve().parents[1]

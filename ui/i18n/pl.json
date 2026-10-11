@@ -205,7 +205,7 @@
   "platform_profile": "Profil platformy",
   "performance_profile": "Profil wydajności",
   "target_size_mb": "Rozmiar docelowy, MB",
-  "target_size_hint": "Puste = automatycznie. Rozmiar docelowy: H.264 w dwóch przebiegach na CPU, 6% rezerwy na kontener.",
+  "target_size_hint": "MB = 1 000 000 bajtów. H.264 na CPU w dwóch przebiegach; kontrola rozmiaru i do dwóch powtórzeń.",
   "cpu_load_limit": "Limit CPU, %",
   "gpu_load_limit": "Limit GPU, %",
   "quality": "Jakość",
@@ -1036,5 +1036,13 @@
   "inspector": "Inspektor",
   "preset_name": "Nazwa presetu",
   "presets_import": "Import JSON",
-  "presets_export": "Eksport JSON"
+  "presets_export": "Eksport JSON",
+  "presets_builtin": "Wbudowane",
+  "presets_custom": "Własne",
+  "presets_save_as": "Zapisz jako",
+  "presets_conflicts": "Konflikty nazw: {names}.\nTak — zastąp własne presety; wbudowane importuj jako kopie.\nNie — zachowaj istniejące. Anuluj — przerwij import.",
+  "target_size_estimate": "Wideo: {video} kbit/s · Audio: {audio} kbit/s · Minimum: {minimum} MB",
+  "target_size_probe_hint": "Dodaj wideo i poczekaj na odczyt czasu trwania.",
+  "target_size_resize": "Niski bitrate: zmień rozmiar na {width}×{height}",
+  "presets_copy": "Kopia"
 }

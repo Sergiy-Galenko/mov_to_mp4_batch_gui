@@ -30,8 +30,9 @@ from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
 from app.paths import find_ffmpeg, find_ffprobe
 from app.performance_profiles import prediction_factor
 from app.settings import merge_settings_maps, settings_map_to_model
-from services.batch_workflow_service import DEFAULT_FOLDER_RULES, BatchWorkflowService
+from app.target_size import target_size_bytes
 from services.archive_backend import ArchiveBackend
+from services.batch_workflow_service import DEFAULT_FOLDER_RULES, BatchWorkflowService
 from services.display_service import DisplayService
 from services.event_queue import UiEventQueue
 from services.ffmpeg_auto_installer import FfmpegAutoInstaller, FfmpegAutoInstallResult
@@ -75,7 +76,6 @@ List = list
 
 __all__ = [
     "ANALYTICS_EMIT_INTERVAL_SEC",
-    "ArchiveBackend",
     "APP_TITLE",
     "APP_VERSION",
     "DEFAULT_FOLDER_RULES",
@@ -85,6 +85,7 @@ __all__ = [
     "RESOURCE_SAMPLE_INTERVAL_SEC",
     "WATCH_SCAN_INTERVAL_MS",
     "Any",
+    "ArchiveBackend",
     "BatchWorkflowService",
     "ConversionSettings",
     "Dict",
@@ -156,6 +157,7 @@ __all__ = [
     "shutil",
     "subprocess",
     "sys",
+    "target_size_bytes",
     "threading",
     "time",
     "translate",

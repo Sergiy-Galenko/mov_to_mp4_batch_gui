@@ -10,6 +10,7 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
       QT_QUICK_CONTROLS_STYLE: Basic
+      MEDIA_CONVERTER_REQUIRE_FFMPEG_TESTS: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -26,11 +27,18 @@ jobs:
       - name: Lint with Ruff
         run: python -m ruff check app services ui utils tests cli.py main.py
 
-      - name: Run tests
-        run: python -m pytest -q --tb=short
-
       - name: Install FFmpeg
         run: choco install ffmpeg --no-progress --yes
+
+      - name: Expose FFmpeg for integration tests
+        shell: pwsh
+        run: |
+          $testFfmpeg = Get-ChildItem "$env:ChocolateyInstall\lib\ffmpeg" -Filter ffmpeg.exe -Recurse | Select-Object -First 1
+          if (-not $testFfmpeg) { throw 'FFmpeg not found.' }
+          "MEDIA_CONVERTER_TEST_FFMPEG=$($testFfmpeg.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Run tests
+        run: python -m pytest -q --tb=short
 
       - name: Build portable package
         shell: pwsh

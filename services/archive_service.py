@@ -11,6 +11,7 @@ Provides robust, cross-platform archiving and extraction supporting:
 
 from __future__ import annotations
 
+import contextlib
 import gzip
 import logging
 import os
@@ -34,17 +35,69 @@ logger = logging.getLogger(__name__)
 
 # Known media/compressed extensions where compression yields minimal gains
 ALREADY_COMPRESSED_EXTENSIONS = {
-    ".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".wmv", ".flv",
-    ".jpg", ".jpeg", ".png", ".webp", ".heic", ".gif",
-    ".mp3", ".aac", ".ogg", ".flac", ".m4a", ".opus",
-    ".zip", ".7z", ".rar", ".gz", ".bz2", ".xz", ".tar.gz", ".tar.xz",
-    ".pdf", ".docx", ".xlsx", ".pptx",
+    ".mp4",
+    ".mov",
+    ".mkv",
+    ".avi",
+    ".webm",
+    ".m4v",
+    ".wmv",
+    ".flv",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".heic",
+    ".gif",
+    ".mp3",
+    ".aac",
+    ".ogg",
+    ".flac",
+    ".m4a",
+    ".opus",
+    ".zip",
+    ".7z",
+    ".rar",
+    ".gz",
+    ".bz2",
+    ".xz",
+    ".tar.gz",
+    ".tar.xz",
+    ".pdf",
+    ".docx",
+    ".xlsx",
+    ".pptx",
 }
 
 TEXT_OR_CODE_EXTENSIONS = {
-    ".txt", ".json", ".xml", ".csv", ".tsv", ".html", ".htm", ".css", ".js", ".ts",
-    ".py", ".rs", ".c", ".cpp", ".h", ".hpp", ".java", ".go", ".rb", ".php",
-    ".md", ".log", ".sql", ".yaml", ".yml", ".ini", ".cfg", ".conf",
+    ".txt",
+    ".json",
+    ".xml",
+    ".csv",
+    ".tsv",
+    ".html",
+    ".htm",
+    ".css",
+    ".js",
+    ".ts",
+    ".py",
+    ".rs",
+    ".c",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".java",
+    ".go",
+    ".rb",
+    ".php",
+    ".md",
+    ".log",
+    ".sql",
+    ".yaml",
+    ".yml",
+    ".ini",
+    ".cfg",
+    ".conf",
 }
 
 
@@ -118,11 +171,13 @@ def get_file_icon_type(name: str, is_dir: bool = False) -> str:
 
 class ArchiveSecurityError(Exception):
     """Raised when an archive operation violates security constraints."""
+
     pass
 
 
 class NotEnoughDiskSpaceError(ArchiveSecurityError):
     """Raised when destination drive lacks sufficient space."""
+
     pass
 
 
@@ -307,7 +362,7 @@ class ArchiveService:
                     text_count += 1
             elif src.is_dir():
                 parent_dir = src.parent
-                for root, dirs, files in os.walk(src):
+                for root, _dirs, files in os.walk(src):
                     for f in files:
                         p = Path(root) / f
                         if p.is_symlink() and not p.exists():
@@ -488,16 +543,12 @@ class ArchiveService:
         except Exception as exc:
             # Cleanup on failure or cancellation
             if out_file.exists():
-                try:
+                with contextlib.suppress(OSError):
                     out_file.unlink()
-                except OSError:
-                    pass
             # Also clean up any split files if generated
             for part in out_file.parent.glob(f"{out_file.name}.*"):
-                try:
+                with contextlib.suppress(OSError):
                     part.unlink()
-                except OSError:
-                    pass
             msg = str(exc)
             if "cancelled" in msg.lower():
                 return ArchiveResult(success=False, error_message="Operation cancelled by user.")
@@ -544,24 +595,18 @@ class ArchiveService:
                 zf.setpassword(password.encode("utf-8"))
                 zf.setencryption(pyzipper.WZ_AES, nbits=256)
 
-            for disk_path, arc_name, fsize in resolved_files:
+            for disk_path, arc_name, _fsize in resolved_files:
                 if cancel_requested and cancel_requested():
                     raise RuntimeError("Compression cancelled by user.")
 
                 # Stream file into zip using buffer
-                zinfo = (
-                    zf.zipinfo_cls(arc_name)
-                    if password
-                    else zipfile.ZipInfo.from_file(disk_path, arc_name)
-                )
+                zinfo = zf.zipinfo_cls(arc_name) if password else zipfile.ZipInfo.from_file(disk_path, arc_name)
                 if password:
                     zinfo.date_time = time.localtime(os.stat(disk_path).st_mtime)[:6]
                 zinfo.compress_type = comp_type
                 # Preserve permissions
-                try:
+                with contextlib.suppress(OSError):
                     zinfo.external_attr = (os.stat(disk_path).st_mode & 0xFFFF) << 16
-                except OSError:
-                    pass
 
                 chunk_size = 1024 * 1024  # 1MB
                 with open(disk_path, "rb") as src_f, zf.open(zinfo, mode="w") as dest_f:
@@ -576,9 +621,7 @@ class ArchiveService:
                         if progress_callback:
                             pct = min(100.0, (bytes_processed / max(1, total_size)) * 100)
                             elapsed = time.time() - start_time
-                            progress_callback(
-                                pct, files_processed, total_files, bytes_processed, total_size, arc_name, elapsed
-                            )
+                            progress_callback(pct, files_processed, total_files, bytes_processed, total_size, arc_name, elapsed)
 
                 files_processed += 1
                 if progress_callback:
@@ -649,9 +692,11 @@ class ArchiveService:
             writer_cls = gzip.open
         elif comp_type == "bz2":
             import bz2
+
             writer_cls = bz2.open
         elif comp_type == "xz":
             import lzma
+
             writer_cls = lzma.open
         else:
             raise ValueError(f"Unknown single-file compression: {comp_type}")
@@ -704,7 +749,7 @@ class ArchiveService:
             cmd.append(f"-v{split_size_mb}m")
 
         # Create temporary file list to avoid command line length limits
-        temp_list_file = output_path.parent / f"_7z_list_{int(time.time()*1000)}.txt"
+        temp_list_file = output_path.parent / f"_7z_list_{int(time.time() * 1000)}.txt"
         try:
             with open(temp_list_file, "w", encoding="utf-8") as f:
                 # Group by parent source or write disk paths
@@ -753,10 +798,8 @@ class ArchiveService:
 
         finally:
             if temp_list_file.exists():
-                try:
+                with contextlib.suppress(OSError):
                     temp_list_file.unlink()
-                except OSError:
-                    pass
 
     def _create_rar(
         self,
@@ -808,10 +851,8 @@ class ArchiveService:
                 progress_callback(100.0, total_files, total_files, total_size, total_size, output_path.name, time.time() - start_time)
         finally:
             if file_list.exists():
-                try:
+                with contextlib.suppress(OSError):
                     file_list.unlink()
-                except OSError:
-                    pass
 
     # =========================================================================
     # EXTRACT ARCHIVE & SECURITY
@@ -837,7 +878,7 @@ class ArchiveService:
                         is_dir = zi.is_dir()
                         # Date tuple: (year, month, day, hour, min, sec)
                         try:
-                            mod_time = time.mktime(zi.date_time + (0, 0, -1))
+                            mod_time = time.mktime((*zi.date_time, 0, 0, -1))
                         except Exception:
                             mod_time = 0.0
                         entries.append(
@@ -853,7 +894,7 @@ class ArchiveService:
                         )
                 return entries
             except zipfile.BadZipFile as e:
-                raise ValueError(f"Corrupted or invalid ZIP archive: {e}")
+                raise ValueError(f"Corrupted or invalid ZIP archive: {e}") from e
 
         # Check if TAR
         if tarfile.is_tarfile(arc):
@@ -874,20 +915,50 @@ class ArchiveService:
                         )
                 return entries
             except tarfile.TarError as e:
-                raise ValueError(f"Corrupted or invalid TAR archive: {e}")
+                raise ValueError(f"Corrupted or invalid TAR archive: {e}") from e
 
         # Check single file compressed (.gz, .bz2, .xz)
         if name_lower.endswith(".gz") and not name_lower.endswith(".tar.gz"):
             stem = arc.stem
-            entries.append(ArchiveEntry(name=stem, path=stem, size=arc.stat().st_size, compressed_size=arc.stat().st_size, is_dir=False, modified=arc.stat().st_mtime, icon_type=get_file_icon_type(stem)))
+            entries.append(
+                ArchiveEntry(
+                    name=stem,
+                    path=stem,
+                    size=arc.stat().st_size,
+                    compressed_size=arc.stat().st_size,
+                    is_dir=False,
+                    modified=arc.stat().st_mtime,
+                    icon_type=get_file_icon_type(stem),
+                )
+            )
             return entries
         if name_lower.endswith(".bz2") and not name_lower.endswith(".tar.bz2"):
             stem = arc.stem
-            entries.append(ArchiveEntry(name=stem, path=stem, size=arc.stat().st_size, compressed_size=arc.stat().st_size, is_dir=False, modified=arc.stat().st_mtime, icon_type=get_file_icon_type(stem)))
+            entries.append(
+                ArchiveEntry(
+                    name=stem,
+                    path=stem,
+                    size=arc.stat().st_size,
+                    compressed_size=arc.stat().st_size,
+                    is_dir=False,
+                    modified=arc.stat().st_mtime,
+                    icon_type=get_file_icon_type(stem),
+                )
+            )
             return entries
         if name_lower.endswith(".xz") and not name_lower.endswith(".tar.xz"):
             stem = arc.stem
-            entries.append(ArchiveEntry(name=stem, path=stem, size=arc.stat().st_size, compressed_size=arc.stat().st_size, is_dir=False, modified=arc.stat().st_mtime, icon_type=get_file_icon_type(stem)))
+            entries.append(
+                ArchiveEntry(
+                    name=stem,
+                    path=stem,
+                    size=arc.stat().st_size,
+                    compressed_size=arc.stat().st_size,
+                    is_dir=False,
+                    modified=arc.stat().st_mtime,
+                    icon_type=get_file_icon_type(stem),
+                )
+            )
             return entries
 
         # Try 7z if available
@@ -905,7 +976,9 @@ class ArchiveService:
                         if "Path" in current_entry and current_entry["Path"] != str(arc):
                             path_val = current_entry.get("Path", "")
                             size_val = int(current_entry.get("Size", 0)) if current_entry.get("Size", "").isdigit() else 0
-                            csize_val = int(current_entry.get("Packed Size", 0)) if current_entry.get("Packed Size", "").isdigit() else size_val
+                            csize_val = (
+                                int(current_entry.get("Packed Size", 0)) if current_entry.get("Packed Size", "").isdigit() else size_val
+                            )
                             is_dir = current_entry.get("Folder", "") == "+"
                             entries.append(
                                 ArchiveEntry(
@@ -940,7 +1013,7 @@ class ArchiveService:
         try:
             resolved_target.relative_to(resolved_dest)
         except ValueError:
-            raise ArchiveSecurityError(f"Zip Slip detected: target '{target_path}' escapes extraction directory.")
+            raise ArchiveSecurityError(f"Zip Slip detected: target '{target_path}' escapes extraction directory.") from None
 
         return resolved_target
 
@@ -975,7 +1048,9 @@ class ArchiveService:
         # Filter by selected files if requested
         if selected_files:
             selected_set = set(selected_files)
-            entries_to_extract = [e for e in entries if e.path in selected_set or any(e.path.startswith(s.rstrip("/") + "/") for s in selected_set)]
+            entries_to_extract = [
+                e for e in entries if e.path in selected_set or any(e.path.startswith(s.rstrip("/") + "/") for s in selected_set)
+            ]
         else:
             entries_to_extract = entries
 
@@ -986,7 +1061,9 @@ class ArchiveService:
         arc_size = max(1, arc.stat().st_size)
         ratio = total_uncompressed_bytes / arc_size
         if ratio > 100.0 and total_uncompressed_bytes > 1024 * 1024 * 1024:  # > 100:1 ratio and > 1GB
-            raise ArchiveSecurityError(f"Potential archive bomb detected: compression ratio {ratio:.1f}:1 ({total_uncompressed_bytes / 1e9:.2f} GB).")
+            raise ArchiveSecurityError(
+                f"Potential archive bomb detected: compression ratio {ratio:.1f}:1 ({total_uncompressed_bytes / 1e9:.2f} GB)."
+            )
 
         # Free space check
         try:
@@ -1131,10 +1208,8 @@ class ArchiveService:
 
                 # Restore timestamp
                 if entry.modified > 0:
-                    try:
+                    with contextlib.suppress(OSError):
                         os.utime(target_file, (entry.modified, entry.modified))
-                    except OSError:
-                        pass
 
                 files_extracted += 1
 
@@ -1239,9 +1314,11 @@ class ArchiveService:
             reader_cls = gzip.open
         elif comp_type == "bz2":
             import bz2
+
             reader_cls = bz2.open
         elif comp_type == "xz":
             import lzma
+
             reader_cls = lzma.open
         else:
             raise ValueError(f"Unknown single-file compression: {comp_type}")

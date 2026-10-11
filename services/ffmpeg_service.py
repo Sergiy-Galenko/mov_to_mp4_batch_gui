@@ -11,6 +11,7 @@ from typing import Any
 
 from app.constants import HW_ENCODER_MAP, PORTRAIT_PRESETS, POSITION_MAP, VIDEO_CODEC_MAP
 from app.models import ConversionSettings, MediaChapter, MediaInfo
+from app.target_size import MIN_VIDEO_KBPS, MUX_RESERVE, target_mode_error, target_size_bytes
 from services.hardware_service import usable_videotoolbox_encoders
 from utils.formatting import build_atempo_chain
 
@@ -497,7 +498,7 @@ class FfmpegService:
     def minimum_target_size_mb(self, settings: ConversionSettings, info: MediaInfo) -> float:
         duration = self.target_duration(settings, info) or 0.0
         audio = self.target_audio_budget_kbps(settings, info)
-        return (120 + audio) * duration / (8192.0 * 0.94)
+        return (MIN_VIDEO_KBPS + audio) * duration * 1000 / (8_000_000 * (1 - MUX_RESERVE))
 
     def target_video_bitrate_kbps(self, settings: ConversionSettings, info: MediaInfo | None) -> int | None:
         if not settings.target_size_mb:
@@ -509,12 +510,12 @@ class FfmpegService:
         if settings.target_size_mb < minimum:
             raise ValueError(f"Цільовий розмір замалий. Мінімально розумне значення: {minimum:.2f} МБ.")
         audio = self.target_audio_budget_kbps(settings, info)
-        return int(settings.target_size_mb * 8192.0 * 0.94 / duration - audio)
+        return int(target_size_bytes(settings.target_size_mb) * 8 * (1 - MUX_RESERVE) / 1000 / duration - audio)
 
     def target_audio_bitrate_kbps(self, settings: ConversionSettings, duration: float | None) -> int | None:
         if not settings.target_size_mb or not duration or duration <= 0:
             return None
-        total_kbits = float(settings.target_size_mb) * 8192.0
+        total_kbits = target_size_bytes(settings.target_size_mb) * 8 / 1000
         return max(32, int(total_kbits * 0.96 / duration))
 
     def source_matches_codec_choice(self, info: MediaInfo | None, codec_choice: str, out_ext: str) -> bool:
@@ -1163,6 +1164,14 @@ class FfmpegService:
         overwrite = "-y" if settings.overwrite else "-n"
         out_ext = outp.suffix.lower()
         trim_args = self.build_trim_args(settings, log_cb=log_cb)
+        input_trim_args = []
+        if settings.target_size_mb and settings.video_codec != "ProRes":
+            # Trim source timestamps before setpts/atempo change the output duration.
+            if settings.trim_start is not None:
+                input_trim_args += ["-ss", f"{settings.trim_start:.3f}"]
+            if settings.trim_end is not None:
+                input_trim_args += ["-t", f"{settings.trim_end - (settings.trim_start or 0):.3f}"]
+            trim_args = []
         filter_arg, filter_val, map_label, extra_inputs, _filters_used = self.build_video_filter_spec(
             inp, settings, out_ext, log_cb=log_cb, info=info
         )
@@ -1171,7 +1180,7 @@ class FfmpegService:
 
         if allow_fast_copy and not settings.target_size_mb and replace_audio is None:
             track_index = max(0, int(settings.audio_track_index))
-            cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
+            cmd = [self.ffmpeg_path, overwrite, *input_trim_args, "-i", str(inp)]
             cmd += trim_args
             if settings.remove_audio:
                 cmd += ["-map", "0:v:0?", "-an", "-map", "0:s?"]
@@ -1184,7 +1193,7 @@ class FfmpegService:
             cmd.append(str(outp))
             return cmd
 
-        cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
+        cmd = [self.ffmpeg_path, overwrite, *input_trim_args, "-i", str(inp)]
         if extra_inputs:
             cmd += ["-i", extra_inputs[0]]
         audio_input_index = 1 + len(extra_inputs)
@@ -1218,9 +1227,10 @@ class FfmpegService:
             return cmd
 
         codec = self.resolve_codec(out_ext, settings.video_codec, log_cb=log_cb)
-        if settings.target_size_mb:
-            if out_ext not in {".mp4", ".mov", ".mkv", ".avi"}:
-                raise ValueError("Target size підтримує MP4, MOV, MKV та AVI (H.264).")
+        if settings.target_size_mb and codec != "prores":
+            error = target_mode_error(settings.video_codec, out_ext, settings.merge)
+            if error:
+                raise ValueError(error)
             codec, encoder, is_hw = "h264", "libx264", False
         else:
             encoder, is_hw = self.select_encoder(codec, HW_ENCODER_MAP.get(settings.hw_encoder, "auto"), log_cb=log_cb)
@@ -1231,7 +1241,7 @@ class FfmpegService:
             cmd += ["-tag:v", "hvc1"]
         if not is_hw and encoder in {"libx264", "libx265"}:
             cmd += ["-preset", (settings.preset or "medium").strip()]
-        target_video_kbps = self.target_video_bitrate_kbps(settings, info)
+        target_video_kbps = self.target_video_bitrate_kbps(settings, info) if codec != "prores" else None
         if target_video_kbps and codec != "prores":
             cmd += [
                 "-b:v",

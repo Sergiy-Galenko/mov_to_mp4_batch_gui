@@ -207,7 +207,7 @@
   "platform_profile": "Platform profile",
   "performance_profile": "Performance profile",
   "target_size_mb": "Target size, MB",
-  "target_size_hint": "Empty = automatic. Target size: two-pass H.264 on CPU, with 6% reserved for container overhead.",
+  "target_size_hint": "MB = 1,000,000 bytes. Two-pass H.264 on CPU; size verification and up to two retries.",
   "cpu_load_limit": "CPU limit, %",
   "gpu_load_limit": "GPU limit, %",
   "quality": "Quality",
@@ -1036,5 +1036,13 @@
   "inspector": "Inspector",
   "preset_name": "Preset name",
   "presets_import": "Import JSON",
-  "presets_export": "Export JSON"
+  "presets_export": "Export JSON",
+  "presets_builtin": "Built-in",
+  "presets_custom": "Custom",
+  "presets_save_as": "Save as",
+  "presets_conflicts": "Conflicting names: {names}.\nYes — replace custom presets; import built-ins as copies.\nNo — keep existing presets. Cancel — stop import.",
+  "target_size_estimate": "Video: {video} kbit/s · Audio: {audio} kbit/s · Minimum: {minimum} MB",
+  "target_size_probe_hint": "Add a video and wait for its duration to calculate the bitrate.",
+  "target_size_resize": "Low bitrate: resize to {width}×{height}",
+  "presets_copy": "Copy"
 }

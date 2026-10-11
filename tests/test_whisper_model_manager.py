@@ -156,6 +156,7 @@ def test_environment_cache_roots_are_shared(monkeypatch, tmp_path):
 
 
 def test_devices_follow_runtime_availability_and_engine(monkeypatch):
+    monkeypatch.setattr(whisper_runtime, "managed_runtime", lambda: {})
     monkeypatch.setattr(whisper_runtime, "package_available", lambda name: name == "whisper")
     monkeypatch.setitem(
         __import__("sys").modules,

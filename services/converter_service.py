@@ -13,6 +13,7 @@ from queue import Queue
 
 from app.constants import PROGRESS_THROTTLE_SEC
 from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
+from app.target_size import MIN_VIDEO_KBPS, target_size_bytes
 from services.cloud_upload_service import CloudUploadService
 from services.ffmpeg_service import FfmpegService, parse_progress_line
 from services.security_service import secure_delete, write_checksum_sidecar
@@ -320,6 +321,8 @@ class ConverterService:
         info = self.media_info.get(task.path)
         return apply_smart_settings(base, info, media_type=task.media_type, source_path=task.path)
 
+    OVERSIZE_RC = -10001
+
     def _can_use_two_pass(self, settings: ConversionSettings, cmd: list[str], allow_fast: bool) -> bool:
         if not settings.target_size_mb:
             return False
@@ -340,11 +343,6 @@ class ConverterService:
         }
         encoder = cmd[cmd.index("-c:v") + 1]
         return not FfmpegService.is_gpu_encoder(encoder) and not any(encoder in joined for encoder in unsupported)
-
-    def _cleanup_passlog(self, passlog: Path) -> None:
-        for candidate in passlog.parent.glob(passlog.name + "*"):
-            with contextlib.suppress(Exception):
-                candidate.unlink(missing_ok=True)
 
     def _create_cpu_fallback_command(self, cmd: list[str]) -> list[str] | None:
         if "-c:v" not in cmd:
@@ -416,25 +414,64 @@ class ConverterService:
         if not self._can_use_two_pass(settings, cmd, allow_fast):
             rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
         else:
-            passlog = Path(tempfile.gettempdir()) / ("media-converter-pass-" + uuid.uuid4().hex)
+            budget = target_size_bytes(settings.target_size_mb)
+            command = list(cmd)
+            self._encoding_output_duration = self.ffmpeg.target_duration(settings, MediaInfo(duration=duration))
+            self._encoding_progress = (0.0, 0.49)
+            self._encoding_progress_floor = 0.0
             try:
-                pass1, pass2 = self.ffmpeg.build_two_pass_commands(cmd, passlog)
-                self._log("INFO", f"Two-pass encoding: pass 1/2 для {outp.name}")
-                rc = self._run_ffmpeg(
-                    pass1,
-                    duration,
-                    done_duration,
-                    total_duration,
-                    done_files,
-                    total_files,
-                    total_start,
-                    publish_output=False,
-                )
+                for attempt in range(3):
+                    if self.stop_event.is_set() or self.skip_event.is_set():
+                        return self.SKIP_RC if self.skip_event.is_set() else 1
+                    with tempfile.TemporaryDirectory(prefix="media-converter-pass-") as temporary:
+                        passlog = Path(temporary) / "stats"
+                        pass1, pass2 = self.ffmpeg.build_two_pass_commands(command, passlog)
+                        self._encoding_progress = (0.0, 0.49)
+                        message = f"Прохід 1/2: {outp.name} (спроба {attempt + 1}/3)"
+                        self._log("INFO", message)
+                        self._emit("status", message)
+                        rc = self._run_ffmpeg(
+                            pass1, duration, done_duration, total_duration, done_files, total_files, total_start, publish_output=False
+                        )
+                        if rc == 0 and not self.stop_event.is_set() and not self.skip_event.is_set():
+                            self._encoding_progress = (0.49, 0.50)
+                            message = f"Прохід 2/2: {outp.name} (спроба {attempt + 1}/3)"
+                            self._log("INFO", message)
+                            self._emit("status", message)
+                            rc = self._run_ffmpeg(
+                                pass2,
+                                duration,
+                                done_duration,
+                                total_duration,
+                                done_files,
+                                total_files,
+                                total_start,
+                                size_limit_bytes=budget,
+                            )
+                    if rc != self.OVERSIZE_RC:
+                        break
+                    actual_size = self._last_encode_size
+                    current = int(command[command.index("-b:v") + 1].removesuffix("k"))
+                    planned = self.ffmpeg.target_video_bitrate_kbps(
+                        settings, MediaInfo(duration=duration, audio_streams=0 if "-an" in command else 1)
+                    )
+                    corrected = min(int(current * budget / actual_size * 0.90), planned or current)
+                    if corrected < MIN_VIDEO_KBPS or attempt == 2:
+                        self._log("ERROR", "Не вдалося вкластися в цільовий розмір. Збільш розмір або зменш бітрейт аудіо.")
+                        break
+                    for flag, value in (("-b:v", corrected), ("-maxrate", int(corrected * 1.35)), ("-bufsize", corrected * 2)):
+                        if flag in command:
+                            command[command.index(flag) + 1] = f"{value}k"
+                    self._log("WARN", f"Розмір {actual_size / 1_000_000:.2f} MB перевищує ліміт; повтор з {corrected} kbit/s.")
                 if rc == 0 and not self.stop_event.is_set() and not self.skip_event.is_set():
-                    self._log("INFO", f"Two-pass encoding: pass 2/2 для {outp.name}")
-                    rc = self._run_ffmpeg(pass2, duration, done_duration, total_duration, done_files, total_files, total_start)
+                    total_pct = (
+                        (done_duration + (duration or 0)) / total_duration if total_duration else (done_files + 1) / max(total_files, 1)
+                    )
+                    self._emit("progress", 1.0, duration, duration, 0.0, min(total_pct, 1.0), None, None)
             finally:
-                self._cleanup_passlog(passlog)
+                self._encoding_output_duration = None
+                self._encoding_progress = None
+                self._encoding_progress_floor = 0.0
 
         # Automatic GPU to CPU fallback on failure
         if rc != 0 and not self.stop_event.is_set() and not self.skip_event.is_set() and getattr(settings, "auto_gpu_fallback", True):
@@ -1447,6 +1484,7 @@ class ConverterService:
         total_start: float,
         *,
         publish_output: bool = True,
+        size_limit_bytes: int | None = None,
     ) -> int:
         if len(cmd) < 2:
             return -1
@@ -1508,16 +1546,25 @@ class ConverterService:
 
                 file_pct = None
                 file_eta = None
-                if duration and duration > 0:
-                    file_pct = min(out_time / duration, 1.0)
+                progress_duration = getattr(self, "_encoding_output_duration", None) or duration
+                if progress_duration and progress_duration > 0:
+                    file_pct = min(out_time / progress_duration, 1.0)
                     elapsed = max(time.time() - file_start, 0.001)
                     if speed and speed > 0:
-                        file_eta = max((duration - out_time) / speed, 0.0)
+                        file_eta = max((progress_duration - out_time) / speed, 0.0)
                     else:
                         file_eta = _estimate_eta(elapsed, file_pct) if file_pct else None
 
+                weighted_time = out_time
+                phase = getattr(self, "_encoding_progress", None)
+                if phase and file_pct is not None:
+                    offset, scale = phase
+                    file_pct = max(getattr(self, "_encoding_progress_floor", 0.0), offset + scale * file_pct)
+                    self._encoding_progress_floor = file_pct
+                    weighted_time = file_pct * duration
+                    file_eta = None  # pass speeds differ; a single-pass ETA would be misleading
                 if total_duration > 0:
-                    overall_done = total_done + out_time
+                    overall_done = total_done + weighted_time
                     total_pct = min(overall_done / total_duration, 1.0)
                     overall_elapsed = time.time() - total_start
                     total_eta = _estimate_eta(overall_elapsed, total_pct) if total_pct else None
@@ -1542,6 +1589,11 @@ class ConverterService:
             self.current_proc = None
             self.current_output_path = None
         cancelled = self.skip_event.is_set() or self.stop_event.is_set()
+        if publish_output and rc == 0 and not cancelled and size_limit_bytes is not None:
+            self._last_encode_size = work_output_path.stat().st_size
+            if self._last_encode_size > size_limit_bytes:
+                work_output_path.unlink(missing_ok=True)
+                return self.OVERSIZE_RC
         if publish_output and rc == 0 and not cancelled:
             if output_path.exists() and "-y" not in cmd:
                 self._log("ERROR", f"Вихідний файл з'явився під час конвертації: {output_path.name}")

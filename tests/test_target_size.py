@@ -31,9 +31,9 @@ def test_target_bitrate_accounts_for_trim_speed_audio():
     ffmpeg = FfmpegService("ffmpeg", None)
     settings = ConversionSettings(target_size_mb=8, trim_start=10, trim_end=50, speed=2, audio_bitrate="128k")
     info = MediaInfo(duration=60, audio_streams=1)
-    assert ffmpeg.target_video_bitrate_kbps(settings, info) == int(8 * 8192 * 0.94 / 20 - 128)
+    assert ffmpeg.target_video_bitrate_kbps(settings, info) == int(8 * 8000 * 0.94 / 20 - 128)
     settings.remove_audio = True
-    assert ffmpeg.target_video_bitrate_kbps(settings, info) == int(8 * 8192 * 0.94 / 20)
+    assert ffmpeg.target_video_bitrate_kbps(settings, info) == int(8 * 8000 * 0.94 / 20)
     settings.target_size_mb = 0.01
     with pytest.raises(ValueError, match="Мінімально розумне"):
         ffmpeg.target_video_bitrate_kbps(settings, info)
@@ -92,3 +92,29 @@ def test_validation_warns_with_minimum_and_rejects_invalid_sizes(tmp_path):
         errors = {}
         service._validate_fields({"target_size_mb": value}, errors.setdefault)
         assert "target_size_mb" in errors
+
+
+def test_preflight_rejects_prores_and_incompatible_task_overrides(tmp_path):
+    from app.models import TaskItem
+    from services.validation_service import ValidationService
+
+    ffmpeg = FfmpegService("ffmpeg", None)
+    service = ValidationService(ffmpeg)
+    result = service.validate(
+        {"target_size_mb": 8, "codec": "ProRes", "out_video_fmt": "mov"},
+        tasks=[],
+        output_dir="",
+        ffmpeg_path="",
+        include_queue=False,
+        require_output_dir=False,
+    )
+    assert "ProRes" in result["errors"]["target_size_mb"]
+    source = TaskItem(
+        path=tmp_path / "in.mp4",
+        media_type="video",
+        overrides={"codec": "H.265 (HEVC)"},
+        probe_data=MediaInfo(duration=30, audio_streams=1),
+    )
+    errors = {}
+    service._validate_media_compatibility([source], {"target_size_mb": 8}, {}, errors.setdefault, lambda _: None)
+    assert "H.265" in errors["target_size_mb"]

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.preset_schema import validate_settings
 from utils.state import save_json_file
 
 DEFAULT_PRESETS: dict[str, dict[str, Any]] = {
@@ -239,7 +240,9 @@ def validate_presets(data: Any) -> dict[str, dict[str, Any]]:
         not isinstance(name, str) or not name.strip() or not isinstance(value, dict) for name, value in data.items()
     ):
         raise ValueError("JSON має містити об’єкт {назва: налаштування}.")
-    return {name: dict(value) for name, value in data.items()}
+    if len({name.strip() for name in data}) != len(data):
+        raise ValueError("Назви пресетів збігаються після видалення пробілів.")
+    return {name.strip(): validate_settings(value) for name, value in data.items()}
 
 
 def load_presets(path: Path) -> dict[str, dict[str, Any]]:

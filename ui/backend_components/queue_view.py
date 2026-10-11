@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-BODY = r"""    @QtCore.Property(QtCore.QObject, constant=True)
+from .common import Any, ConversionSettings, Dict, List, Path, QtCore, QueueModel, merge_settings_maps, settings_map_to_model
+from .core import CoreMixin
+
+
+class QueueViewMixin:
+    @QtCore.Property(QtCore.QObject, constant=True)
     def filteredQueueModel(self) -> QtCore.QObject:
         return self.queue_filter_model
 
-    @QtCore.Property(int, notify=queueFilterChanged)
+    @QtCore.Property(int, notify=CoreMixin.queueFilterChanged)
     def visibleQueueCount(self) -> int:
         return self.queue_filter_model.rowCount()
 
-    @QtCore.Property("QVariantList", notify=queueFilterChanged)
+    @QtCore.Property("QVariantList", notify=CoreMixin.queueFilterChanged)
     def visibleQueuePaths(self) -> List[str]:
         model = self.queue_filter_model
         return [str(model.data(model.index(row, 0), QueueModel.PathRole)) for row in range(model.rowCount())]
@@ -38,4 +43,3 @@ BODY = r"""    @QtCore.Property(QtCore.QObject, constant=True)
             "trimEnd": settings.trim_end or 0,
             "fastCopy": settings.fast_copy,
         }
-"""

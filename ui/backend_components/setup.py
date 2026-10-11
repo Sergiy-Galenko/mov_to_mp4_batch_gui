@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
+from .common import QtCore, QtWidgets
+
+
+class SetupMixin:
+    @QtCore.Property(QtCore.QObject, constant=True)
     def editorProject(self):
         return self._editor_project
 
@@ -78,7 +82,9 @@ BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
         elif self.autoTuneEnabled:
             recommendation = dict(report.get("recommendation", {}))
             self.settings_manager.state["concurrency_limit"] = recommendation.get("concurrency_limit", 1)
-            self._last_settings_map.update({key: recommendation[key] for key in ("concurrency_limit", "cpu_load_limit", "gpu_load_limit") if key in recommendation})
+            self._last_settings_map.update(
+                {key: recommendation[key] for key in ("concurrency_limit", "cpu_load_limit", "gpu_load_limit") if key in recommendation}
+            )
             self._pending_system_profile = None
             self.concurrencyLimitChanged.emit()
             self.autoProfileReady.emit(recommendation)
@@ -100,6 +106,7 @@ BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
 
     @QtCore.Slot(result=str)
     def pickWhisperTestMedia(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(None, "Whisper — audio / video", "", "Media (*.wav *.mp3 *.m4a *.mp4 *.mov *.mkv *.flac *.ogg);;All files (*)")
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            None, "Whisper — audio / video", "", "Media (*.wav *.mp3 *.m4a *.mp4 *.mov *.mkv *.flac *.ogg);;All files (*)"
+        )
         return path
-'''
