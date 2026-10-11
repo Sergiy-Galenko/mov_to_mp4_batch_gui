@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import shutil
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -121,6 +122,11 @@ class ValidationService:
         return {"ok": not errors, "errors": errors, "warnings": warnings, "summary": summary}
 
     def _validate_fields(self, raw: dict[str, Any], add_error) -> None:
+        target = str(raw.get("target_size_mb", "")).strip()
+        if target:
+            value = parse_float(target)
+            if value is None or not math.isfinite(value) or value <= 0:
+                add_error("target_size_mb", "Цільовий розмір має бути додатним скінченним числом.")
         positive_int_fields = {
             "resize_w": "Ширина resize",
             "resize_h": "Висота resize",
@@ -368,6 +374,20 @@ class ValidationService:
             if item.media_type != "video" or operation not in {"convert", "subtitle_burn"}:
                 continue
 
+            if settings.target_size_mb:
+                duration = self.ffmpeg.target_duration(settings, info)
+                if not duration:
+                    add_error("target_size_mb", f"{item.path.name}: Target size потребує відомої тривалості.")
+                else:
+                    minimum = self.ffmpeg.minimum_target_size_mb(settings, info)
+                    if settings.target_size_mb < minimum:
+                        message = f"{item.path.name}: цільовий розмір замалий; мінімально розумне значення {minimum:.2f} МБ."
+                        add_warning(message)
+                        add_error("target_size_mb", message)
+                if settings.out_video_format.lower() not in {"mp4", "mov", "mkv", "avi"}:
+                    add_error("target_size_mb", "Target size підтримує MP4, MOV, MKV та AVI (H.264).")
+                if settings.merge:
+                    add_error("target_size_mb", "Target size: вимкни об’єднання, щоб задати розмір для кожного відео.")
             out_format = settings.out_video_format.lower()
             if not info.audio_streams:
                 add_warning(f"{item.path.name}: у результаті не буде аудіо — у джерелі немає аудіодоріжок.")

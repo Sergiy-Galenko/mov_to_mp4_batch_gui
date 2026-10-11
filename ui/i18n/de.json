@@ -205,7 +205,7 @@
   "platform_profile": "Plattformprofil",
   "performance_profile": "Leistungsprofil",
   "target_size_mb": "Zielgröße, MB",
-  "target_size_hint": "Leer = automatische Größe",
+  "target_size_hint": "Leer = automatisch. Zielgröße: H.264 in zwei Durchläufen auf CPU, 6% Reserve für den Container.",
   "cpu_load_limit": "CPU-Limit, %",
   "gpu_load_limit": "GPU-Limit, %",
   "quality": "Qualität",
@@ -1033,5 +1033,8 @@
   "archive.open_folder": "Ordner öffnen",
   "archive.copy_path": "Pfad kopieren",
   "archive.done": "Fertig",
-  "inspector": "Inspektor"
+  "inspector": "Inspektor",
+  "preset_name": "Presetname",
+  "presets_import": "JSON importieren",
+  "presets_export": "JSON exportieren"
 }

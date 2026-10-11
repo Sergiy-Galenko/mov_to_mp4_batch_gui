@@ -198,23 +198,61 @@ DEFAULT_PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
+for _size in (8, 25, 50):
+    DEFAULT_PRESETS[f"Discord • {_size} МБ"] = {
+        **DEFAULT_PRESETS["Discord • Compact MP4"],
+        "performance_profile": "Balanced",
+        "target_size_mb": _size,
+        "smart_two_pass": True,
+        "fast_copy": False,
+    }
+DEFAULT_PRESETS["Архів • HEVC"] = {
+    **DEFAULT_PRESETS["H.265 • Менший розмір (MP4)"],
+    "hw": "Тільки CPU",
+    "audio_bitrate": "192k",
+    "portrait": "",
+    "resize_w": "",
+    "resize_h": "",
+}
+DEFAULT_PRESETS["Максимальна сумісність • H.264"] = {
+    **DEFAULT_PRESETS["H.264 • Баланс (MP4)"],
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "portrait": "",
+    "resize_w": "",
+    "resize_h": "",
+}
+# Each video preset resets settings that can otherwise leak from the previous selection.
+for _preset in DEFAULT_PRESETS.values():
+    if "out_video_fmt" in _preset:
+        _preset.setdefault("operation", "Конвертація")
+        _preset.setdefault("fast_copy", False)
+        _preset.setdefault("target_size_mb", None)
+        _preset.setdefault("smart_two_pass", False)
+        _preset.setdefault("portrait", "")
+        _preset.setdefault("resize_w", "")
+        _preset.setdefault("resize_h", "")
+
+
+def validate_presets(data: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(data, dict) or any(
+        not isinstance(name, str) or not name.strip() or not isinstance(value, dict) for name, value in data.items()
+    ):
+        raise ValueError("JSON має містити об’єкт {назва: налаштування}.")
+    return {name: dict(value) for name, value in data.items()}
+
+
 def load_presets(path: Path) -> dict[str, dict[str, Any]]:
-    if not path.exists():
-        return dict(DEFAULT_PRESETS)
+    from copy import deepcopy
+
+    merged = deepcopy(DEFAULT_PRESETS)
     try:
         with path.open("r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        if isinstance(data, dict):
-            merged = dict(DEFAULT_PRESETS)
-            merged.update(data)
-            return merged
-    except Exception:
-        return dict(DEFAULT_PRESETS)
-    return dict(DEFAULT_PRESETS)
+            merged.update(validate_presets(json.load(fh)))
+    except (OSError, ValueError):
+        pass
+    return merged
 
 
 def save_presets(path: Path, presets: dict[str, dict[str, Any]]) -> None:
-    try:
-        save_json_file(path, presets)
-    except Exception:
-        return
+    save_json_file(path, validate_presets(presets))

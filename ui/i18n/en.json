@@ -207,7 +207,7 @@
   "platform_profile": "Platform profile",
   "performance_profile": "Performance profile",
   "target_size_mb": "Target size, MB",
-  "target_size_hint": "Empty = automatic size",
+  "target_size_hint": "Empty = automatic. Target size: two-pass H.264 on CPU, with 6% reserved for container overhead.",
   "cpu_load_limit": "CPU limit, %",
   "gpu_load_limit": "GPU limit, %",
   "quality": "Quality",
@@ -1033,5 +1033,8 @@
   "archive.open_folder": "Open Folder",
   "archive.copy_path": "Copy Path",
   "archive.done": "Done",
-  "inspector": "Inspector"
+  "inspector": "Inspector",
+  "preset_name": "Preset name",
+  "presets_import": "Import JSON",
+  "presets_export": "Export JSON"
 }

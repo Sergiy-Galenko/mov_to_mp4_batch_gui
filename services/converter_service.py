@@ -321,7 +321,7 @@ class ConverterService:
         return apply_smart_settings(base, info, media_type=task.media_type, source_path=task.path)
 
     def _can_use_two_pass(self, settings: ConversionSettings, cmd: list[str], allow_fast: bool) -> bool:
-        if allow_fast or not settings.smart_two_pass or not settings.target_size_mb:
+        if not settings.target_size_mb:
             return False
         joined = " ".join(cmd)
         if "-b:v" not in cmd or "-c:v" not in cmd:
@@ -416,23 +416,25 @@ class ConverterService:
         if not self._can_use_two_pass(settings, cmd, allow_fast):
             rc = self._run_ffmpeg(cmd, duration, done_duration, total_duration, done_files, total_files, total_start)
         else:
-            passlog = outp.with_suffix(outp.suffix + ".ffmpeg2pass")
-            pass1, pass2 = self.ffmpeg.build_two_pass_commands(cmd, passlog)
-            self._log("INFO", f"Two-pass encoding: pass 1/2 для {outp.name}")
-            rc = self._run_ffmpeg(
-                pass1,
-                duration,
-                done_duration,
-                total_duration,
-                done_files,
-                total_files,
-                total_start,
-                publish_output=False,
-            )
-            if rc == 0 and not self.stop_event.is_set():
-                self._log("INFO", f"Two-pass encoding: pass 2/2 для {outp.name}")
-                rc = self._run_ffmpeg(pass2, duration, done_duration, total_duration, done_files, total_files, total_start)
-            self._cleanup_passlog(passlog)
+            passlog = Path(tempfile.gettempdir()) / ("media-converter-pass-" + uuid.uuid4().hex)
+            try:
+                pass1, pass2 = self.ffmpeg.build_two_pass_commands(cmd, passlog)
+                self._log("INFO", f"Two-pass encoding: pass 1/2 для {outp.name}")
+                rc = self._run_ffmpeg(
+                    pass1,
+                    duration,
+                    done_duration,
+                    total_duration,
+                    done_files,
+                    total_files,
+                    total_start,
+                    publish_output=False,
+                )
+                if rc == 0 and not self.stop_event.is_set() and not self.skip_event.is_set():
+                    self._log("INFO", f"Two-pass encoding: pass 2/2 для {outp.name}")
+                    rc = self._run_ffmpeg(pass2, duration, done_duration, total_duration, done_files, total_files, total_start)
+            finally:
+                self._cleanup_passlog(passlog)
 
         # Automatic GPU to CPU fallback on failure
         if rc != 0 and not self.stop_event.is_set() and not self.skip_event.is_set() and getattr(settings, "auto_gpu_fallback", True):
@@ -1175,7 +1177,7 @@ class ConverterService:
                             ):
                                 fast_copy_ok = False
                                 reason = "Smart Convert обрав інший кодек"
-                            allow_fast = settings_for_task.fast_copy and fast_copy_ok
+                            allow_fast = settings_for_task.fast_copy and fast_copy_ok and not settings_for_task.target_size_mb
                             if settings_for_task.fast_copy and not fast_copy_ok:
                                 self._log("WARN", f"Fast copy вимкнено для {task.path.name}: {reason}")
                             if settings_for_task.smart_convert_enabled:

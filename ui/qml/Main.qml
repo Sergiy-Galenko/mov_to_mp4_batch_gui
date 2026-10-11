@@ -1278,11 +1278,14 @@ ApplicationWindow {
             Panel {
                 title: I18n.t("presets")
                 AppComboBox { id: presetScreenCombo; model: backend ? backend.presetsModel : null; textRole: "display" }
+                AppTextField { id: presetScreenName; placeholderText: I18n.t("preset_name"); text: presetScreenCombo.currentText }
                 RowLayout {
                     Layout.fillWidth: true
                     SecondaryButton { iconName: "folder"; text: I18n.t("load"); onClicked: { root.selectedPreset = presetScreenCombo.currentText; backend && backend.loadPreset(presetScreenCombo.currentText) } }
-                    SecondaryButton { iconName: "save"; text: I18n.t("save"); onClicked: backend && backend.savePreset(presetScreenCombo.currentText || "Custom", collectSettings()) }
+                    SecondaryButton { iconName: "save"; text: I18n.t("save"); onClicked: backend && backend.savePreset(presetScreenName.text, collectSettings()) }
                     SecondaryButton { iconName: "trash"; text: I18n.t("delete"); onClicked: backend && backend.deletePreset(presetScreenCombo.currentText) }
+                    SecondaryButton { iconName: "folder"; text: I18n.t("presets_import"); onClicked: backend && backend.importPresets() }
+                    SecondaryButton { iconName: "save"; text: I18n.t("presets_export"); onClicked: backend && backend.exportPresets() }
                 }
             }
 
@@ -1935,7 +1938,7 @@ ApplicationWindow {
             smartAbTestCheck.checked = !!preset.smart_ab_test
             smartAbCrfsField.text = preset.smart_ab_crfs || "18,23,28"
             if (preset.smart_ab_duration !== undefined) smartAbDurationSpin.value = Number(preset.smart_ab_duration)
-            if (preset.portrait) root.setComboCanonical(portraitCombo, preset.portrait, root.portraitCanonicalOptions)
+            root.setComboCanonical(portraitCombo, preset.portrait || root.portraitCanonicalOptions[0], root.portraitCanonicalOptions)
             if (preset.img_quality !== undefined) imgQualitySpin.value = Number(preset.img_quality)
             overwriteCheck.checked = !!preset.overwrite
             fastCopyCheck.checked = !!preset.fast_copy
@@ -2238,12 +2241,15 @@ ApplicationWindow {
             iconTint: "#AF52DE"
             title: I18n.t("presets")
             AppComboBox { id: savedPresetCombo; model: backend ? backend.presetsModel : null; textRole: "display" }
+                AppTextField { id: savedPresetName; placeholderText: I18n.t("preset_name"); text: savedPresetCombo.currentText }
             Flow {
                 Layout.fillWidth: true
                 spacing: Theme.space2
                 SecondaryButton { iconName: "folder"; text: I18n.t("load"); onClicked: { root.selectedPreset = savedPresetCombo.currentText; backend && backend.loadPreset(savedPresetCombo.currentText) } }
-                SecondaryButton { iconName: "save"; text: I18n.t("save"); onClicked: backend && backend.savePreset(savedPresetCombo.currentText || "Custom", collectSettings()) }
+                SecondaryButton { iconName: "save"; text: I18n.t("save"); onClicked: backend && backend.savePreset(savedPresetName.text, collectSettings()) }
                 SecondaryButton { iconName: "trash"; text: I18n.t("delete"); onClicked: backend && backend.deletePreset(savedPresetCombo.currentText) }
+                    SecondaryButton { iconName: "folder"; text: I18n.t("presets_import"); onClicked: backend && backend.importPresets() }
+                    SecondaryButton { iconName: "save"; text: I18n.t("presets_export"); onClicked: backend && backend.exportPresets() }
             }
         }
 

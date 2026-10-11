@@ -205,7 +205,7 @@
   "platform_profile": "Profil platformy",
   "performance_profile": "Profil wydajności",
   "target_size_mb": "Rozmiar docelowy, MB",
-  "target_size_hint": "Puste = automatyczny rozmiar",
+  "target_size_hint": "Puste = automatycznie. Rozmiar docelowy: H.264 w dwóch przebiegach na CPU, 6% rezerwy na kontener.",
   "cpu_load_limit": "Limit CPU, %",
   "gpu_load_limit": "Limit GPU, %",
   "quality": "Jakość",
@@ -1033,5 +1033,8 @@
   "archive.open_folder": "Otwórz folder",
   "archive.copy_path": "Kopiuj ścieżkę",
   "archive.done": "Gotowe",
-  "inspector": "Inspektor"
+  "inspector": "Inspektor",
+  "preset_name": "Nazwa presetu",
+  "presets_import": "Import JSON",
+  "presets_export": "Eksport JSON"
 }

@@ -461,7 +461,7 @@ class FfmpegService:
         requested = str(settings.audio_codec or "auto").strip().lower()
         if out_ext == ".mpg" and requested in {"auto", "aac", "opus"}:
             return ["-c:a", "ac3", "-b:a", settings.audio_bitrate or "192k"]
-        if requested == "copy":
+        if requested == "copy" and not settings.target_size_mb:
             return ["-c:a", "copy"]
         codec_map = {
             "aac": "aac",
@@ -481,14 +481,35 @@ class FfmpegService:
             return ["-profile:v", profile]
         return []
 
-    def target_video_bitrate_kbps(self, settings: ConversionSettings, info: MediaInfo | None) -> int | None:
-        if not settings.target_size_mb or not info or not info.duration or info.duration <= 0:
+    def target_duration(self, settings: ConversionSettings, info: MediaInfo | None) -> float | None:
+        if not info or not info.duration or info.duration <= 0:
             return None
-        total_kbits = float(settings.target_size_mb) * 8192.0
-        audio_kbps = _bitrate_to_kbps(settings.audio_bitrate, fallback=160)
-        mux_overhead = 0.94
-        video_kbps = int((total_kbits * mux_overhead / info.duration) - audio_kbps)
-        return max(video_kbps, 120)
+        start = settings.trim_start or 0.0
+        end = min(info.duration, settings.trim_end) if settings.trim_end is not None else info.duration
+        return max(0.0, end - start) / (settings.speed or 1.0)
+
+    def target_audio_budget_kbps(self, settings: ConversionSettings, info: MediaInfo) -> int:
+        if settings.remove_audio or (not info.audio_streams and not settings.replace_audio_path):
+            return 0
+        args = self.video_audio_codec_args(settings, "." + settings.out_video_format.lower())
+        return _bitrate_to_kbps(args[args.index("-b:a") + 1], fallback=192)
+
+    def minimum_target_size_mb(self, settings: ConversionSettings, info: MediaInfo) -> float:
+        duration = self.target_duration(settings, info) or 0.0
+        audio = self.target_audio_budget_kbps(settings, info)
+        return (120 + audio) * duration / (8192.0 * 0.94)
+
+    def target_video_bitrate_kbps(self, settings: ConversionSettings, info: MediaInfo | None) -> int | None:
+        if not settings.target_size_mb:
+            return None
+        duration = self.target_duration(settings, info)
+        if not duration:
+            raise ValueError("Target size: потрібна відома додатна тривалість відео.")
+        minimum = self.minimum_target_size_mb(settings, info)
+        if settings.target_size_mb < minimum:
+            raise ValueError(f"Цільовий розмір замалий. Мінімально розумне значення: {minimum:.2f} МБ.")
+        audio = self.target_audio_budget_kbps(settings, info)
+        return int(settings.target_size_mb * 8192.0 * 0.94 / duration - audio)
 
     def target_audio_bitrate_kbps(self, settings: ConversionSettings, duration: float | None) -> int | None:
         if not settings.target_size_mb or not duration or duration <= 0:
@@ -1148,7 +1169,7 @@ class FfmpegService:
         audio_filter = self.build_audio_filter(settings)
         replace_audio = self._resolve_replace_audio_path(settings, log_cb=log_cb)
 
-        if allow_fast_copy and replace_audio is None:
+        if allow_fast_copy and not settings.target_size_mb and replace_audio is None:
             track_index = max(0, int(settings.audio_track_index))
             cmd = [self.ffmpeg_path, overwrite, "-i", str(inp)]
             cmd += trim_args
@@ -1197,7 +1218,12 @@ class FfmpegService:
             return cmd
 
         codec = self.resolve_codec(out_ext, settings.video_codec, log_cb=log_cb)
-        encoder, is_hw = self.select_encoder(codec, HW_ENCODER_MAP.get(settings.hw_encoder, "auto"), log_cb=log_cb)
+        if settings.target_size_mb:
+            if out_ext not in {".mp4", ".mov", ".mkv", ".avi"}:
+                raise ValueError("Target size підтримує MP4, MOV, MKV та AVI (H.264).")
+            codec, encoder, is_hw = "h264", "libx264", False
+        else:
+            encoder, is_hw = self.select_encoder(codec, HW_ENCODER_MAP.get(settings.hw_encoder, "auto"), log_cb=log_cb)
         cmd += ["-c:v", encoder]
         if encoder.endswith("_videotoolbox"):
             cmd += ["-allow_sw", "0"]

@@ -74,9 +74,36 @@ BODY = r"""            self._append_log("WARN", "Немає попередніх
             answer = QtWidgets.QMessageBox.question(None, "Пресети", "Пресет уже існує. Перезаписати?")
             if answer != QtWidgets.QMessageBox.Yes:
                 return
-        self.preset_manager.save(name, dict(settings_map))
+        try:
+            self.preset_manager.save(name, dict(settings_map))
+        except (OSError, ValueError) as exc:
+            QtWidgets.QMessageBox.warning(None, "Пресети", str(exc))
+            return
         self._refresh_presets()
         self._append_log("OK", f"Пресет збережено: {name}")
+
+    @QtCore.Slot()
+    def importPresets(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(None, "Імпорт пресетів", "", "JSON (*.json)")
+        if not path:
+            return
+        try:
+            self.preset_manager.import_json(Path(path))
+            self._refresh_presets()
+            self._append_log("OK", "Пресети імпортовано.")
+        except (OSError, ValueError) as exc:
+            QtWidgets.QMessageBox.warning(None, "Пресети", str(exc))
+
+    @QtCore.Slot()
+    def exportPresets(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(None, "Експорт користувацьких пресетів", "presets.json", "JSON (*.json)")
+        if not path:
+            return
+        try:
+            self.preset_manager.export_json(Path(path))
+            self._append_log("OK", "Пресети експортовано.")
+        except (OSError, ValueError) as exc:
+            QtWidgets.QMessageBox.warning(None, "Пресети", str(exc))
 
     @QtCore.Slot(str)
     def deletePreset(self, name: str) -> None:
