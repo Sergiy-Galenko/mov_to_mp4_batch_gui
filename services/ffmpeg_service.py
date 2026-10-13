@@ -6,13 +6,15 @@ import subprocess
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from app.constants import HW_ENCODER_MAP, PORTRAIT_PRESETS, POSITION_MAP, VIDEO_CODEC_MAP
 from app.models import ConversionSettings, MediaChapter, MediaInfo
 from app.target_size import MIN_VIDEO_KBPS, MUX_RESERVE, target_mode_error, target_size_bytes
-from services.hardware_service import usable_videotoolbox_encoders
+from services.hardware_service import discover_encoders
+from services.media_processing_plan import audio_copy_compatible, plan_streams
 from utils.formatting import build_atempo_chain
 
 
@@ -116,13 +118,19 @@ def _container_supports_codec(ext: str, vcodec: str) -> bool:
     vcodec = vcodec.lower()
     if ext in {".mkv"}:
         return True
-    if ext in {".mp4", ".m4v", ".mov"}:
-        return vcodec in {"h264", "hevc", "h265", "av1"}
+    if ext == ".mov":
+        return vcodec in {"h264", "hevc", "h265", "av1", "prores", "mjpeg", "mpeg4"}
+    if ext in {".mp4", ".m4v"}:
+        return vcodec in {"h264", "hevc", "h265", "av1", "mpeg4"}
     if ext in {".webm"}:
         return vcodec in {"vp8", "vp9", "av1"}
     if ext in {".avi"}:
-        return vcodec in {"mpeg4", "h264", "xvid"}
-    return True
+        return vcodec in {"mpeg4", "h264", "xvid", "mjpeg"}
+    if ext in {".mpg", ".mpeg"}:
+        return vcodec in {"mpeg1video", "mpeg2video"}
+    if ext in {".m2ts", ".ts"}:
+        return vcodec in {"h264", "hevc", "mpeg2video"}
+    return False
 
 
 def _null_output() -> str:
@@ -177,25 +185,9 @@ class FfmpegService:
         if not self.ffmpeg_path:
             return set()
         try:
-            result = subprocess.run(
-                [self.ffmpeg_path, "-hide_banner", "-encoders"],
-                capture_output=True,
-                text=True,
-                timeout=self.DETECT_TIMEOUT_SEC,
-            )
-        except Exception:
+            return discover_encoders(self.ffmpeg_path)
+        except (OSError, RuntimeError, subprocess.SubprocessError):
             return set()
-        if result.returncode != 0:
-            return set()
-        encoders: set[str] = set()
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if not line or line.startswith("Encoders:") or line.startswith("--"):
-                continue
-            parts = line.split()
-            if len(parts) >= 2:
-                encoders.add(parts[1])
-        return usable_videotoolbox_encoders(self.ffmpeg_path, encoders)
 
     def probe_duration_ms(self, path: Path) -> float | None:
         if not self.ffprobe_path:
@@ -1009,7 +1001,15 @@ class FfmpegService:
             return False, "GIF потребує перекодування"
         if filters_used or audio_filter_used:
             return False, "Є фільтри/зміна швидкості"
-        if info and info.vcodec and not _container_supports_codec(out_ext, info.vcodec):
+        if not info or not info.vcodec:
+            return False, "Немає даних ffprobe"
+        if info.acodec and not audio_copy_compatible(out_ext, info.acodec):
+            return False, "Аудіокодек несумісний з контейнером"
+        if info.audio_streams and not info.acodec:
+            return False, "Аудіокодек невідомий"
+        if inp.suffix.lower() != out_ext.lower() and info.subtitle_streams:
+            return False, "Сумісність субтитрів не підтверджена"
+        if not _container_supports_codec(out_ext, info.vcodec):
             return False, "Кодек несумісний з контейнером"
         if inp.suffix.lower() != out_ext.lower() and not allow_remux:
             return False, "Контейнер відрізняється"
@@ -1178,18 +1178,46 @@ class FfmpegService:
         audio_filter = self.build_audio_filter(settings)
         replace_audio = self._resolve_replace_audio_path(settings, log_cb=log_cb)
 
-        if allow_fast_copy and not settings.target_size_mb and replace_audio is None:
+        requested_copy = allow_fast_copy or settings.fast_copy
+        if settings.smart_convert_enabled and settings.smart_reencode_detection:
+            requested_copy = requested_copy and self.source_matches_codec_choice(info, settings.video_codec, out_ext)
+        plan = plan_streams(
+            info, out_ext, requested=requested_copy,
+            video_compatible=bool(info and info.vcodec and _container_supports_codec(out_ext, info.vcodec)),
+            video_processing=bool(_filters_used or settings.target_size_mb),
+            audio_processing=bool(audio_filter or replace_audio or settings.audio_codec not in {"auto", "copy"}),
+            remove_audio=settings.remove_audio, cross_container=inp.suffix.lower() != out_ext,
+        )
+        if plan.video_copy:
             track_index = max(0, int(settings.audio_track_index))
             cmd = [self.ffmpeg_path, overwrite, *input_trim_args, "-i", str(inp)]
+            if replace_audio is not None and not settings.remove_audio:
+                cmd += ["-i", str(replace_audio)]
             cmd += trim_args
+            cmd += ["-map", "0:v:0?", "-c:v", "copy"]
             if settings.remove_audio:
-                cmd += ["-map", "0:v:0?", "-an", "-map", "0:s?"]
+                cmd += ["-an"]
             else:
-                cmd += ["-map", "0:v:0?", "-map", f"0:a:{track_index}?", "-map", "0:s?"]
-            cmd += ["-c", "copy"]
+                audio_map = "1:a:0?" if replace_audio is not None else f"0:a:{track_index}?"
+                cmd += ["-map", audio_map]
+                if replace_audio is not None:
+                    cmd += ["-shortest"]
+                if plan.audio_copy:
+                    cmd += ["-c:a", "copy"]
+                else:
+                    if audio_filter:
+                        cmd += ["-filter:a", audio_filter]
+                    # An incompatible explicit audio copy request must be encoded.
+                    audio_settings = replace(settings, audio_codec="auto") if settings.audio_codec == "copy" else settings
+                    cmd += self.video_audio_codec_args(audio_settings, out_ext)
+            cmd += ["-map", "0:s?", "-c:s", "copy"]
+            if plan.audio_copy:
+                cmd += ["-c", "copy"]
             cmd += self.metadata_args(settings)
             if out_ext in {".mp4", ".mov", ".m4v"}:
                 cmd += ["-movflags", "+faststart"]
+            if log_cb:
+                log_cb("INFO", plan.reason)
             cmd.append(str(outp))
             return cmd
 
@@ -1272,7 +1300,11 @@ class FfmpegService:
             cmd += ["-pix_fmt", "ayuv64le"]
 
         cmd += self.video_profile_args(encoder, settings)
-        cmd += self.video_audio_codec_args(settings, out_ext)
+        audio_settings = settings
+        if settings.audio_codec == "copy" and (audio_filter or replace_audio or not info
+                                               or not audio_copy_compatible(out_ext, info.acodec)):
+            audio_settings = replace(settings, audio_codec="auto")
+        cmd += self.video_audio_codec_args(audio_settings, out_ext)
 
         if out_ext in {".mp4", ".mov", ".m4v"}:
             cmd += ["-movflags", "+faststart"]

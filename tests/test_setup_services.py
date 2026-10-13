@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication
 
 from app.models import ConversionSettings
 from app.settings import settings_map_to_model
-from services import system_profile, whisper_environment, whisper_setup, whisper_worker
+from services import hardware_service, system_profile, whisper_environment, whisper_setup, whisper_worker
 from services.background_job import BackgroundJob, JobCancelled, JobContext
 from services.converter_service import ConverterService
 from services.system_profile import GIB, recommend_workload, scan_system
@@ -31,6 +31,7 @@ def test_tuning_reserves_cpu_and_memory_and_reaches_converter(cpus, total, avail
 @pytest.mark.parametrize("system,label", [("Darwin", "macOS"), ("Windows", "Windows"), ("Linux", "Linux")])
 def test_scan_reports_os_and_only_working_hardware_encoders(monkeypatch, system, label):
     monkeypatch.setattr(system_profile.platform, "system", lambda: system)
+    monkeypatch.setattr(hardware_service.sys, "platform", {"Darwin": "darwin", "Windows": "win32", "Linux": "linux"}[system])
     monkeypatch.setattr(system_profile.psutil, "cpu_count", lambda **kw: 8)
     monkeypatch.setattr(system_profile.psutil, "virtual_memory", lambda: SimpleNamespace(total=8 * GIB, available=5 * GIB))
     commands = []
@@ -54,7 +55,7 @@ def test_scan_reports_os_and_only_working_hardware_encoders(monkeypatch, system,
     result = scan_system(context, "/fake/ffmpeg")
     assert result["os"] == label
     assert result["ram_gib"] == 8
-    assert result["encoders"] == ["VideoToolbox H.264"]
+    assert result["encoders"] == (["VideoToolbox H.264"] if system == "Darwin" else [])
     assert "NVENC H.264" not in result["encoders"]
     assert all(command[command.index("-allow_sw") + 1] == "0" for command in commands if "videotoolbox" in " ".join(command) and "-c:v" in command)
 

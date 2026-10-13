@@ -14,8 +14,10 @@ from queue import Queue
 from app.constants import PROGRESS_THROTTLE_SEC
 from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
 from app.target_size import MIN_VIDEO_KBPS, target_size_bytes
+from services.adaptive_scheduler import AdaptiveScheduler, bound_ffmpeg_threads
 from services.cloud_upload_service import CloudUploadService
 from services.ffmpeg_service import FfmpegService, parse_progress_line
+from services.resource_monitor import ResourceMonitor
 from services.security_service import secure_delete, write_checksum_sidecar
 from services.smart_convert_service import apply_smart_settings, parse_ab_crfs, recommend_settings
 from services.text_conversion_service import convert_text_file
@@ -55,6 +57,8 @@ class ConverterService:
         self._children_lock = threading.RLock()
         self._output_path_lock = threading.Lock()
         self._reserved_output_paths: set[Path] = set()
+        self.resource_monitor = ResourceMonitor()
+        self._ffmpeg_thread_budget: int | None = None
 
     def _result_output_paths(self, result_output: str) -> list[Path]:
         paths: list[Path] = []
@@ -148,6 +152,7 @@ class ConverterService:
 
     def _create_child_service(self, result_queue: Queue) -> "ConverterService":
         child = ConverterService(self.ffmpeg, result_queue, self.transcriber)
+        child.resource_monitor = self.resource_monitor
         child._output_path_lock = self._output_path_lock
         child._reserved_output_paths = self._reserved_output_paths
         return child
@@ -692,50 +697,6 @@ class ConverterService:
                 return False
         return True
 
-    def _current_cpu_load(self) -> float:
-        try:
-            import psutil  # type: ignore
-
-            return float(psutil.cpu_percent(interval=None))
-        except Exception:
-            return 0.0
-
-    def _current_gpu_load(self) -> float:
-        try:
-            result = subprocess.run(
-                [
-                    "nvidia-smi",
-                    "--query-gpu=utilization.gpu",
-                    "--format=csv,noheader,nounits",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=0.4,
-            )
-            if result.returncode != 0:
-                return 0.0
-            values = [float(line.strip()) for line in result.stdout.splitlines() if line.strip()]
-            return max(values) if values else 0.0
-        except Exception:
-            return 0.0
-
-    def _wait_for_resource_budget(self, settings: ConversionSettings) -> None:
-        logged = False
-        while not self.stop_event.is_set():
-            cpu = self._current_cpu_load()
-            gpu = self._current_gpu_load()
-            cpu_over = cpu >= max(1, min(100, settings.cpu_load_limit))
-            gpu_over = gpu > 0 and gpu >= max(1, min(100, settings.gpu_load_limit))
-            if not cpu_over and not gpu_over:
-                return
-            if not logged:
-                self._log(
-                    "WARN",
-                    f"Load limit reached; waiting before next task (CPU {cpu:.0f}%/{settings.cpu_load_limit}%, GPU {gpu:.0f}%/{settings.gpu_load_limit}%).",
-                )
-                logged = True
-            time.sleep(1.0)
-
     def _run_parallel_tasks(
         self,
         tasks: list[TaskItem],
@@ -746,6 +707,7 @@ class ConverterService:
     ) -> list[dict[str, str]]:
         worker_count = min(self.conversion_worker_limit(settings), len(tasks))
         self._log("INFO", f"Parallel conversion enabled: {worker_count} workers")
+        scheduler = AdaptiveScheduler(worker_count, self.resource_monitor)
         result_queue: Queue[tuple] = Queue()
         run_results: list[dict[str, str]] = []
         completed_paths: set[Path] = set()
@@ -753,7 +715,7 @@ class ConverterService:
 
         def run_child(task: TaskItem, index: int) -> None:
             child = self._create_child_service(result_queue)
-            child.prefetched_media_info = dict(self.media_info)
+            child.prefetched_media_info = {task.path: self.media_info[task.path]} if task.path in self.media_info else {}
             child.progress_task_path = task.path
             child_settings = replace(settings, before_hook="", after_hook="", merge=False)
             child_task = task
@@ -768,8 +730,21 @@ class ConverterService:
                 child.stop_event = self.stop_event
                 self.child_services.append(child)
             try:
-                self._wait_for_resource_budget(child_task.resolved_settings or child_settings)
-                child._run([child_task], child_settings, out_dir, start_index=index)
+                effective = child_task.resolved_settings or child_settings
+                cost = scheduler.estimate(child_task, effective, self.media_info.get(task.path), self.ffmpeg)
+                child._ffmpeg_thread_budget = cost.cpu_threads
+                with scheduler.reserve(cost, effective, self.stop_event, self.pause_event, child.skip_event) as admitted:
+                    if admitted:
+                        child._run([child_task], child_settings, out_dir, start_index=index)
+                    else:
+                        status = TaskStatus.CANCELLED if self.stop_event.is_set() else TaskStatus.SKIPPED
+                        child._emit("task_state", task.path, status, "", "")
+                        child._emit("run_summary", {"results": [{"path": str(task.path), "status": status,
+                                                                 "message": "", "output_path": ""}]})
+            except Exception as exc:
+                child._task_state(task.path, TaskStatus.FAILED, str(exc))
+                child._emit("run_summary", {"results": [{"path": str(task.path), "status": TaskStatus.FAILED,
+                                                         "message": str(exc), "output_path": ""}]})
             finally:
                 with self._children_lock, contextlib.suppress(ValueError):
                     self.child_services.remove(child)
@@ -1118,6 +1093,7 @@ class ConverterService:
             run_results.extend(parallel_results)
 
         if parallel_results is None:
+            serial_scheduler = AdaptiveScheduler(1, self.resource_monitor) if self._ffmpeg_thread_budget is None else None
             for index, task in enumerate(tasks, start=start_index):
                 if self.stop_event.is_set():
                     self._log("WARN", "Зупинено користувачем.")
@@ -1175,7 +1151,22 @@ class ConverterService:
                     self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
                     continue
 
-                self._wait_for_resource_budget(settings_for_task)
+                reservation = contextlib.ExitStack()
+                previous_budget = self._ffmpeg_thread_budget
+                if serial_scheduler is not None:
+                    cost = serial_scheduler.estimate(task, settings_for_task, self.media_info.get(task.path), self.ffmpeg)
+                    admitted = reservation.enter_context(
+                        serial_scheduler.reserve(cost, settings_for_task, self.stop_event, self.pause_event, self.skip_event)
+                    )
+                    if not admitted:
+                        reservation.close()
+                        status = TaskStatus.CANCELLED if self.stop_event.is_set() else TaskStatus.SKIPPED
+                        self._task_state(task.path, status)
+                        run_results.append({"path": str(task.path), "status": status, "message": "", "output_path": ""})
+                        done_files += 1
+                        self.skip_event.clear()
+                        continue
+                    self._ffmpeg_thread_budget = cost.cpu_threads
                 self._emit("status", f"Обробка: {task.path.name}")
                 self._task_state(task.path, TaskStatus.RUNNING)
                 self._log("INFO", f"→ {task.path.name} ({task.media_type}) ==> {outp.name}")
@@ -1204,7 +1195,7 @@ class ConverterService:
                                 info,
                                 filters_used,
                                 audio_processing,
-                                allow_remux=settings_for_task.smart_convert_enabled and settings_for_task.smart_reencode_detection,
+                                allow_remux=settings_for_task.fast_copy or (settings_for_task.smart_convert_enabled and settings_for_task.smart_reencode_detection),
                             )
                             if (
                                 settings_for_task.smart_convert_enabled
@@ -1216,7 +1207,7 @@ class ConverterService:
                                 reason = "Smart Convert обрав інший кодек"
                             allow_fast = settings_for_task.fast_copy and fast_copy_ok and not settings_for_task.target_size_mb
                             if settings_for_task.fast_copy and not fast_copy_ok:
-                                self._log("WARN", f"Fast copy вимкнено для {task.path.name}: {reason}")
+                                self._log("WARN", f"Повне копіювання потоків недоступне для {task.path.name}: {reason}")
                             if settings_for_task.smart_convert_enabled:
                                 rec = recommend_settings(settings_for_task, info, task.path)
                                 self._log("INFO", f"Smart Convert: {rec.reason} -> {rec.video_codec}, CRF {rec.crf}, preset {rec.preset}")
@@ -1412,6 +1403,9 @@ class ConverterService:
                     self._log("ERROR", f"Несподівана помилка: {exc}")
                     self._task_state(task.path, "failed", str(exc))
                     result_message = str(exc)
+                finally:
+                    reservation.close()
+                    self._ffmpeg_thread_budget = previous_budget
 
                 if self.stop_event.is_set() and not fatal_error:
                     status = TaskStatus.CANCELLED
@@ -1493,6 +1487,8 @@ class ConverterService:
         if publish_output:
             work_output_path = output_path.with_name(f".{output_path.stem}.{uuid.uuid4().hex}.partial{output_path.suffix}")
             cmd = [*cmd[:-1], str(work_output_path)]
+        if self._ffmpeg_thread_budget is not None:
+            cmd = bound_ffmpeg_threads(cmd, self._ffmpeg_thread_budget)
         cmd_with_progress = [*cmd[:2], "-progress", "pipe:1", "-nostats", "-hide_banner", *cmd[2:]]
         proc = subprocess.Popen(
             cmd_with_progress,

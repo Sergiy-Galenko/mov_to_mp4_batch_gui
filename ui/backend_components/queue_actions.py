@@ -278,9 +278,10 @@ class QueueActionsMixin:
 
     def _scheduler_idle_due(self) -> bool:
         sample = self._sample_resources()
-        cpu_ok = sample.get("cpu", 0.0) <= max(1, min(100, self._scheduler_cpu_limit))
-        gpu_value = sample.get("gpu", 0.0)
-        gpu_ok = gpu_value <= 0.0 or gpu_value <= max(1, min(100, self._scheduler_gpu_limit))
+        cpu_value = sample.get("cpu")
+        cpu_ok = cpu_value is not None and cpu_value <= max(1, min(100, self._scheduler_cpu_limit))
+        gpu_value = sample.get("gpu")
+        gpu_ok = gpu_value is None or gpu_value <= max(1, min(100, self._scheduler_gpu_limit))
         return cpu_ok and gpu_ok
 
     def _scheduler_start_key(self, now: time.struct_time) -> str:

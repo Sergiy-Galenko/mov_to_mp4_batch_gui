@@ -4,10 +4,13 @@ from __future__ import annotations
 import json
 import os
 import platform
+import subprocess
 
 import psutil
 
 from services.background_job import BackgroundJob
+from services.hardware_service import HARDWARE_ENCODERS as ENCODER_VENDORS
+from services.hardware_service import discover_encoders
 
 GIB = 1024 ** 3
 HARDWARE_ENCODERS = {
@@ -65,26 +68,10 @@ def scan_system(context, ffmpeg_path: str) -> dict:
     context.progress("encoders", 50)
     if ffmpeg_path:
         try:
-            listing = context.run([ffmpeg_path, "-hide_banner", "-encoders"], timeout=15)
-            if listing.returncode:
-                raise RuntimeError(listing.stderr.strip())
+            usable = discover_encoders(ffmpeg_path, run=context.run, checkpoint=context.check)
             report["encoding_checked"] = True
-            advertised = {line.split()[1] for line in listing.stdout.splitlines() if len(line.split()) > 1}
-            candidates = sorted(HARDWARE_ENCODERS.keys() & advertised)
-            for index, encoder in enumerate(candidates):
-                context.check()
-                context.progress("encoders", 50 + int(35 * index / len(candidates)))
-                pixel = "ayuv64le" if encoder == "prores_videotoolbox" else "yuv420p"
-                command = [ffmpeg_path, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-                           "color=size=256x256:rate=1", "-frames:v", "1", "-an", "-c:v", encoder, "-pix_fmt", pixel]
-                if encoder.endswith("_videotoolbox"):
-                    command += ["-allow_sw", "0"]
-                try:
-                    if context.run([*command, "-f", "null", "-"], timeout=6).returncode == 0:
-                        report["encoders"].append(HARDWARE_ENCODERS[encoder])
-                except TimeoutError:
-                    report["warnings"].append(encoder + ": timeout")
-        except (OSError, RuntimeError, TimeoutError) as exc:
+            report["encoders"] = [HARDWARE_ENCODERS.get(name, name) for name in sorted(usable & ENCODER_VENDORS.keys())]
+        except (OSError, RuntimeError, TimeoutError, subprocess.TimeoutExpired) as exc:
             report["warnings"].append(str(exc))
     else:
         report["warnings"].append("FFmpeg is unavailable; encoder checks were skipped.")

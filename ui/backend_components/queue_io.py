@@ -303,7 +303,7 @@ class QueueIoMixin:
             return "VP9"
         return codec or "Unknown"
 
-    def _sample_resources(self) -> Dict[str, float]:
+    def _sample_resources(self) -> Dict[str, float | None]:
         return self._resource_monitor.sample()
 
     def _append_resource_sample(self, now: float) -> None:
@@ -313,9 +313,9 @@ class QueueIoMixin:
         sample["time"] = now - self._run_started_monotonic
         self._resource_history.append(sample)
         self._resource_history = self._resource_history[-120:]
-        self._cpu_load_text = f"CPU {sample['cpu']:.0f}%"
-        self._gpu_load_text = f"GPU {sample['gpu']:.0f}%"
-        self._ram_load_text = f"RAM {sample['ram']:.0f}%"
+        self._cpu_load_text = f"CPU {sample['cpu']:.0f}%" if sample["cpu"] is not None else "CPU —"
+        self._gpu_load_text = f"GPU {sample['gpu']:.0f}%" if sample["gpu"] is not None else "GPU —"
+        self._ram_load_text = f"RAM {sample['ram']:.0f}%" if sample["ram"] is not None else "RAM —"
         self.resourceHistoryChanged.emit(list(self._resource_history))
 
     def _record_file_timing(self, path: Path, status: str) -> None:

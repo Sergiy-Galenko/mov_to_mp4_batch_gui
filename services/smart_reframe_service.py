@@ -10,11 +10,12 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-import tempfile
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+
+from services.frame_stream import FrameDetector, open_frame, sample_frames
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class SmartReframeService:
     def __init__(self, ffmpeg_path: str = "ffmpeg", ffprobe_path: str = "ffprobe") -> None:
         self.ffmpeg_path = ffmpeg_path or "ffmpeg"
         self.ffprobe_path = ffprobe_path or "ffprobe"
+        self._detector = FrameDetector()
 
     def probe_dimensions(self, video_path: Path | str) -> tuple[int, int, float]:
         """Return (width, height, duration) of the video."""
@@ -84,54 +86,22 @@ class SmartReframeService:
             logger.warning("Failed to probe video dimensions for reframe: %s", exc)
         return 1920, 1080, 10.0
 
-    def _extract_sample_frames(self, video_path: Path, tmp_dir: Path, interval_sec: float = 1.0) -> list[tuple[float, Path]]:
-        """Extract lightweight JPEG thumbnails at periodic intervals."""
-        pattern = tmp_dir / "frame_%04d.jpg"
-        cmd = [
-            self.ffmpeg_path,
-            "-y",
-            "-i",
-            str(video_path),
-            "-vf",
-            f"fps=1/{interval_sec:.2f},scale=320:-1",
-            "-q:v",
-            "4",
-            str(pattern),
-        ]
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        except Exception as exc:
-            logger.debug("Failed to extract frames with ffmpeg: %s", exc)
-        frames = sorted(tmp_dir.glob("frame_*.jpg"))
-        return [(i * interval_sec, f) for i, f in enumerate(frames)]
-
     def _detect_subject_center(self, image_path: Path) -> float:
         """Find the normalized horizontal center (0.0 - 1.0) of the primary face/subject in the frame."""
-        # 1. Try OpenCV Haar Cascade if installed
         try:
-            import cv2  # type: ignore
-
-            img = cv2.imread(str(image_path))
-            if img is not None:
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                # Load default frontal face cascade if available
-                cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-                face_cascade = cv2.CascadeClassifier(cascade_path)
-                faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(24, 24))
-                if len(faces) > 0:
-                    # Choose largest detected face
-                    largest = max(faces, key=lambda b: b[2] * b[3])
-                    fx, _fy, fw, _fh = largest
-                    face_center_x = (fx + fw / 2.0) / img.shape[1]
-                    return float(face_center_x)
-        except Exception:
+            faces = self._detector.detect(image_path)
+            if len(faces) > 0:
+                fx, _fy, fw, _fh = max(faces, key=lambda b: b[2] * b[3])
+                with open_frame(image_path) as frame:
+                    return float((fx + fw / 2.0) / frame.width)
+        except (ImportError, OSError, RuntimeError):
             pass
+        except Exception:
+            logger.debug("OpenCV detection failed", exc_info=True)
 
         # 2. PIL-based Luminance & Edge Saliency Fallback
         try:
-            from PIL import Image
-
-            with Image.open(image_path) as im:
+            with open_frame(image_path) as im:
                 im_small = im.convert("L").resize((64, 36))
                 pixels = im_small.load()
                 # Focus primarily on upper-middle portion (where heads/faces typically are)
@@ -189,18 +159,16 @@ class SmartReframeService:
 
         max_x = max(0, orig_w - crop_w)
 
-        with tempfile.TemporaryDirectory() as tmp:
-            samples = self._extract_sample_frames(v_path, Path(tmp), interval_sec=sample_interval)
-            keyframes: list[KeyframeFocus] = []
-
-            current_smooth_center = 0.5
-            for t, fpath in samples:
-                detected_center = self._detect_subject_center(fpath)
-                # Apply deadband: ignore tiny shifts
+        keyframes: list[KeyframeFocus] = []
+        current_smooth_center = 0.5
+        try:
+            for t, frame in sample_frames(self.ffmpeg_path, v_path, sample_interval, width=320, timeout=30):
+                detected_center = self._detect_subject_center(frame)
                 if abs(detected_center - current_smooth_center) > deadband:
-                    # Exponential Moving Average (EMA)
                     current_smooth_center = smoothing_factor * detected_center + (1.0 - smoothing_factor) * current_smooth_center
                 keyframes.append(KeyframeFocus(timestamp=t, center_x=round(current_smooth_center, 3), center_y=0.5))
+        except (OSError, RuntimeError, TimeoutError) as exc:
+            logger.warning("Frame sampling failed: %s", exc)
 
         if keyframes:
             avg_norm_x = sum(k.center_x for k in keyframes) / len(keyframes)

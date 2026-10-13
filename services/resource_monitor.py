@@ -9,12 +9,12 @@ import time
 class ResourceMonitor:
     def __init__(self, interval: float = 2.0) -> None:
         self._interval = interval
-        self._sample = {"cpu": 100.0, "gpu": 100.0, "ram": 0.0}
+        self._sample = {"cpu": 100.0, "gpu": None, "ram": None, "available_bytes": None}
         self._next_sample = 0.0
         self._lock = threading.Lock()
         self._worker: threading.Thread | None = None
 
-    def sample(self) -> dict[str, float]:
+    def sample(self) -> dict[str, float | None]:
         with self._lock:
             now = time.monotonic()
             if now >= self._next_sample and (self._worker is None or not self._worker.is_alive()):
@@ -24,19 +24,20 @@ class ResourceMonitor:
             return dict(self._sample)
 
     def _collect(self) -> None:
-        sample = {"cpu": 100.0, "gpu": 0.0, "ram": 0.0}
+        sample = {"cpu": None, "gpu": None, "ram": None, "available_bytes": None}
         try:
             import psutil  # type: ignore
 
             # Sample in the worker: a new thread's first non-blocking CPU reading
             # is meaningless and could incorrectly trigger the idle scheduler.
             sample["cpu"] = float(psutil.cpu_percent(interval=0.1))
-            sample["ram"] = float(psutil.virtual_memory().percent)
+            memory = psutil.virtual_memory()
+            sample["ram"] = float(memory.percent)
+            sample["available_bytes"] = float(memory.available)
         except (ImportError, OSError):
             pass
         executable = shutil.which("nvidia-smi")
         if executable:
-            sample["gpu"] = 100.0
             try:
                 result = subprocess.run(
                     [executable, "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],

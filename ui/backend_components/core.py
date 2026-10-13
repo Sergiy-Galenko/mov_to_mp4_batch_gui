@@ -388,6 +388,7 @@ class CoreMixin:
             from services.converter_service import ConverterService
 
             self._converter_service = ConverterService(self.ffmpeg_service, self.event_queue)
+            self._converter_service.resource_monitor = self._resource_monitor
         return self._converter_service
 
     @property

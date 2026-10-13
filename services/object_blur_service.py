@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import logging
 import subprocess
-import tempfile
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+
+from services.frame_stream import FrameDetector, open_frame, sample_frames
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class ObjectTrackingBlurService:
 
     def __init__(self, ffmpeg_path: str = "ffmpeg") -> None:
         self.ffmpeg_path = ffmpeg_path or "ffmpeg"
+        self._detector = FrameDetector()
 
     def _detect_faces_or_plate(
         self,
@@ -62,34 +64,19 @@ class ObjectTrackingBlurService:
         if initial_bbox:
             return initial_bbox
 
-        # 1. OpenCV Haar Cascade if available
         try:
-            import cv2  # type: ignore
-
-            img = cv2.imread(str(image_path))
-            if img is not None:
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                if target_type == "plate":
-                    # Plate cascade or Russian/European plate classifier if available
-                    plate_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_russian_plate_number.xml")
-                    plates = plate_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3)
-                    if len(plates) > 0:
-                        x, y, w, h = plates[0]
-                        return int(x), int(y), int(w), int(h)
-                # Fallback or default to face
-                cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-                faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4)
-                if len(faces) > 0:
-                    x, y, w, h = max(faces, key=lambda b: b[2] * b[3])
-                    return int(x), int(y), int(w), int(h)
-        except Exception:
+            detections = self._detector.detect(image_path, target_type)
+            if len(detections) > 0:
+                box = detections[0] if target_type == "plate" else max(detections, key=lambda b: b[2] * b[3])
+                return tuple(int(value) for value in box)
+        except (ImportError, OSError, RuntimeError):
             pass
+        except Exception:
+            logger.debug("OpenCV detection failed", exc_info=True)
 
         # 2. PIL-based Fallback Region Detection
         try:
-            from PIL import Image
-
-            with Image.open(image_path) as im:
+            with open_frame(image_path) as im:
                 width, height = im.size
                 if target_type == "plate":
                     # Lower third center area where vehicle license plates usually reside
@@ -112,31 +99,12 @@ class ObjectTrackingBlurService:
     ) -> TrackingResult:
         """Track target object over time and record its bounding box path."""
         v_path = Path(video_path).resolve()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp = Path(tmp_dir)
-            pattern = tmp / "frame_%04d.jpg"
-            cmd = [
-                self.ffmpeg_path,
-                "-y",
-                "-i",
-                str(v_path),
-                "-vf",
-                f"fps=1/{sample_interval:.2f}",
-                "-q:v",
-                "4",
-                str(pattern),
-            ]
-            subprocess.run(cmd, capture_output=True, text=True, timeout=40)
-            frame_files = sorted(tmp.glob("frame_*.jpg"))
-
-            tracked_boxes: list[TrackedBox] = []
-            prev_box = initial_bbox
-
-            for i, f_path in enumerate(frame_files):
-                t = round(i * sample_interval, 3)
+        tracked_boxes: list[TrackedBox] = []
+        prev_box = initial_bbox
+        try:
+            for i, (t, frame) in enumerate(sample_frames(self.ffmpeg_path, v_path, sample_interval)):
                 detected = self._detect_faces_or_plate(
-                    f_path,
-                    target_type=target_type,
+                    frame, target_type=target_type,
                     initial_bbox=prev_box if i == 0 and initial_bbox else None,
                 )
                 if detected:
@@ -152,6 +120,8 @@ class ObjectTrackingBlurService:
                     prev_box = (x, y, w, h)
                 elif prev_box:
                     tracked_boxes.append(TrackedBox(timestamp=t, x=prev_box[0], y=prev_box[1], w=prev_box[2], h=prev_box[3]))
+        except (OSError, RuntimeError, TimeoutError) as exc:
+            logger.warning("Frame sampling failed: %s", exc)
 
         if not tracked_boxes:
             tracked_boxes = [TrackedBox(timestamp=0.0, x=100, y=100, w=150, h=150)]
