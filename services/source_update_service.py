@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import urllib.request
@@ -182,7 +181,7 @@ class SourceUpdateService:
         )
 
     def _package_url(self, assets: list[dict]) -> str:
-        platform = "mac" if sys.platform == "darwin" else "win" if os.name == "nt" else "linux"
+        platform = "mac" if sys.platform == "darwin" else "win" if sys.platform == "win32" else "linux"
         extensions = (".dmg", ".pkg", ".zip") if platform == "mac" else (".exe", ".msi", ".zip") if platform == "win" else (".appimage", ".deb", ".tar.gz", ".zip")
         candidates = [asset for asset in assets if str(asset.get("name") or "").lower().endswith(extensions)]
         named = [asset for asset in candidates if platform in str(asset.get("name") or "").lower()]

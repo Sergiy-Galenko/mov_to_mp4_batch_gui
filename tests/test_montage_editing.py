@@ -250,8 +250,17 @@ def test_cancelled_export_preserves_existing_file(studio, tmp_path, monkeypatch)
 @pytest.fixture
 def ffmpeg():
     binary = os.environ.get("MEDIA_CONVERTER_TEST_FFMPEG") or shutil.which("ffmpeg")
+    required = os.environ.get("MEDIA_CONVERTER_REQUIRE_FFMPEG_TESTS") == "1"
     if not binary:
+        if required:
+            pytest.fail("FFmpeg is required for media integration tests")
         pytest.skip("FFmpeg is required for media integration tests")
+    filters = subprocess.run([binary, "-hide_banner", "-filters"], capture_output=True, text=True, timeout=15)
+    if filters.returncode or not any("subtitles" in line.split() for line in filters.stdout.splitlines()):
+        message = "FFmpeg with the subtitles filter (libass) is required; on macOS install ffmpeg-full"
+        if required:
+            pytest.fail(message)
+        pytest.skip(message)
     return binary
 
 

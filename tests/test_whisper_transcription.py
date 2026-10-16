@@ -13,6 +13,8 @@ from services.transcription_service import TranscriptionService
 
 
 def install_python_whisper(monkeypatch, model):
+    # Model/device tests isolate decoding and optional NumPy/FFmpeg dependencies.
+    monkeypatch.setattr(TranscriptionService, "_whisper_audio", lambda self, inp: str(inp))
     load = Mock(return_value=model)
     whisper = SimpleNamespace(load_model=load)
 

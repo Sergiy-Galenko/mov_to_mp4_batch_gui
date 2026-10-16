@@ -3,6 +3,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from services.source_update_service import SourceUpdateService
 
 
@@ -68,11 +70,16 @@ def test_apply_fast_forwards_and_requires_restart(tmp_path):
     assert ("merge", "--ff-only", "FETCH_HEAD") in fake_git.calls
 
 
-def test_packaged_app_downloads_the_platform_release(tmp_path, monkeypatch):
+@pytest.mark.parametrize("platform,extension", [("darwin", ".dmg"), ("win32", ".exe"), ("linux", ".AppImage")])
+def test_packaged_app_downloads_the_platform_release(tmp_path, monkeypatch, platform, extension):
+    monkeypatch.setattr("services.source_update_service.sys.platform", platform)
     monkeypatch.setattr("services.source_update_service.Path.home", lambda: tmp_path)
     release = {
         "tag_name": "v2.1.0",
-        "assets": [{"name": "MediaConverter-mac.dmg", "browser_download_url": "https://example.test/MediaConverter-mac.dmg"}],
+        "assets": [
+            {"name": f"MediaConverter-{system}{suffix}", "browser_download_url": f"https://example.test/MediaConverter-{system}{suffix}"}
+            for system, suffix in [("mac", ".dmg"), ("win", ".exe"), ("linux", ".AppImage")]
+        ],
     }
     downloaded: list[tuple[str, Path]] = []
 
@@ -85,6 +92,6 @@ def test_packaged_app_downloads_the_platform_release(tmp_path, monkeypatch):
     result = service.apply()
 
     assert available.available is True
-    assert available.package_url.endswith(".dmg")
+    assert available.package_url.endswith(extension)
     assert downloaded[0][0] == available.package_url
     assert Path(result.downloaded_path).read_bytes() == b"installer"

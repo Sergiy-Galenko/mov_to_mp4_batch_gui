@@ -45,10 +45,11 @@ class TestTelegramNoteService(unittest.TestCase):
             "volume_boost": 1.2,
             "burn_circle": False,
         }
-        cmd = self.service.build_render_command(source, target, options)
+        with patch.object(self.service, "_resolve_binaries", return_value=("/configured/ffmpeg", "/configured/ffprobe")):
+            cmd = self.service.build_render_command(source, target, options)
 
         # Check binary and timing
-        self.assertEqual(cmd[0], "ffmpeg")
+        self.assertEqual(cmd[0], "/configured/ffmpeg")
         self.assertIn("-ss", cmd)
         ss_idx = cmd.index("-ss")
         self.assertEqual(cmd[ss_idx + 1], "5.000")

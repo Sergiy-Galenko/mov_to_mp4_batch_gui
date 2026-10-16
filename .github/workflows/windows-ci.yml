@@ -36,9 +36,11 @@ jobs:
           $testFfmpeg = Get-ChildItem "$env:ChocolateyInstall\lib\ffmpeg" -Filter ffmpeg.exe -Recurse | Select-Object -First 1
           if (-not $testFfmpeg) { throw 'FFmpeg not found.' }
           "MEDIA_CONVERTER_TEST_FFMPEG=$($testFfmpeg.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MEDIA_CONVERTER_FFMPEG=$($testFfmpeg.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MEDIA_CONVERTER_FFPROBE=$(Join-Path $testFfmpeg.Directory.FullName 'ffprobe.exe')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Run tests
-        run: python -m pytest -q --tb=short
+        run: python -m pytest -q --tb=short --junitxml=test-results.xml
 
       - name: Build portable package
         shell: pwsh
@@ -58,6 +60,7 @@ jobs:
           $required | ForEach-Object { if (-not (Test-Path $_)) { throw "Missing portable build file: $_" } }
 
       - name: Verify portable application behavior
+        id: package
         run: python scripts/verify_package.py dist/MediaConverter/MediaConverter.exe --report package-smoke.json
 
       - name: Collect benchmark report
@@ -72,12 +75,21 @@ jobs:
         run: python scripts/check_performance_regression.py --base-sha "$env:PERFORMANCE_BASE_SHA" --ffmpeg "$env:MEDIA_CONVERTER_TEST_FFMPEG" --head-report performance.json
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.package.outcome == 'success'
         with:
           name: MediaConverter-windows-portable
           path: |
             dist/MediaConverter
+          if-no-files-found: error
+
+      - name: Upload diagnostic reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: CI-reports-windows-python-3.12
+          path: |
+            test-results.xml
             package-smoke.json
             performance.json
             regression.json
-          if-no-files-found: error
+          if-no-files-found: warn

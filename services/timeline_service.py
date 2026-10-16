@@ -312,7 +312,7 @@ class TimelineService:
         if project.subtitle_path:
             from services.ffmpeg_service import escape_filter_path
 
-            filter_chains.append(f"{last_v}subtitles='{escape_filter_path(project.subtitle_path)}'[subtitled]")
+            filter_chains.append(f"{last_v}subtitles=filename='{escape_filter_path(project.subtitle_path)}'[subtitled]")
             last_v = "[subtitled]"
 
         cmd = [self.ffmpeg_path, "-y"]
