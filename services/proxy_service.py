@@ -7,18 +7,19 @@ Provides seamless replacement of proxies with full-resolution originals upon fin
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 from app.paths import APP_DATA_DIR
+from services.cache_manager import CacheManager, tool_fingerprint
 from services.timeline_service import TimelineClip, TimelineProject
+from utils.sqlite_store import database
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROXY_DIR = APP_DATA_DIR / "proxies"
+DEFAULT_PROXY_DIR = APP_DATA_DIR / "cache" / "proxies"
 
 
 class ProxyService:
@@ -28,16 +29,22 @@ class ProxyService:
         self.ffmpeg_path = ffmpeg_path or "ffmpeg"
         self.proxy_dir = Path(proxy_dir)
         self.proxy_dir.mkdir(parents=True, exist_ok=True)
+        self.cache = CacheManager(self.proxy_dir.parent)
         self._master_to_proxy: dict[str, str] = {}
         self._proxy_to_master: dict[str, str] = {}
+        self._leases: dict[str, object] = {}
+        with database(self.cache.index) as db:
+            db.execute("CREATE TABLE IF NOT EXISTS proxy_sources (proxy TEXT PRIMARY KEY, master TEXT NOT NULL)")
+            pairs = db.execute("SELECT proxy,master FROM proxy_sources").fetchall()
+            for pair in pairs:
+                if Path(pair["proxy"]).is_file():
+                    self._master_to_proxy[pair["master"]] = pair["proxy"]
+                    self._proxy_to_master[pair["proxy"]] = pair["master"]
+                else:
+                    db.execute("DELETE FROM proxy_sources WHERE proxy=?", (pair["proxy"],))
 
     def _generate_cache_key(self, source_path: Path | str, target_height: int = 720) -> str:
-        p = Path(source_path).resolve()
-        stat = p.stat() if p.exists() else None
-        mtime = str(stat.st_mtime) if stat else "0"
-        size = str(stat.st_size) if stat else "0"
-        raw = f"{p}_{mtime}_{size}_{target_height}"
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+        return self.cache.key(Path(source_path), "proxies", {"height": target_height, "ffmpeg": tool_fingerprint(self.ffmpeg_path)})
 
     def get_proxy_path(self, source_path: Path | str, target_height: int = 720) -> Path:
         """Return the destination path where the proxy for the given source is cached."""
@@ -48,7 +55,15 @@ class ProxyService:
     def is_proxy_ready(self, source_path: Path | str, target_height: int = 720) -> bool:
         """Check if a valid proxy file already exists on disk."""
         target = self.get_proxy_path(source_path, target_height)
-        return target.exists() and target.stat().st_size > 1024
+        key = self._generate_cache_key(source_path, target_height)
+        if self.cache.known(key):
+            return self.cache.get(key) is not None
+        ready = target.is_file() and target.stat().st_size > 1024
+        if ready:
+            key = self._generate_cache_key(source_path, target_height)
+            self.cache.register(key, "proxies", target)
+            self.cache.get(key)
+        return ready
 
     def generate_proxy(
         self,
@@ -107,13 +122,18 @@ class ProxyService:
 
         logger.info("Generating proxy for %s: %s", src.name, out.name)
         try:
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            if res.returncode == 0 and out.exists() and out.stat().st_size > 1024:
-                self._register_pair(str(src), str(out))
+            def produce(target):
+                result = subprocess.run([*cmd[:-1], str(target)], capture_output=True, text=True, timeout=300)
+                return result.returncode == 0 and target.is_file() and target.stat().st_size > 1024
+
+            result = self.cache.produce(src, "proxies", {"height": target_height, "ffmpeg": tool_fingerprint(self.ffmpeg_path)},
+                                        ".mp4", produce, filename=out.name)
+            if result:
+                self._register_pair(str(src), str(result))
                 if progress_cb:
                     progress_cb(1.0)
-                return out
-            logger.warning("Failed to generate proxy: %s", (res.stderr or "")[-500:])
+                return result
+            logger.warning("Failed to generate proxy for %s", src.name)
             return None
         except Exception as exc:
             logger.error("Exception generating proxy for %s: %s", src, exc)
@@ -124,6 +144,13 @@ class ProxyService:
         p_norm = str(Path(proxy_path).resolve())
         self._master_to_proxy[m_norm] = p_norm
         self._proxy_to_master[p_norm] = m_norm
+        if Path(p_norm).is_file():
+            with database(self.cache.index) as db:
+                db.execute("INSERT OR REPLACE INTO proxy_sources VALUES (?,?)", (p_norm, m_norm))
+        if Path(p_norm).is_file() and p_norm not in self._leases:
+            lease = self.cache.lease(Path(p_norm))
+            lease.__enter__()
+            self._leases[p_norm] = lease
 
     def resolve_source(self, path: Path | str, prefer_proxy: bool = False, target_height: int = 720) -> Path:
         """Return the proxy path if requested and ready, else the original path."""
@@ -133,8 +160,10 @@ class ProxyService:
             master = self._proxy_to_master.get(str(src))
             return Path(master) if master and Path(master).exists() else src
 
-        if self.is_proxy_ready(src, target_height):
-            return self.get_proxy_path(src, target_height)
+        if src.exists() and self.is_proxy_ready(src, target_height):
+            proxy = self.get_proxy_path(src, target_height)
+            self._register_pair(str(src), str(proxy))
+            return proxy
         return src
 
     def swap_proxies_for_masters(self, project: TimelineProject) -> TimelineProject:
@@ -177,3 +206,8 @@ class ProxyService:
             height=project.height,
             fps=project.fps,
         )
+
+    def close(self):
+        for lease in self._leases.values():
+            lease.__exit__(None, None, None)
+        self._leases.clear()

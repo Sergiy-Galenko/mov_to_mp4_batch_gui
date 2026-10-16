@@ -1,12 +1,14 @@
 # Resource planning and media processing
 
+For the latest cache, journal, calibration, GPU and packaged-test details, see [Reliable processing and performance](reliability-and-performance.md).
+
 The application keeps Python/Qt for orchestration and uses FFmpeg for media processing. `services/adaptive_scheduler.py` now handles admission separately from the converter. Both sequential and parallel tasks use the same resource monitor.
 
 ## Admission budgets
 
 A conversion batch reserves CPU thread tokens, estimated working memory, hardware encoding sessions, and disk slots before starting a task. The defaults allow at most two disk-intensive tasks and two hardware sessions at once, within the user's concurrency limit. Thumbnail/subtitle extraction costs less than video conversion; video memory estimates scale with pixel count; transcription has a larger memory estimate. The scheduler checks live available RAM and known CPU/GPU load before admission. Tasks wait without occupying a reservation during pause; cancellation/skip interrupts waiting. Completion and failures release the reservation.
 
-Memory costs are heuristics, capped to the batch memory budget, not hard OS memory limits or model-specific guarantees. Disk slots are conservative global limits, not per-device throughput measurements. Reservations do not preempt an already running task when resource pressure rises. Transcription, merge, and chapter splitting retain their existing sequential execution rules. Merge processing retains its existing execution path.
+Memory costs start with heuristics and can grow with measured process RSS. They are not hard OS memory limits or model-specific guarantees. Disk slots are conservative global limits, not per-device throughput measurements. Reservations do not preempt an already running task when resource pressure rises. Transcription, merge, and chapter splitting retain their existing sequential execution rules. Merge processing retains its existing execution path.
 
 Parallel FFmpeg commands bound input decoder threads, filter threads, and output encoder threads. x265 pools and SVT-AV1 logical processors receive explicit limits too. These are per-stage thread limits, not an OS CPU percentage quota. The UI concurrency setting remains an upper bound; resource budgets can reduce actual concurrency.
 
@@ -14,7 +16,7 @@ Parallel FFmpeg commands bound input decoder threads, filter threads, and output
 
 `discover_encoders` is the common inventory implementation for `HardwareService`, `FfmpegService`, and startup system profiling. Hardware is advertised as usable only after a one-frame encode with the production pixel format succeeds. VideoToolbox forbids software substitution. Failed driver initialization excludes the encoder; conversion retains the existing runtime CPU fallback for failures with actual input.
 
-Linux VA-API probes use a render node and `format=nv12,hwupload`. Verified VA-API encoders appear in the inventory. Automatic rendering selection is intentionally limited to the existing VideoToolbox/NVENC/QSV/AMF pipelines: a VA-API rendering path must handle device selection and hardware filter uploads before it can be enabled.
+Linux VA-API probes use a render node and `format=nv12,hwupload`. Verified VA-API encoders appear in the inventory and are eligible for automatic or explicit selection on Linux. The rendering path handles device selection, hardware scaling where supported, CPU-filter uploads and CPU fallback.
 
 NVIDIA utilization is collected when `nvidia-smi` is available. GPU utilization remains `None` when the tool or reading is unavailable, including Apple/Intel/AMD systems without a telemetry provider. The UI shows an em dash and the chart leaves a gap. Unknown GPU telemetry does not prevent conversion; conservative hardware-session limits still apply. Idle scheduling requires a known CPU reading and uses GPU readings when available.
 

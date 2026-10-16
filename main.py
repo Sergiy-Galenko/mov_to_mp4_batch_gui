@@ -17,6 +17,19 @@ def _bootstrap_dependencies() -> None:
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["--self-test"]:
+        import argparse
+        import tempfile
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--self-test", action="store_true")
+        parser.add_argument("--report", type=Path)
+        parser.add_argument("--allow-missing-ffprobe", action="store_true")
+        args = parser.parse_args()
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        with tempfile.TemporaryDirectory(prefix="media-converter-self-test-") as temporary:
+            os.environ["MEDIA_CONVERTER_PORTABLE_DIR"] = temporary
+            from services.package_smoke import run_smoke
+            sys.exit(run_smoke(args.report, require_tools=not args.allow_missing_ffprobe))
     if sys.argv[1:2] == ["--whisper-setup-worker"]:
         from services.whisper_worker import main as whisper_main
 

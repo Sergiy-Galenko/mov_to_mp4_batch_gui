@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "environment_id": "14d2de36b2cb4e06845237d72cb1c667f26666e4626853365b6a2dbc56311688",
+  "repeats": 3,
+  "metrics": {
+    "encode_4k_seconds": 0.5053206250304356,
+    "encode_4k_peak_rss_bytes": 386072576,
+    "queue_10000_import_seconds": 0.03203025000402704,
+    "queue_1000_updates_seconds": 0.0034742080024443567,
+    "preview_cold_seconds": 0.20583145803539082,
+    "preview_warm_seconds": 0.0036872500204481184,
+    "waveform_warm_seconds": 0.001020333031192422,
+    "qml_startup_seconds": 1.235754499968607
+  },
+  "skipped": {
+    "transcription": "Provide --speech-audio with an already installed Whisper model/runtime"
+  },
+  "regressions": []
+}

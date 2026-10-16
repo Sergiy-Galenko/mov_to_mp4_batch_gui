@@ -39,7 +39,7 @@ def _ensure_windows_icon() -> None:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build MediaConverter with PyInstaller")
-    parser.add_argument("--portable", action="store_true", help="Create an onedir portable Windows package with local settings.")
+    parser.add_argument("--portable", action="store_true", help="Create an onedir portable package with local settings.")
     parser.add_argument("--ffmpeg-dir", help="Directory containing verified ffmpeg and ffprobe binaries.")
     return parser.parse_args()
 
@@ -47,7 +47,7 @@ def _parse_args() -> argparse.Namespace:
 def _verify_binary(path: Path) -> bool:
     try:
         return subprocess.run([str(path), "-version"], capture_output=True, timeout=10).returncode == 0
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return False
 
 
@@ -57,7 +57,7 @@ def main() -> int:
     args = _parse_args()
     _ensure_windows_icon()
 
-    ffmpeg = str(Path(args.ffmpeg_dir).expanduser() / "ffmpeg.exe") if args.ffmpeg_dir else find_ffmpeg()
+    ffmpeg = str(Path(args.ffmpeg_dir).expanduser() / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")) if args.ffmpeg_dir else find_ffmpeg()
     ffprobe = find_ffprobe(ffmpeg)
 
     if ffmpeg and ffprobe and _verify_binary(Path(ffmpeg)) and _verify_binary(Path(ffprobe)):
@@ -69,7 +69,7 @@ def main() -> int:
             print("FFmpeg and FFprobe found in different directories. Bundle them manually if needed.")
     else:
         if args.portable:
-            print("Portable build requires verified ffmpeg.exe and ffprobe.exe. Pass --ffmpeg-dir.")
+            print("Portable build requires verified FFmpeg and FFprobe binaries. Pass --ffmpeg-dir.")
             return 2
         print("FFmpeg/FFprobe not both found. Build will continue without bundling those binaries.")
         print("Use scripts/find_ffmpeg.py for setup hints.")

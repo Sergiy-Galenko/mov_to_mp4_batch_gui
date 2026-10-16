@@ -36,6 +36,7 @@ class ConversionControlsMixin:
             resolved = settings_map_to_model(merged_map, defaults=ConversionSettings())
             tasks.append(
                 TaskItem(
+                    task_id=item.task_id,
                     path=item.path,
                     media_type=item.media_type,
                     status=TaskStatus.QUEUED,

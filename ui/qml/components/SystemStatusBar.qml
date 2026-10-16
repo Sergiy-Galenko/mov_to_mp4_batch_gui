@@ -177,6 +177,22 @@ Rectangle {
                         }
                     }
                 }
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    AppButton {
+                        objectName: "exportDiagnosticsButton"
+                        text: I18n.t("system.export_report")
+                        enabled: !!backend
+                        onClicked: backend.exportDiagnostics()
+                    }
+                    AppButton {
+                        objectName: "clearMediaCacheButton"
+                        text: I18n.t("system.clear_cache")
+                        enabled: !!backend && !backend.isRunning
+                        onClicked: backend.clearMediaCache()
+                    }
+                }
                 AppCheckBox {
                     text: I18n.t("system.auto_tune")
                     checked: backend ? backend.autoTuneEnabled : false

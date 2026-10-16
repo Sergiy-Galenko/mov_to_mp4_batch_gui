@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "frozen": true,
+  "checks": {
+    "qml_startup": true,
+    "ffprobe_metadata": true,
+    "queue_import": true,
+    "conversion_decode": true,
+    "pause": true,
+    "resume": true,
+    "cancel_cleanup": true
+  },
+  "timings": {
+    "startup_seconds": 17.835725207987707
+  },
+  "ok": true
+}

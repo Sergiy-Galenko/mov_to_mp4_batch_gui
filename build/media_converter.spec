@@ -46,14 +46,8 @@ a = Analysis(
     excludes=[
         "tkinter",
         "unittest",
-        "email",
-        "html",
-        "http",
-        "xmlrpc",
         "pydoc",
         "doctest",
-        "difflib",
-        "multiprocessing.pool",
     ],
     noarchive=False,
 )
@@ -62,8 +56,6 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
     name="MediaConverter",
     debug=False,

@@ -6,13 +6,15 @@ import subprocess
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
 from app.constants import HW_ENCODER_MAP, PORTRAIT_PRESETS, POSITION_MAP, VIDEO_CODEC_MAP
 from app.models import ConversionSettings, MediaChapter, MediaInfo
 from app.target_size import MIN_VIDEO_KBPS, MUX_RESERVE, target_mode_error, target_size_bytes
+from services.cache_manager import CacheManager, source_fingerprint, tool_fingerprint
+from services.hardware_pipeline import configure_pipeline
 from services.hardware_service import discover_encoders
 from services.media_processing_plan import audio_copy_compatible, plan_streams
 from utils.formatting import build_atempo_chain
@@ -176,10 +178,13 @@ class FfmpegService:
         self.ffmpeg_path = ffmpeg_path
         self.ffprobe_path = ffprobe_path
         self.encoder_caps: set[str] = set()
+        self.cache: CacheManager | None = None
+        self.filter_caps: set[str] | None = None
 
     def set_paths(self, ffmpeg_path: str | None, ffprobe_path: str | None) -> None:
         self.ffmpeg_path = ffmpeg_path
         self.ffprobe_path = ffprobe_path
+        self.filter_caps = None
 
     def detect_encoders(self) -> set[str]:
         if not self.ffmpeg_path:
@@ -188,6 +193,18 @@ class FfmpegService:
             return discover_encoders(self.ffmpeg_path)
         except (OSError, RuntimeError, subprocess.SubprocessError):
             return set()
+
+    def detect_filters(self) -> set[str]:
+        if self.filter_caps is None:
+            self.filter_caps = set()
+            try:
+                listing = subprocess.run([self.ffmpeg_path, "-hide_banner", "-filters"], capture_output=True, text=True, timeout=15)
+                if listing.returncode == 0:
+                    self.filter_caps = {parts[1] for line in listing.stdout.splitlines()
+                                        if len(parts := line.split()) > 1 and len(parts[0]) == 3 and set(parts[0]) <= set("TSC.")}
+            except (OSError, subprocess.SubprocessError, TypeError):
+                pass
+        return self.filter_caps
 
     def probe_duration_ms(self, path: Path) -> float | None:
         if not self.ffprobe_path:
@@ -225,6 +242,31 @@ class FfmpegService:
         return results
 
     def probe_media(self, path: Path) -> MediaInfo | None:
+        if not self.ffprobe_path or not path.is_file():
+            return self._probe_media_uncached(path)
+        try:
+            cache = self.cache or CacheManager()
+            self.cache = cache
+            params = {"ffprobe": tool_fingerprint(self.ffprobe_path), "schema": 1}
+
+            def produce(target):
+                info = self._probe_media_uncached(path)
+                if info is None:
+                    return False
+                target.write_text(json.dumps(asdict(info), allow_nan=False), encoding="utf-8")
+                return True
+
+            target = cache.produce(path, "metadata", params, ".json", produce)
+            if target:
+                data = json.loads(target.read_text(encoding="utf-8"))
+                data["chapters"] = [MediaChapter(**chapter) for chapter in data.get("chapters", [])]
+                data["source_identity"] = source_fingerprint(path)
+                return MediaInfo(**data)
+            return None
+        except (OSError, ValueError, TypeError, TimeoutError):
+            return self._probe_media_uncached(path)
+
+    def _probe_media_uncached(self, path: Path) -> MediaInfo | None:
         if not self.ffprobe_path:
             return None
         cmd = [
@@ -330,6 +372,8 @@ class FfmpegService:
         if info.size_bytes is None:
             with contextlib.suppress(Exception):
                 info.size_bytes = path.stat().st_size
+        with contextlib.suppress(OSError):
+            info.source_identity = source_fingerprint(path)
         return info
 
     def output_extension_for(self, media_type_name: str, settings: ConversionSettings) -> str:
@@ -389,6 +433,7 @@ class FfmpegService:
             "nvidia": {"h264": "h264_nvenc", "h265": "hevc_nvenc", "av1": "av1_nvenc"},
             "intel": {"h264": "h264_qsv", "h265": "hevc_qsv", "av1": "av1_qsv"},
             "amd": {"h264": "h264_amf", "h265": "hevc_amf", "av1": "av1_amf"},
+            "vaapi": {"h264": "h264_vaapi", "h265": "hevc_vaapi", "av1": "av1_vaapi", "vp9": "vp9_vaapi"},
         }
 
         if hw_pref == "cpu" or codec == "mpeg2":
@@ -401,6 +446,8 @@ class FfmpegService:
 
         if hw_pref == "auto":
             vendors = ["apple", "nvidia", "intel", "amd"] if sys.platform == "darwin" else ["nvidia", "intel", "amd", "apple"]
+            if sys.platform.startswith("linux"):
+                vendors.append("vaapi")
             for vendor in vendors:
                 encoder = hw_map.get(vendor, {}).get(codec)
                 if encoder and encoder in self.encoder_caps:
@@ -444,6 +491,8 @@ class FfmpegService:
             return ["-rc:v", "vbr", "-cq", str(crf), "-b:v", "0"]
         if encoder.endswith("_qsv"):
             return ["-global_quality", str(crf)]
+        if encoder.endswith("_vaapi"):
+            return ["-qp", str(crf)]
         if encoder.endswith("_amf"):
             return ["-rc", "cqp", "-qp_i", str(crf), "-qp_p", str(crf), "-qp_b", str(crf)]
         return []
@@ -759,6 +808,10 @@ class FfmpegService:
     def is_gpu_encoder(encoder: str) -> bool:
         normalized = str(encoder or "").strip().lower()
         return normalized in {
+            "h264_vaapi",
+            "hevc_vaapi",
+            "av1_vaapi",
+            "vp9_vaapi",
             "h264_nvenc",
             "hevc_nvenc",
             "av1_nvenc",
@@ -1313,6 +1366,8 @@ class FfmpegService:
 
         cmd += self.metadata_args(settings)
         cmd.append(str(outp))
+        if is_hw:
+            cmd = configure_pipeline(cmd, encoder, info, self.detect_filters())
         return cmd
 
     def build_audio_command(
@@ -1599,4 +1654,6 @@ class FfmpegService:
 
         cmd += self.metadata_args(settings)
         cmd.append(str(outp))
+        if encoder.endswith("_vaapi"):
+            cmd = configure_pipeline(cmd, encoder, None, self.detect_filters())
         return cmd, list_path

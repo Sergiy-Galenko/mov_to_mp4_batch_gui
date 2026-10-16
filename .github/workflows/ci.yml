@@ -33,6 +33,12 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ffmpeg
 
+      - name: Expose FFmpeg for integration tests
+        run: |
+          echo "MEDIA_CONVERTER_TEST_FFMPEG=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+          echo "MEDIA_CONVERTER_FFMPEG=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+          echo "MEDIA_CONVERTER_FFPROBE=$(command -v ffprobe)" >> "$GITHUB_ENV"
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
@@ -46,3 +52,30 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q --tb=short
+
+      - name: Build and verify portable application
+        if: matrix.python-version == '3.12'
+        run: |
+          python scripts/build_pyinstaller.py --portable --ffmpeg-dir "$(dirname "$(command -v ffmpeg)")"
+          python scripts/verify_package.py dist/MediaConverter/MediaConverter --report package-smoke.json
+
+      - name: Collect benchmark report
+        if: matrix.python-version == '3.12'
+        run: python scripts/performance_suite.py --ffmpeg "$(command -v ffmpeg)" --report performance.json --repeats 3
+
+      - name: Check performance against PR base on the same runner
+        if: matrix.python-version == '3.12' && github.event_name == 'pull_request'
+        env:
+          PERFORMANCE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python scripts/check_performance_regression.py --base-sha "$PERFORMANCE_BASE_SHA" --ffmpeg "$(command -v ffmpeg)" --head-report performance.json
+
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.python-version == '3.12'
+        with:
+          name: MediaConverter-${{ matrix.os }}
+          path: |
+            dist/MediaConverter
+            package-smoke.json
+            performance.json
+            regression.json
+          if-no-files-found: error

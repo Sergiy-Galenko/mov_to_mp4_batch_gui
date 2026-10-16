@@ -338,3 +338,26 @@ class QueueIoMixin:
         self._file_timings.sort(key=lambda item: float(item.get("duration") or 0), reverse=True)
         self._file_timings = self._file_timings[:10]
         self.fileTimingsChanged.emit(list(self._file_timings))
+
+    @QtCore.Slot()
+    def exportDiagnostics(self) -> None:
+        if self._diagnostic_job.busy:
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(None, self._tr("system.export_report"), "diagnostics.json", "JSON (*.json)")
+        if not path:
+            return
+        from services.diagnostic_service import export_report
+        logs = list(self._log_lines)
+        plans = list(self._converter_service.processing_plans) if self._converter_service else []
+        def write(context):
+            context.progress("report", 20)
+            export_report(Path(path), self.ffmpeg_service, logs=logs, plans=plans, context=context)
+            return {"saved": True}
+        self._diagnostic_job.start_job(write)
+
+    @QtCore.Slot()
+    def clearMediaCache(self) -> None:
+        from services.cache_manager import CacheManager
+        if self._diagnostic_job.busy:
+            return
+        self._diagnostic_job.start_job(lambda context: {"cache_removed": CacheManager().cleanup(clear=True)})

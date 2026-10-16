@@ -148,6 +148,12 @@ class CoreMixin:
         self.settings_manager = SettingsManager()
         self._pending_system_profile = None
         self.isRunningChanged.connect(self._apply_pending_profile)
+        from services.background_job import BackgroundJob
+        self._diagnostic_job = BackgroundJob(self)
+        self._diagnostic_job.completed.connect(lambda result: self._append_log(
+            "OK", self._tr("system.cache_cleared", count=result["cache_removed"]) if "cache_removed" in result
+            else self._tr("system.report_saved")
+        ))
         self._system_profile = SystemProfile(self)
         self._system_profile.completed.connect(self._apply_system_profile)
         self._whisper_setup = WhisperSetup(self)
@@ -248,6 +254,8 @@ class CoreMixin:
             state.get("queue_items", []),
             pending_recovery=bool(state.get("pending_recovery")),
         )
+        from services.task_journal import TaskJournal
+        restored_items = TaskJournal().recover_items(restored_items)
         self.queue_model.set_items(restored_items)
 
         self.media_info_cache: Dict[Path, MediaInfo] = {}
@@ -377,6 +385,8 @@ class CoreMixin:
         self._montage_editing.shutdown()
         self._editor_project.shutdown()
         self._editor_render.shutdown()
+        self._diagnostic_job.shutdown()
+        self.montage_service.proxy_service.close()
         self._system_profile.shutdown()
         self._whisper_setup.shutdown()
         self._probe_executor.shutdown(wait=False, cancel_futures=True)

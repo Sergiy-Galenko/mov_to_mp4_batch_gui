@@ -85,6 +85,11 @@ class FakeTranscriber:
 
 
 class MockConverterService(ConverterService):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from types import SimpleNamespace
+        self.resource_monitor = SimpleNamespace(sample=lambda: {"cpu": 0.0, "gpu": None, "available_bytes": 64 * 1024**3})
+
     def _create_child_service(self, result_queue):
         child = MockConverterService(self.ffmpeg, result_queue, self.transcriber)
         child._output_path_lock = self._output_path_lock

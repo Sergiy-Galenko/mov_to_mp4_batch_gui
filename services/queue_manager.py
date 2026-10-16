@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from contextlib import suppress
@@ -13,6 +14,7 @@ from utils.files import file_sha256, media_type
 class QueueManager:
     def serialize_task(self, item: TaskItem) -> dict[str, Any]:
         return {
+            "task_id": item.task_id,
             "path": str(item.path),
             "media_type": item.media_type,
             "status": item.status,
@@ -43,6 +45,7 @@ class QueueManager:
         if not isinstance(payload, list):
             return []
         items: list[TaskItem] = []
+        identities: set[str] = set()
         for raw in payload:
             if not isinstance(raw, dict):
                 continue
@@ -56,8 +59,16 @@ class QueueManager:
             was_interrupted = pending_recovery and status in {TaskStatus.ANALYZING, TaskStatus.RUNNING, TaskStatus.PAUSED}
             if was_interrupted:
                 status = TaskStatus.QUEUED
+            try:
+                identity = uuid.UUID(str(raw.get("task_id") or "")).hex
+            except ValueError:
+                identity = uuid.uuid4().hex
+            if identity in identities:
+                identity = uuid.uuid4().hex
+            identities.add(identity)
             items.append(
                 TaskItem(
+                    task_id=identity,
                     path=Path(path_value).expanduser(),
                     media_type=media_kind,
                     status=status,

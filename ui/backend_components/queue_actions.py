@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from services.cache_manager import media_info_matches_source
+
 from .common import (
     Any,
     ConversionSettings,
@@ -409,6 +411,12 @@ class QueueActionsMixin:
         return str(task.path) if task else ""
 
     def _run_preflight(self, settings_map: Dict[str, Any], *, only_paths: Optional[set[Path]] = None) -> Dict[str, Any]:
+        for task in self.queue_model.items():
+            info = self.media_info_cache.get(task.path) or task.probe_data
+            if info and not media_info_matches_source(info, task.path):
+                self.media_info_cache.pop(task.path, None)
+                task.probe_data = None
+                self._prefetch_probe_async(task.path, task.media_type)
         result = self.validation.validate(
             dict(settings_map),
             tasks=self.queue_model.items(),

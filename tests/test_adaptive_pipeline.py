@@ -108,7 +108,7 @@ def test_estimates_distinguish_thumbnail_4k_and_transcription():
     info = MediaInfo(width=3840, height=2160)
     video = service.estimate(task, ConversionSettings(), info, ffmpeg)
     thumbnail = service.estimate(task, ConversionSettings(operation="thumbnail"), info, ffmpeg)
-    speech = service.estimate(task, ConversionSettings(operation="auto_subtitle"), info, ffmpeg)
+    speech = service.estimate(task, ConversionSettings(operation="auto_subtitle", subtitle_model="medium"), info, ffmpeg)
     assert video.memory_bytes > thumbnail.memory_bytes
     assert video.hardware_sessions == 1
     assert thumbnail.cpu_threads == 1 and thumbnail.hardware_sessions == 0

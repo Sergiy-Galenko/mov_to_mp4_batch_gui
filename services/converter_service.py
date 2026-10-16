@@ -11,18 +11,24 @@ from dataclasses import replace
 from pathlib import Path
 from queue import Queue
 
+import psutil
+
 from app.constants import PROGRESS_THROTTLE_SEC
 from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
 from app.target_size import MIN_VIDEO_KBPS, target_size_bytes
 from services.adaptive_scheduler import AdaptiveScheduler, bound_ffmpeg_threads
+from services.cache_manager import media_info_matches_source, tool_fingerprint
 from services.cloud_upload_service import CloudUploadService
 from services.ffmpeg_service import FfmpegService, parse_progress_line
+from services.hardware_pipeline import software_pipeline
 from services.resource_monitor import ResourceMonitor
 from services.security_service import secure_delete, write_checksum_sidecar
 from services.smart_convert_service import apply_smart_settings, parse_ab_crfs, recommend_settings
+from services.task_journal import TaskJournal
 from services.text_conversion_service import convert_text_file
 from services.transcription_service import TranscriptionService
 from services.validation_service import operation_supports_media
+from services.workload_history import ProcessMemorySampler, WorkloadHistory
 from utils.files import build_merge_output_path, build_output_path, resolve_output_collision, sanitize_file_stem
 from utils.files import publish_output as publish_completed_output
 from utils.formatting import format_bytes, format_time, parse_ffmpeg_time
@@ -59,6 +65,13 @@ class ConverterService:
         self._reserved_output_paths: set[Path] = set()
         self.resource_monitor = ResourceMonitor()
         self._ffmpeg_thread_budget: int | None = None
+        self.journal = TaskJournal()
+        self.workload_history = WorkloadHistory()
+        self._tasks_by_path: dict[Path, TaskItem] = {}
+        self._journal_prepared = False
+        self._active_settings = ConversionSettings()
+        self._calibration_paused = False
+        self.processing_plans: list[dict] = []
 
     def _result_output_paths(self, result_output: str) -> list[Path]:
         paths: list[Path] = []
@@ -153,6 +166,10 @@ class ConverterService:
     def _create_child_service(self, result_queue: Queue) -> "ConverterService":
         child = ConverterService(self.ffmpeg, result_queue, self.transcriber)
         child.resource_monitor = self.resource_monitor
+        child.journal = self.journal
+        child.workload_history = self.workload_history
+        child._journal_prepared = True
+        child.processing_plans = self.processing_plans
         child._output_path_lock = self._output_path_lock
         child._reserved_output_paths = self._reserved_output_paths
         return child
@@ -165,6 +182,7 @@ class ConverterService:
 
     def pause(self) -> None:
         with self._children_lock:
+            self._calibration_paused = True
             self.pause_event.set()
             for child in list(self.child_services):
                 child.pause()
@@ -227,6 +245,13 @@ class ConverterService:
             proc = subprocess.Popen(cmd, stdout=stdout, stderr=stderr, env=env)
             self.current_proc = proc
             started = time.monotonic()
+            speech = self._active_settings.operation == "auto_subtitle" and any(
+                marker in cmd for marker in ("--transcribe-worker", "transcribe")
+            )
+            memory_sampler = None
+            if speech:
+                with contextlib.suppress(psutil.Error, ValueError, TypeError):
+                    memory_sampler = ProcessMemorySampler(proc.pid)
             try:
                 if self.pause_event.is_set():
                     self._set_process_suspended(True)
@@ -238,10 +263,23 @@ class ConverterService:
                 self._checkpoint()
                 stdout.seek(0)
                 stderr.seek(0)
+                if speech and proc.returncode == 0 and memory_sampler and not self._calibration_paused:
+                    info = self.media_info.get(self.active_task_path)
+                    if info and info.duration:
+                        profile = self.workload_history.profile(
+                            self._active_settings,
+                            info,
+                            "none",
+                            tool=tool_fingerprint(self.ffmpeg.ffmpeg_path),
+                            threads=self._ffmpeg_thread_budget,
+                        )
+                        self.workload_history.record(profile, time.monotonic() - started, info.duration, memory_sampler.peak_rss)
                 return subprocess.CompletedProcess(
                     cmd, proc.returncode, stdout.read().decode("utf-8", "replace"), stderr.read().decode("utf-8", "replace")
                 )
             finally:
+                if memory_sampler:
+                    memory_sampler.close()
                 self._terminate_process(proc)
                 self.current_proc = None
 
@@ -319,6 +357,9 @@ class ConverterService:
         self._emit("log", level, msg)
 
     def _task_state(self, task_path: Path, status: str, message: str = "", output_path: str = "") -> None:
+        task = self._tasks_by_path.get(task_path)
+        if task:
+            self.journal.transition(task.task_id, status, message, output_path)
         self._emit("task_state", task_path, status, message, output_path)
 
     def _effective_settings(self, task: TaskItem, defaults: ConversionSettings) -> ConversionSettings:
@@ -361,6 +402,7 @@ class ConverterService:
         cpu_enc = FfmpegService.get_cpu_fallback_encoder(current_enc)
         new_cmd = list(cmd)
         new_cmd[idx + 1] = cpu_enc
+        new_cmd = software_pipeline(new_cmd)
         cleaned: list[str] = []
         skip_next = False
         for arg in new_cmd:
@@ -374,6 +416,7 @@ class ConverterService:
                 "-rc",
                 "-rc:v",
                 "-cq",
+                "-qp",
                 "-qp_i",
                 "-qp_p",
                 "-qp_b",
@@ -385,7 +428,7 @@ class ConverterService:
                 skip_next = True
                 continue
             cleaned.append(arg)
-        quality = next((new_cmd[new_cmd.index(flag) + 1] for flag in ("-cq", "-global_quality", "-qp_i") if flag in new_cmd), "23")
+        quality = next((new_cmd[new_cmd.index(flag) + 1] for flag in ("-cq", "-global_quality", "-qp_i", "-qp") if flag in new_cmd), "23")
         if "-b:v" in cleaned and cleaned[cleaned.index("-b:v") + 1] == "0":
             pos = cleaned.index("-b:v")
             del cleaned[pos : pos + 2]
@@ -707,7 +750,7 @@ class ConverterService:
     ) -> list[dict[str, str]]:
         worker_count = min(self.conversion_worker_limit(settings), len(tasks))
         self._log("INFO", f"Parallel conversion enabled: {worker_count} workers")
-        scheduler = AdaptiveScheduler(worker_count, self.resource_monitor)
+        scheduler = AdaptiveScheduler(worker_count, self.resource_monitor, history=self.workload_history)
         result_queue: Queue[tuple] = Queue()
         run_results: list[dict[str, str]] = []
         completed_paths: set[Path] = set()
@@ -739,12 +782,15 @@ class ConverterService:
                     else:
                         status = TaskStatus.CANCELLED if self.stop_event.is_set() else TaskStatus.SKIPPED
                         child._emit("task_state", task.path, status, "", "")
-                        child._emit("run_summary", {"results": [{"path": str(task.path), "status": status,
-                                                                 "message": "", "output_path": ""}]})
+                        child._emit(
+                            "run_summary", {"results": [{"path": str(task.path), "status": status, "message": "", "output_path": ""}]}
+                        )
             except Exception as exc:
                 child._task_state(task.path, TaskStatus.FAILED, str(exc))
-                child._emit("run_summary", {"results": [{"path": str(task.path), "status": TaskStatus.FAILED,
-                                                         "message": str(exc), "output_path": ""}]})
+                child._emit(
+                    "run_summary",
+                    {"results": [{"path": str(task.path), "status": TaskStatus.FAILED, "message": str(exc), "output_path": ""}]},
+                )
             finally:
                 with self._children_lock, contextlib.suppress(ValueError):
                     self.child_services.remove(child)
@@ -853,7 +899,11 @@ class ConverterService:
 
     def _run(self, tasks: list[TaskItem], settings: ConversionSettings, out_dir: Path, *, start_index: int = 1) -> None:
         started = time.time()
+        self._tasks_by_path = {task.path: task for task in tasks}
+        self._calibration_paused = False
         try:
+            if not self._journal_prepared:
+                self.journal.prepare_many((task, task.resolved_settings or settings) for task in tasks)
             self._run_inner(tasks, settings, out_dir, start_index=start_index)
         except Exception as exc:
             self._log("ERROR", str(exc))
@@ -891,7 +941,7 @@ class ConverterService:
         run_results: list[dict[str, str]] = []
 
         self.media_info.clear()
-        self.media_info.update(self.prefetched_media_info)
+        self.media_info.update({path: info for path, info in self.prefetched_media_info.items() if media_info_matches_source(info, path)})
         if self.ffmpeg.ffprobe_path:
             missing_probe: list[Path] = []
             for task in tasks:
@@ -1093,7 +1143,9 @@ class ConverterService:
             run_results.extend(parallel_results)
 
         if parallel_results is None:
-            serial_scheduler = AdaptiveScheduler(1, self.resource_monitor) if self._ffmpeg_thread_budget is None else None
+            serial_scheduler = (
+                AdaptiveScheduler(1, self.resource_monitor, history=self.workload_history) if self._ffmpeg_thread_budget is None else None
+            )
             for index, task in enumerate(tasks, start=start_index):
                 if self.stop_event.is_set():
                     self._log("WARN", "Зупинено користувачем.")
@@ -1106,6 +1158,7 @@ class ConverterService:
                     continue
 
                 settings_for_task = self._effective_settings(task, settings)
+                self._active_settings = settings_for_task
                 valid, message = self._validate_operation(task, settings_for_task)
                 if not valid:
                     self._log("WARN", f"{task.path.name}: {message}")
@@ -1126,6 +1179,7 @@ class ConverterService:
                 self.active_task_path = task.path
                 try:
                     outp = self._resolve_output_path(task, settings_for_task, out_dir, index)
+                    self.journal.plan_output(task.task_id, outp)
                 except (OSError, ValueError) as exc:
                     self._task_state(task.path, TaskStatus.FAILED, str(exc))
                     self._log("ERROR", str(exc))
@@ -1195,7 +1249,8 @@ class ConverterService:
                                 info,
                                 filters_used,
                                 audio_processing,
-                                allow_remux=settings_for_task.fast_copy or (settings_for_task.smart_convert_enabled and settings_for_task.smart_reencode_detection),
+                                allow_remux=settings_for_task.fast_copy
+                                or (settings_for_task.smart_convert_enabled and settings_for_task.smart_reencode_detection),
                             )
                             if (
                                 settings_for_task.smart_convert_enabled
@@ -1487,6 +1542,10 @@ class ConverterService:
         if publish_output:
             work_output_path = output_path.with_name(f".{output_path.stem}.{uuid.uuid4().hex}.partial{output_path.suffix}")
             cmd = [*cmd[:-1], str(work_output_path)]
+        from services.diagnostic_service import summarize_command
+
+        self.processing_plans.append(summarize_command(cmd))
+        del self.processing_plans[:-20]
         if self._ffmpeg_thread_budget is not None:
             cmd = bound_ffmpeg_threads(cmd, self._ffmpeg_thread_budget)
         cmd_with_progress = [*cmd[:2], "-progress", "pipe:1", "-nostats", "-hide_banner", *cmd[2:]]
@@ -1505,6 +1564,24 @@ class ConverterService:
         if self.pause_event.is_set():
             self._set_process_suspended(True)
         file_start = time.time()
+        try:
+            memory_sampler = ProcessMemorySampler(proc.pid)
+        except (psutil.Error, ValueError, TypeError):
+            memory_sampler = None
+        info = self.media_info.get(self.active_task_path)
+        encoder = cmd[cmd.index("-c:v") + 1] if "-c:v" in cmd else "none"
+        calibration_profile = self.workload_history.profile(
+            self._active_settings, info, encoder, tool=tool_fingerprint(self.ffmpeg.ffmpeg_path), threads=self._ffmpeg_thread_budget
+        )
+        effective_duration = getattr(self, "_encoding_output_duration", None) or duration
+        if (
+            info
+            and not self._active_settings.split_chapters
+            and not self._active_settings.smart_ab_test
+            and hasattr(self.ffmpeg, "target_duration")
+        ):
+            effective_duration = self.ffmpeg.target_duration(self._active_settings, info) or effective_duration
+        historical = self.workload_history.estimate(calibration_profile, effective_duration)
 
         assert proc.stderr is not None
         err_thread = threading.Thread(target=self._consume_stderr, args=(proc.stderr,), daemon=True)
@@ -1542,7 +1619,7 @@ class ConverterService:
 
                 file_pct = None
                 file_eta = None
-                progress_duration = getattr(self, "_encoding_output_duration", None) or duration
+                progress_duration = effective_duration
                 if progress_duration and progress_duration > 0:
                     file_pct = min(out_time / progress_duration, 1.0)
                     elapsed = max(time.time() - file_start, 0.001)
@@ -1550,8 +1627,10 @@ class ConverterService:
                         file_eta = max((progress_duration - out_time) / speed, 0.0)
                     else:
                         file_eta = _estimate_eta(elapsed, file_pct) if file_pct else None
+                    if elapsed < 2 and historical.get("seconds") is not None and not self._calibration_paused:
+                        file_eta = max(0, historical["seconds"] * (1 - file_pct))
 
-                weighted_time = out_time
+                weighted_time = file_pct * duration if file_pct is not None and duration else out_time
                 phase = getattr(self, "_encoding_progress", None)
                 if phase and file_pct is not None:
                     offset, scale = phase
@@ -1581,6 +1660,8 @@ class ConverterService:
         try:
             rc = proc.wait()
         finally:
+            if memory_sampler is not None:
+                memory_sampler.close()
             err_thread.join(timeout=0.2)
             self.current_proc = None
             self.current_output_path = None
@@ -1598,6 +1679,9 @@ class ConverterService:
                 return 1
             try:
                 publish_completed_output(work_output_path, output_path, overwrite="-y" in cmd)
+                task = self._tasks_by_path.get(self.active_task_path)
+                if task:
+                    self.journal.publication(task.task_id, output_path)
             except OSError as exc:
                 self._log("ERROR", f"Не вдалося опублікувати результат {output_path.name}: {exc}")
                 with contextlib.suppress(Exception):
@@ -1608,4 +1692,15 @@ class ConverterService:
                 work_output_path.unlink(missing_ok=True)
         if self.skip_event.is_set():
             return self.SKIP_RC
+        if (
+            rc == 0
+            and not cancelled
+            and duration
+            and out_time > 0
+            and memory_sampler is not None
+            and not self._calibration_paused
+            and not getattr(self, "_encoding_progress", None)
+            and not self._active_settings.smart_ab_test
+        ):
+            self.workload_history.record(calibration_profile, time.time() - file_start, out_time, memory_sampler.peak_rss)
         return rc

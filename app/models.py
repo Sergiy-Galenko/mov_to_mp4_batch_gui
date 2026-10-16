@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -58,6 +59,7 @@ class MediaInfo:
     subtitle_streams: int = 0
     chapters: list[MediaChapter] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    source_identity: dict[str, Any] | None = None
 
 
 @dataclass
@@ -88,6 +90,7 @@ class TaskItem:
     smart_recommendation: str = ""
     pinned: bool = False
     priority: int = 0
+    task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
 
 @dataclass

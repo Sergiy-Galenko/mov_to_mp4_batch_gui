@@ -110,6 +110,8 @@ class FfmpegPathsMixin:
             summary.append("QSV")
         if {"h264_amf", "hevc_amf", "av1_amf"} & caps:
             summary.append("AMF")
+        if any(encoder.endswith("_vaapi") for encoder in caps):
+            summary.append("VA-API")
         if "libx265" in caps:
             summary.append("x265")
         if {"libsvtav1", "libaom-av1"} & caps:

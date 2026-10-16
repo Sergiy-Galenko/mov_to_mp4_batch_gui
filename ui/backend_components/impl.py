@@ -37,6 +37,8 @@ class Backend(
 
     builtinPresetNames = GeneralPropertiesMixin.builtinPresetNames
     customPresetNames = GeneralPropertiesMixin.customPresetNames
+    exportDiagnostics = QueueIoMixin.exportDiagnostics
+    clearMediaCache = QueueIoMixin.clearMediaCache
     shutdown = CoreMixin.shutdown
     getWhisperModels = CoreMixin.getWhisperModels
     getWhisperDevices = CoreMixin.getWhisperDevices

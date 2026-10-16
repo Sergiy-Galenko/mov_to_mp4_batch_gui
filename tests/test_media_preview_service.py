@@ -1,3 +1,4 @@
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,8 +16,9 @@ class MediaPreviewServiceTest(unittest.TestCase):
             with patch("services.media_preview_service.PREVIEW_CACHE_DIR", root / "previews"):
                 service = MediaPreviewService("ffmpeg", "ffprobe")
 
-                def write_thumbnail(command, **_kwargs) -> None:
+                def write_thumbnail(command, **_kwargs):
                     Path(command[-1]).write_bytes(b"thumbnail")
+                    return subprocess.CompletedProcess(command, 0)
 
                 with (
                     patch.object(service, "_get_duration", return_value=12.5) as get_duration,

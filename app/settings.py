@@ -132,6 +132,8 @@ def _apply_hw_encoder(settings: ConversionSettings, value: Any) -> None:
         hw = "cpu"
     elif HW_ENCODER_MAP.get(hw) == "apple":
         hw = "Apple (VideoToolbox)"
+    if HW_ENCODER_MAP.get(hw) == "vaapi":
+        hw = "Linux (VA-API)"
     if hw in HW_ENCODER_OPTIONS:
         settings.hw_encoder = str(hw)
 

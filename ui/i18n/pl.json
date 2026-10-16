@@ -1044,5 +1044,9 @@
   "target_size_estimate": "Wideo: {video} kbit/s · Audio: {audio} kbit/s · Minimum: {minimum} MB",
   "target_size_probe_hint": "Dodaj wideo i poczekaj na odczyt czasu trwania.",
   "target_size_resize": "Niski bitrate: zmień rozmiar na {width}×{height}",
-  "presets_copy": "Kopia"
+  "presets_copy": "Kopia",
+  "system.export_report": "Eksportuj diagnostykę",
+  "system.clear_cache": "Wyczyść pamięć mediów",
+  "system.report_saved": "Zapisano raport diagnostyczny",
+  "system.cache_cleared": "Usunięte wpisy pamięci: {count}"
 }

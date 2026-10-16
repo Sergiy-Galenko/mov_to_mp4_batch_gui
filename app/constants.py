@@ -152,6 +152,7 @@ HW_ENCODER_OPTIONS = [
     "NVIDIA (NVENC)",
     "Intel (QSV)",
     "AMD (AMF)",
+    "Linux (VA-API)",
 ]
 HW_ENCODER_MAP = {
     "auto": "auto",
@@ -166,6 +167,8 @@ HW_ENCODER_MAP = {
     "NVIDIA (NVENC)": "nvidia",
     "Intel (QSV)": "intel",
     "AMD (AMF)": "amd",
+    "Linux (VA-API)": "vaapi",
+    "vaapi": "vaapi",
 }
 
 ROTATE_OPTIONS = ["0", "90° вправо", "90° вліво", "180°"]

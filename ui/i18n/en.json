@@ -1044,5 +1044,9 @@
   "target_size_estimate": "Video: {video} kbit/s · Audio: {audio} kbit/s · Minimum: {minimum} MB",
   "target_size_probe_hint": "Add a video and wait for its duration to calculate the bitrate.",
   "target_size_resize": "Low bitrate: resize to {width}×{height}",
-  "presets_copy": "Copy"
+  "presets_copy": "Copy",
+  "system.export_report": "Export diagnostics",
+  "system.clear_cache": "Clear media cache",
+  "system.report_saved": "Diagnostic report saved",
+  "system.cache_cleared": "Cache entries removed: {count}"
 }

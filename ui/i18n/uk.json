@@ -1052,5 +1052,9 @@
   "target_size_estimate": "Відео: {video} кбіт/с · Аудіо: {audio} кбіт/с · Мінімум: {minimum} MB",
   "target_size_probe_hint": "Додай відео й дочекайся визначення тривалості для розрахунку бітрейту.",
   "target_size_resize": "Малий бітрейт: зменшити кадр до {width}×{height}",
-  "presets_copy": "Копія"
+  "presets_copy": "Копія",
+  "system.export_report": "Експортувати діагностику",
+  "system.clear_cache": "Очистити кеш медіа",
+  "system.report_saved": "Діагностичний звіт збережено",
+  "system.cache_cleared": "Видалено записів кешу: {count}"
 }

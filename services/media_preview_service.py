@@ -9,21 +9,23 @@ Uses FFmpeg/FFprobe to create visual previews of media files:
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
 from pathlib import Path
 
 from app.paths import APP_DATA_DIR
+from services.cache_manager import CacheManager, source_fingerprint, tool_fingerprint
 
-PREVIEW_CACHE_DIR = APP_DATA_DIR / "previews"
+PREVIEW_CACHE_DIR = APP_DATA_DIR / "cache"
 
 
 class MediaPreviewService:
     """Generates visual previews for media files."""
 
-    def __init__(self, ffmpeg_path: str = "", ffprobe_path: str = "") -> None:
+    def __init__(self, ffmpeg_path: str = "", ffprobe_path: str = "", *, cache: CacheManager | None = None) -> None:
         self.ffmpeg_path = ffmpeg_path
         self.ffprobe_path = ffprobe_path
-        PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        self.cache = cache or CacheManager(PREVIEW_CACHE_DIR)
 
     def thumbnail_strip(
         self,
@@ -41,56 +43,37 @@ class MediaPreviewService:
         if not self.ffmpeg_path or not video_path.exists():
             return []
 
-        cache_key = _cache_key(video_path)
-        cache_dir = PREVIEW_CACHE_DIR / cache_key
-        cache_dir.mkdir(parents=True, exist_ok=True)
-
-        # Check if cached thumbnails exist
-        existing = sorted(cache_dir.glob("thumb_*.jpg"))
-        if len(existing) >= count:
-            return [str(path) for path in existing[:count]]
-
         if duration is None:
             duration = self._get_duration(video_path)
         if duration <= 0:
             return []
 
         results: list[str] = []
+        if count < 1 or thumb_width < 1 or thumb_height < 1:
+            return results
         for i in range(count):
             timestamp = (duration / (count + 1)) * (i + 1)
-            output_path = cache_dir / f"thumb_{i:03d}.jpg"
-            if output_path.exists():
-                results.append(str(output_path))
-                continue
-
-            cmd = [
-                self.ffmpeg_path,
-                "-y",
-                "-ss",
-                f"{timestamp:.2f}",
-                "-i",
-                str(video_path),
-                "-vframes",
-                "1",
-                "-vf",
-                f"scale={thumb_width}:{thumb_height}:force_original_aspect_ratio=decrease,pad={thumb_width}:{thumb_height}:(ow-iw)/2:(oh-ih)/2:color=black",
-                "-q:v",
-                "5",
-                str(output_path),
-            ]
-            try:
-                subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    timeout=10,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                )
-                if output_path.exists():
-                    results.append(str(output_path))
-            except Exception:
-                continue
-
+            params = {"count": count, "width": thumb_width, "height": thumb_height, "duration": duration,
+                      "index": i, "ffmpeg": tool_fingerprint(self.ffmpeg_path)}
+            filter_string = (f"scale={thumb_width}:{thumb_height}:force_original_aspect_ratio=decrease,"
+                             f"pad={thumb_width}:{thumb_height}:(ow-iw)/2:(oh-ih)/2:color=black")
+            path = self._artifact(video_path, "strips", params, ".jpg",
+                                  ["-ss", f"{timestamp:.6f}", "-i", str(video_path), "-vframes", "1",
+                                   "-vf", filter_string, "-q:v", "5"], timeout=10)
+            if path:
+                results.append(path)
         return results
+
+    def _artifact(self, source, namespace, params, suffix, arguments, *, timeout):
+        def producer(target):
+            result = subprocess.run([self.ffmpeg_path, "-y", *arguments, str(target)], capture_output=True,
+                                    timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            return result.returncode == 0
+        try:
+            target = self.cache.produce(source, namespace, params, suffix, producer)
+            return str(target) if target else None
+        except (OSError, TimeoutError, subprocess.SubprocessError):
+            return None
 
     def audio_waveform(
         self,
@@ -108,36 +91,16 @@ class MediaPreviewService:
         if not self.ffmpeg_path or not audio_path.exists():
             return None
 
-        cache_key = _cache_key(audio_path)
-        output_path = PREVIEW_CACHE_DIR / f"waveform_{cache_key}.png"
-
-        if output_path.exists():
-            return str(output_path)
-
-        cmd = [
-            self.ffmpeg_path,
-            "-y",
-            "-i",
-            str(audio_path),
-            "-filter_complex",
-            f"showwavespic=s={width}x{height}:colors={color}:split_channels=0",
-            "-frames:v",
-            "1",
-            str(output_path),
-        ]
-
-        try:
-            subprocess.run(
-                cmd,
-                capture_output=True,
-                timeout=30,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            if output_path.exists():
-                return str(output_path)
-        except Exception:
-            pass
-        return None
+        if width < 1 or height < 1:
+            return None
+        params = {"width": width, "height": height, "color": color, "background": bg_color,
+                  "ffmpeg": tool_fingerprint(self.ffmpeg_path)}
+        # showwavespic produces transparency; explicitly compose the requested background.
+        filters = (f"color=c={bg_color}:s={width}x{height}[bg];"
+                   f"[0:a]showwavespic=s={width}x{height}:colors={color}:split_channels=0[wave];"
+                   "[bg][wave]overlay=shortest=1[out]")
+        return self._artifact(audio_path, "waveforms", params, ".png",
+                              ["-i", str(audio_path), "-filter_complex", filters, "-map", "[out]", "-frames:v", "1"], timeout=30)
 
     def video_snapshot(
         self,
@@ -154,40 +117,12 @@ class MediaPreviewService:
         if not self.ffmpeg_path or not video_path.exists():
             return None
 
-        cache_key = _cache_key(video_path)
-        output_path = PREVIEW_CACHE_DIR / f"snap_{cache_key}_{int(timestamp * 1000)}.jpg"
-
-        if output_path.exists():
-            return str(output_path)
-
-        cmd = [
-            self.ffmpeg_path,
-            "-y",
-            "-ss",
-            f"{timestamp:.3f}",
-            "-i",
-            str(video_path),
-            "-vframes",
-            "1",
-            "-vf",
-            f"scale={width}:{height}:force_original_aspect_ratio=decrease",
-            "-q:v",
-            "3",
-            str(output_path),
-        ]
-
-        try:
-            subprocess.run(
-                cmd,
-                capture_output=True,
-                timeout=10,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            if output_path.exists():
-                return str(output_path)
-        except Exception:
-            pass
-        return None
+        if timestamp < 0 or width < 1 or height < 1:
+            return None
+        params = {"timestamp": timestamp, "width": width, "height": height, "ffmpeg": tool_fingerprint(self.ffmpeg_path)}
+        return self._artifact(video_path, "snapshots", params, ".jpg",
+                              ["-ss", f"{timestamp:.6f}", "-i", str(video_path), "-vframes", "1",
+                               "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease", "-q:v", "3"], timeout=10)
 
     def generate_preview(
         self,
@@ -230,52 +165,17 @@ class MediaPreviewService:
         return result
 
     def _get_duration(self, path: Path) -> float:
-        """Get media duration in seconds using ffprobe."""
-        if not self.ffprobe_path:
-            return 0.0
-        cmd = [
-            self.ffprobe_path,
-            "-v",
-            "quiet",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            str(path),
-        ]
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                return float(result.stdout.strip())
-        except Exception:
-            pass
-        return 0.0
+        from services.ffmpeg_service import FfmpegService
+        service = FfmpegService(self.ffmpeg_path, self.ffprobe_path)
+        service.cache = self.cache
+        info = service.probe_media(path)
+        return info.duration or 0.0 if info else 0.0
 
     def clear_cache(self) -> int:
         """Remove all cached preview files. Returns count of removed files."""
-        removed = 0
-        if PREVIEW_CACHE_DIR.exists():
-            for item in PREVIEW_CACHE_DIR.rglob("*"):
-                if item.is_file():
-                    try:
-                        item.unlink()
-                        removed += 1
-                    except OSError:
-                        pass
-        return removed
+        return sum(self.cache.cleanup(namespace=namespace, clear=True)
+                   for namespace in ("strips", "snapshots", "waveforms", "thumbnails"))
 
 
 def _cache_key(path: Path) -> str:
-    """Generate a stable cache key for a file path."""
-    try:
-        stat = path.stat()
-        raw = f"{path.resolve()}:{stat.st_size}:{stat.st_mtime_ns}"
-    except OSError:
-        raw = str(path.resolve())
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+    return hashlib.sha256(json.dumps(source_fingerprint(path), sort_keys=True).encode()).hexdigest()[:16]

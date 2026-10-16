@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from services.cache_manager import media_info_matches_source
+
 from .common import (
     MONTAGE_MEDIA_FILTER,
     Any,
@@ -35,6 +37,9 @@ class MediaDetailsMixin:
     def _prefetch_probe_async(self, path: Path, media_kind: str) -> None:
         if media_kind not in {"video", "audio"}:
             return
+        cached = self.media_info_cache.get(path)
+        if cached is not None and not media_info_matches_source(cached, path):
+            self.media_info_cache.pop(path, None)
         if not self.ffmpeg_service.ffprobe_path or path in self.media_info_cache or path in self._probe_pending:
             return
         self._probe_pending.add(path)
@@ -52,7 +57,13 @@ class MediaDetailsMixin:
         if media_kind != "video":
             return
         current = self.queue_model.item_by_path(path)
-        if path in self._thumbnail_pending or (current and current.thumbnail_path):
+        if path in self._thumbnail_pending:
+            return
+        try:
+            expected = self.media_analysis.thumbnail_path(path)
+            if current and current.thumbnail_path == str(expected) and expected.is_file():
+                return
+        except OSError:
             return
         self._thumbnail_pending.add(path)
         self._thumbnail_executor.submit(self._create_thumbnail_async, path, media_kind)

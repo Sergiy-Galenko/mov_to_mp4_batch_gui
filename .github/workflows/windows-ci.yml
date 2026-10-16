@@ -57,8 +57,27 @@ jobs:
           )
           $required | ForEach-Object { if (-not (Test-Path $_)) { throw "Missing portable build file: $_" } }
 
+      - name: Verify portable application behavior
+        run: python scripts/verify_package.py dist/MediaConverter/MediaConverter.exe --report package-smoke.json
+
+      - name: Collect benchmark report
+        shell: pwsh
+        run: python scripts/performance_suite.py --ffmpeg "$env:MEDIA_CONVERTER_TEST_FFMPEG" --report performance.json --repeats 3
+
+      - name: Check performance against PR base on the same runner
+        if: github.event_name == 'pull_request'
+        env:
+          PERFORMANCE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: pwsh
+        run: python scripts/check_performance_regression.py --base-sha "$env:PERFORMANCE_BASE_SHA" --ffmpeg "$env:MEDIA_CONVERTER_TEST_FFMPEG" --head-report performance.json
+
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: MediaConverter-windows-portable
-          path: dist/MediaConverter
+          path: |
+            dist/MediaConverter
+            package-smoke.json
+            performance.json
+            regression.json
           if-no-files-found: error
