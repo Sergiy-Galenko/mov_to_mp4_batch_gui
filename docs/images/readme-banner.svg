@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="430" viewBox="0 0 1440 430" role="img" aria-labelledby="title desc">
-  <title id="title">Media Converter — ваш медіапростір</title>
-  <desc id="desc">Конвертуйте файли, монтуйте відео та готуйте матеріали до публікації. Відео, фото, аудіо, текст і субтитри в одному застосунку.</desc>
+  <title id="title">Media Converter — your media workspace</title>
+  <desc id="desc">Convert files, edit video, and prepare media for publishing. Video, images, audio, text, and subtitles in one application.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop stop-color="#111820"/><stop offset="1" stop-color="#17283b"/>
@@ -11,28 +11,28 @@
   <path d="M980 0V430M1160 0V430M1340 0V430M900 80H1440M900 260H1440" stroke="#c9e2ff" stroke-opacity=".055"/>
   <rect x="56" y="51" width="42" height="5" rx="2.5" fill="url(#accent)"/>
   <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
-    <text x="112" y="60" fill="#acc1d8" font-size="16" letter-spacing="3">ВАШ МЕДІАПРОСТІР</text>
+    <text x="112" y="60" fill="#acc1d8" font-size="16" letter-spacing="3">YOUR MEDIA WORKSPACE</text>
     <text x="52" y="161" fill="#f5f8fc" font-size="76" font-weight="700" letter-spacing="-3">Media Converter</text>
-    <text x="56" y="215" fill="#c5d2e2" font-size="27">Від вихідного файлу до готового результату.</text>
-    <text x="56" y="254" fill="#9db2c9" font-size="22">Конвертуйте. Монтуйте. Створюйте субтитри.</text>
+    <text x="56" y="215" fill="#c5d2e2" font-size="27">From source file to finished result.</text>
+    <text x="56" y="254" fill="#9db2c9" font-size="22">Convert. Edit. Create subtitles.</text>
     <g font-size="16" font-weight="600" text-anchor="middle">
-      <rect x="56" y="321" width="108" height="42" rx="21" fill="#243c4c"/><text x="110" y="348" fill="#a4f0e2">ВІДЕО</text>
-      <rect x="176" y="321" width="98" height="42" rx="21" fill="#25364d"/><text x="225" y="348" fill="#b3d5ff">ФОТО</text>
-      <rect x="286" y="321" width="106" height="42" rx="21" fill="#30344c"/><text x="339" y="348" fill="#d7ccff">АУДІО</text>
-      <rect x="404" y="321" width="106" height="42" rx="21" fill="#293c44"/><text x="457" y="348" fill="#b6e8cc">ТЕКСТ</text>
-      <rect x="522" y="321" width="148" height="42" rx="21" fill="#3b3c3e"/><text x="596" y="348" fill="#f5d6a0">СУБТИТРИ</text>
+      <rect x="56" y="321" width="108" height="42" rx="21" fill="#243c4c"/><text x="110" y="348" fill="#a4f0e2">VIDEO</text>
+      <rect x="176" y="321" width="98" height="42" rx="21" fill="#25364d"/><text x="225" y="348" fill="#b3d5ff">IMAGES</text>
+      <rect x="286" y="321" width="106" height="42" rx="21" fill="#30344c"/><text x="339" y="348" fill="#d7ccff">AUDIO</text>
+      <rect x="404" y="321" width="106" height="42" rx="21" fill="#293c44"/><text x="457" y="348" fill="#b6e8cc">TEXT</text>
+      <rect x="522" y="321" width="148" height="42" rx="21" fill="#3b3c3e"/><text x="596" y="348" fill="#f5d6a0">SUBTITLES</text>
     </g>
     <g transform="translate(926 92)">
       <rect width="170" height="114" rx="18" fill="#253447" stroke="#3a4a5f"/>
-      <text x="22" y="35" fill="#a4b9d1" font-size="14" letter-spacing="2">ДЖЕРЕЛО</text>
+      <text x="22" y="35" fill="#a4b9d1" font-size="14" letter-spacing="2">SOURCE</text>
       <text x="22" y="82" fill="#eef5fd" font-size="38" font-weight="650">MOV</text>
       <path d="M187 56h39m-9-9 10 9-10 9" fill="none" stroke="#86e7d8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
       <rect x="246" y="0" width="170" height="114" rx="18" fill="#28434b" stroke="#4a787e"/>
-      <text x="268" y="35" fill="#a9dece" font-size="14" letter-spacing="2">РЕЗУЛЬТАТ</text>
+      <text x="268" y="35" fill="#a9dece" font-size="14" letter-spacing="2">OUTPUT</text>
       <text x="268" y="82" fill="#effdf8" font-size="38" font-weight="650">MP4</text>
       <rect y="144" width="416" height="124" rx="18" fill="#192837" stroke="#32485e"/>
-      <text x="24" y="180" fill="#dae6f2" font-size="18" font-weight="600">Один файл або ціла черга</text>
-      <text x="24" y="213" fill="#a3b8cf" font-size="17">Оберіть формат і папку результатів.</text>
+      <text x="24" y="180" fill="#dae6f2" font-size="18" font-weight="600">One file or an entire queue</text>
+      <text x="24" y="213" fill="#a3b8cf" font-size="17">Choose a format and output folder.</text>
       <path d="M24 242h366" stroke="#30475e" stroke-width="5" stroke-linecap="round"/>
       <path d="M24 242h224" stroke="url(#accent)" stroke-width="5" stroke-linecap="round"/>
     </g>
