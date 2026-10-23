@@ -109,6 +109,36 @@ Rectangle {
                 font.pixelSize: Theme.fontSizeSm
                 font.family: Theme.monoFont
             }
+
+            Label {
+                visible: !!(archiveBackend && archiveBackend.speedText)
+                text: "Швидкість:"
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontSizeSm
+            }
+            Label {
+                visible: !!(archiveBackend && archiveBackend.speedText)
+                Layout.fillWidth: true
+                text: archiveBackend ? archiveBackend.speedText : ""
+                color: Theme.textPrimary
+                font.pixelSize: Theme.fontSizeSm
+                font.family: Theme.monoFont
+            }
+
+            Label {
+                visible: !!(archiveBackend && archiveBackend.etaText)
+                text: "Залишилось:"
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontSizeSm
+            }
+            Label {
+                visible: !!(archiveBackend && archiveBackend.etaText)
+                Layout.fillWidth: true
+                text: archiveBackend ? archiveBackend.etaText : ""
+                color: Theme.textPrimary
+                font.pixelSize: Theme.fontSizeSm
+                font.family: Theme.monoFont
+            }
         }
 
         // Current file name

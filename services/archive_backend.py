@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -61,11 +62,32 @@ class ArchiveBackend(BackgroundJob):
         self._bytes_done = 0
         self._bytes_total = 0
         self._elapsed_seconds = 0.0
+        self._bytes_per_second = 0.0
+        self._eta_seconds = 0.0
+        self._current_op_type = ""
         self._last_analysis: dict[str, Any] = {}
         self._last_result_data: dict[str, Any] = {}
         self._last_error_details = ""
         self._cached_archive_contents: list[dict[str, Any]] = []
         self.changed.connect(self.isBusyChanged.emit)
+        self._finished.connect(self._handle_finished)
+
+    def _handle_finished(self, res: dict[str, Any], err: str) -> None:
+        op = self._current_op_type
+        if op == "create":
+            if err:
+                self._last_error_details = err
+                self.archiveFinished.emit(False, err, {})
+                self.operationError.emit("Помилка створення архіву", err, err)
+            else:
+                self.archiveFinished.emit(True, "Архів успішно створено", res)
+        elif op == "extract":
+            if err:
+                self._last_error_details = err
+                self.extractFinished.emit(False, err, {})
+                self.operationError.emit("Помилка розпакування", err, err)
+            else:
+                self.extractFinished.emit(True, "Розпаковано успішно", res)
 
     # -------------------------------------------------------------------------
     # Properties for QML bindings
@@ -98,6 +120,41 @@ class ArchiveBackend(BackgroundJob):
     @QtCore.Property(str, notify=progressDetailsChanged)
     def elapsedText(self) -> str:
         return _format_time(self._elapsed_seconds)
+
+    @QtCore.Property(str, notify=progressDetailsChanged)
+    def speedText(self) -> str:
+        if self._bytes_per_second <= 0:
+            return ""
+        return f"{_format_size(int(self._bytes_per_second))}/s"
+
+    @QtCore.Property(str, notify=progressDetailsChanged)
+    def etaText(self) -> str:
+        if self._eta_seconds <= 0 or not self._busy:
+            return ""
+        return _format_time(self._eta_seconds)
+
+    @QtCore.Property(list, constant=True)
+    def formatOptions(self) -> list[dict[str, Any]]:
+        return [
+            {"id": "zip", "label": "ZIP", "description": "Найкраща сумісність", "available": True},
+            {"id": "7z", "label": "7Z", "description": "Найвищий ступінь стиснення", "available": self._service.has_7z},
+            {"id": "rar", "label": "RAR", "description": "WinRAR формат", "available": self._service.has_rar},
+            {"id": "tar.gz", "label": "TAR.GZ", "description": "Linux / Серверний стандарт", "available": True},
+            {"id": "tar.bz2", "label": "TAR.BZ2", "description": "Високе стиснення тексту", "available": True},
+            {"id": "tar.xz", "label": "TAR.XZ", "description": "Максимальне стиснення TAR", "available": True},
+            {"id": "tar", "label": "TAR", "description": "Пакет без стиснення", "available": True},
+            {"id": "gz", "label": "GZ", "description": "Gzip для одного файлу", "available": True, "singleFile": True},
+            {"id": "bz2", "label": "BZ2", "description": "Bzip2 для одного файлу", "available": True, "singleFile": True},
+            {"id": "xz", "label": "XZ", "description": "XZ для одного файлу", "available": True, "singleFile": True},
+        ]
+
+    @QtCore.Property(list, constant=True)
+    def compressionPresets(self) -> list[dict[str, Any]]:
+        return [
+            {"id": "fast", "label": "Fast", "description": "Швидке стиснення, більший розмір"},
+            {"id": "balanced", "label": "Balanced", "description": "Рекомендований баланс", "recommended": True},
+            {"id": "maximum", "label": "Maximum", "description": "Максимальне стиснення"},
+        ]
 
     @QtCore.Property(bool, notify=toolsChanged)
     def has7z(self) -> bool:
@@ -243,6 +300,32 @@ class ArchiveBackend(BackgroundJob):
                 "requiredFormatted": _format_size(required_bytes),
             }
 
+    @QtCore.Slot(list, str, str, result="QVariantMap")
+    def estimateCompressedSize(self, sources: list[str], format_id: str = "zip", preset: str = "balanced") -> dict[str, Any]:
+        """Estimate the resulting archive size based on content analysis."""
+        clean_sources = [str(s).replace("file://", "").strip() for s in sources if str(s).strip()]
+        analysis = self._service.analyze_sources(clean_sources)
+        total_size = analysis.get("total_size", 0)
+        is_mostly_compressed = analysis.get("is_mostly_compressed", False)
+
+        ratio = 0.98 if is_mostly_compressed else 0.65
+        if preset == "fast":
+            ratio = min(1.0, ratio * 1.1)
+        elif preset == "maximum":
+            ratio = max(0.2, ratio * 0.85)
+
+        if format_id in {"7z", "tar.xz", "xz"} and not is_mostly_compressed:
+            ratio *= 0.85
+
+        est_size = int(total_size * ratio)
+        return {
+            "totalSizeBytes": total_size,
+            "estimatedSizeBytes": est_size,
+            "estimatedFormatted": _format_size(est_size),
+            "ratio": round(ratio, 2),
+            "isMostlyCompressed": is_mostly_compressed,
+        }
+
     @QtCore.Slot(list, str, str, str, str, bool, int, bool)
     def createArchive(
         self,
@@ -259,13 +342,36 @@ class ArchiveBackend(BackgroundJob):
         clean_sources = [str(s).replace("file://", "").strip() for s in sources if str(s).strip()]
         clean_output = str(output_path).replace("file://", "").strip()
 
+        # Validation
+        if not clean_sources:
+            self.operationError.emit("Помилка", "Не вибрано жодного файлу для стиснення.", "")
+            return
+
+        for s in clean_sources:
+            if not Path(s).exists():
+                self.operationError.emit("Помилка", f"Джерело не знайдено: {s}", "")
+                return
+
+        out_path = Path(clean_output)
+        try:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            if not os.access(out_path.parent, os.W_OK):
+                self.operationError.emit("Помилка прав доступу", f"Немає прав на запис у папку: {out_path.parent}", "")
+                return
+        except OSError as e:
+            self.operationError.emit("Помилка створення папки", str(e), str(e))
+            return
+
+        self._current_op_type = "create"
         # Reset progress
-        self._current_file = "Preparing..."
+        self._current_file = "Підготовка..."
         self._files_done = 0
         self._files_total = 0
         self._bytes_done = 0
         self._bytes_total = 0
         self._elapsed_seconds = 0.0
+        self._bytes_per_second = 0.0
+        self._eta_seconds = 0.0
         self._last_result_data = {}
         self._last_error_details = ""
         self.progressDetailsChanged.emit()
@@ -279,7 +385,16 @@ class ArchiveBackend(BackgroundJob):
                 self._bytes_total = b_total
                 self._current_file = curr_f
                 self._elapsed_seconds = elapsed
-                self._progress.emit(f"Compressing ({int(pct)}%)", int(pct))
+                if elapsed > 0.5 and b_done > 0:
+                    speed = b_done / elapsed
+                    self._bytes_per_second = speed
+                    rem_bytes = max(0, b_total - b_done)
+                    self._eta_seconds = (rem_bytes / speed) if speed > 0 else 0.0
+                else:
+                    self._bytes_per_second = 0.0
+                    self._eta_seconds = 0.0
+
+                self._progress.emit(f"Стиснення ({int(pct)}%)", int(pct))
                 self.progressDetailsChanged.emit()
 
             res = self._service.create_archive(
@@ -314,15 +429,6 @@ class ArchiveBackend(BackgroundJob):
             self._last_result_data = result_map
             return result_map
 
-        def on_finished(res: dict[str, Any], err: str) -> None:
-            if err:
-                self._last_error_details = err
-                self.archiveFinished.emit(False, err, {})
-                self.operationError.emit("Archive Creation Error", err, err)
-            else:
-                self.archiveFinished.emit(True, "Archive created successfully", res)
-
-        self._finished.connect(on_finished)
         self.start_job(work)
 
     @QtCore.Slot(str, str, list, str, str)
@@ -338,12 +444,30 @@ class ArchiveBackend(BackgroundJob):
         clean_archive = str(archive_path).replace("file://", "").strip()
         clean_dest = str(destination_dir).replace("file://", "").strip()
 
-        self._current_file = "Reading archive..."
+        # Validation
+        if not clean_archive or not Path(clean_archive).exists():
+            self.operationError.emit("Помилка", f"Архів не знайдено: {clean_archive}", "")
+            return
+
+        dest_path = Path(clean_dest)
+        try:
+            dest_path.mkdir(parents=True, exist_ok=True)
+            if not os.access(dest_path, os.W_OK):
+                self.operationError.emit("Помилка прав доступу", f"Немає прав на запис у папку призначення: {dest_path}", "")
+                return
+        except OSError as e:
+            self.operationError.emit("Помилка створення папки", str(e), str(e))
+            return
+
+        self._current_op_type = "extract"
+        self._current_file = "Аналіз архіву..."
         self._files_done = 0
         self._files_total = 0
         self._bytes_done = 0
         self._bytes_total = 0
         self._elapsed_seconds = 0.0
+        self._bytes_per_second = 0.0
+        self._eta_seconds = 0.0
         self._last_result_data = {}
         self._last_error_details = ""
         self.progressDetailsChanged.emit()
@@ -357,7 +481,16 @@ class ArchiveBackend(BackgroundJob):
                 self._bytes_total = b_total
                 self._current_file = curr_f
                 self._elapsed_seconds = elapsed
-                self._progress.emit(f"Extracting ({int(pct)}%)", int(pct))
+                if elapsed > 0.5 and b_done > 0:
+                    speed = b_done / elapsed
+                    self._bytes_per_second = speed
+                    rem_bytes = max(0, b_total - b_done)
+                    self._eta_seconds = (rem_bytes / speed) if speed > 0 else 0.0
+                else:
+                    self._bytes_per_second = 0.0
+                    self._eta_seconds = 0.0
+
+                self._progress.emit(f"Розпакування ({int(pct)}%)", int(pct))
                 self.progressDetailsChanged.emit()
 
             res = self._service.extract_archive(
@@ -385,15 +518,6 @@ class ArchiveBackend(BackgroundJob):
             self._last_result_data = result_map
             return result_map
 
-        def on_finished(res: dict[str, Any], err: str) -> None:
-            if err:
-                self._last_error_details = err
-                self.extractFinished.emit(False, err, {})
-                self.operationError.emit("Archive Extraction Error", err, err)
-            else:
-                self.extractFinished.emit(True, "Extracted successfully", res)
-
-        self._finished.connect(on_finished)
         self.start_job(work)
 
     @QtCore.Slot(str, str)

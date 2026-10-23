@@ -24,10 +24,61 @@ Rectangle {
     property bool encryptFilenames: false
 
     property var sourceAnalysis: ({})
+    property var estimatedSizeInfo: ({})
     signal archiveDropped(string archivePath)
 
     color: Theme.panelBackground
     clip: true
+
+    onSelectedFormatChanged: updateEstimate()
+    onCompressionPresetChanged: updateEstimate()
+
+    function openFileDialog() {
+        fileDialog.open()
+    }
+
+    function openFolderDialog() {
+        folderDialog.open()
+    }
+
+    function passwordStrengthScore(pass) {
+        if (!pass || pass.length === 0) return 0
+        var score = 0
+        if (pass.length >= 8) score++
+        if (pass.length >= 12) score++
+        if (/[a-z]/.test(pass) && /[A-Z]/.test(pass)) score++
+        if (/\d/.test(pass) && /[^a-zA-Z0-9]/.test(pass)) score++
+        return Math.max(1, Math.min(4, score))
+    }
+
+    function passwordStrengthLabel(score) {
+        switch (score) {
+            case 1: return "Слабкий"
+            case 2: return "Середній"
+            case 3: return "Надійний"
+            case 4: return "Дуже надійний"
+            default: return ""
+        }
+    }
+
+    function passwordStrengthColor(score) {
+        switch (score) {
+            case 1: return Theme.danger
+            case 2: return Theme.warning
+            case 3: return "#34C759"
+            case 4: return "#30D158"
+            default: return Theme.borderMuted
+        }
+    }
+
+    function updateEstimate() {
+        if (!archiveBackend || selectedSources.length === 0) {
+            estimatedSizeInfo = {}
+            return
+        }
+        var est = archiveBackend.estimateCompressedSize(selectedSources, selectedFormat, compressionPreset)
+        estimatedSizeInfo = est || {}
+    }
 
     function addPaths(paths) {
         if (!paths || paths.length === 0) return
@@ -61,12 +112,14 @@ Rectangle {
     function clearAll() {
         selectedSources = []
         sourceAnalysis = {}
+        estimatedSizeInfo = {}
         archiveName = "Archive"
     }
 
     function updateAnalysis() {
         if (!archiveBackend || selectedSources.length === 0) {
             sourceAnalysis = {}
+            estimatedSizeInfo = {}
             return
         }
         var res = archiveBackend.analyzeSources(selectedSources)
@@ -77,6 +130,7 @@ Rectangle {
         if (res.suggestedPreset && res.isMostlyCompressed) {
             compressionPreset = "fast"
         }
+        updateEstimate()
     }
 
     function getFinalOutputPath() {
@@ -341,11 +395,32 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: Theme.space1
 
-                Label {
-                    text: I18n.t("archive.format")
-                    font.pixelSize: Theme.fontSizeSm
-                    font.weight: Font.DemiBold
-                    color: Theme.textPrimary
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label {
+                        text: I18n.t("archive.format")
+                        font.pixelSize: Theme.fontSizeSm
+                        font.weight: Font.DemiBold
+                        color: Theme.textPrimary
+                    }
+                    Item { Layout.fillWidth: true }
+                    Rectangle {
+                        visible: !!(archiveBackend && archiveBackend.has7z)
+                        radius: Theme.radiusSm
+                        implicitWidth: zBadge.implicitWidth + 12
+                        implicitHeight: 20
+                        color: Qt.rgba(0.2, 0.78, 0.35, 0.15)
+                        border.width: 1
+                        border.color: Qt.rgba(0.2, 0.78, 0.35, 0.3)
+                        Label {
+                            id: zBadge
+                            anchors.centerIn: parent
+                            text: "7-Zip: 7z/AES ✓"
+                            font.pixelSize: Theme.fontSizeXs
+                            font.weight: Font.DemiBold
+                            color: "#34C759"
+                        }
+                    }
                 }
 
                 Flow {
@@ -567,12 +642,49 @@ Rectangle {
                         }
                     }
 
+                    // Password Strength Indicator
+                    ColumnLayout {
+                        visible: root.passwordText.length > 0
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Repeater {
+                                model: 4
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 4
+                                    radius: 2
+                                    color: index < root.passwordStrengthScore(root.passwordText)
+                                        ? root.passwordStrengthColor(root.passwordStrengthScore(root.passwordText))
+                                        : Theme.borderMuted
+                                }
+                            }
+                        }
+
+                        Label {
+                            text: (I18n.t("archive.password_strength") || "Надійність: ") + root.passwordStrengthLabel(root.passwordStrengthScore(root.passwordText))
+                            color: root.passwordStrengthColor(root.passwordStrengthScore(root.passwordText))
+                            font.pixelSize: Theme.fontSizeXs
+                        }
+                    }
+
                     AppTextField {
                         Layout.fillWidth: true
                         placeholderText: I18n.t("archive.confirm_password")
                         echoMode: root.showPassword ? TextInput.Normal : TextInput.Password
                         text: root.confirmPasswordText
                         onTextChanged: root.confirmPasswordText = text
+                    }
+
+                    Label {
+                        visible: root.encryptArchive && root.confirmPasswordText.length > 0 && root.passwordText === root.confirmPasswordText
+                        text: "✓ " + (I18n.t("archive.passwords_match") || "Паролі співпадають")
+                        color: "#34C759"
+                        font.pixelSize: Theme.fontSizeXs
                     }
 
                     Label {
@@ -678,6 +790,82 @@ Rectangle {
             }
 
             Item { Layout.preferredHeight: Theme.space2 }
+
+            // -------------------------------------------------------------
+            // Pre-compression Size Estimator Card
+            // -------------------------------------------------------------
+            Rectangle {
+                visible: root.selectedSources.length > 0 && !!root.estimatedSizeInfo && !!root.estimatedSizeInfo.estimatedFormatted
+                Layout.fillWidth: true
+                implicitHeight: estRow.implicitHeight + Theme.space3 * 2
+                radius: Theme.radiusSm
+                color: Theme.panelSecondary
+                border.width: 1
+                border.color: Theme.borderMuted
+
+                RowLayout {
+                    id: estRow
+                    anchors.fill: parent
+                    anchors.margins: Theme.space3
+                    spacing: Theme.space3
+
+                    AppIcon {
+                        name: "archive"
+                        implicitWidth: 20
+                        implicitHeight: 20
+                        iconColor: Theme.accent
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        RowLayout {
+                            spacing: Theme.space2
+
+                            Label {
+                                text: I18n.t("archive.estimated_size", "Очікуваний розмір:")
+                                font.pixelSize: Theme.fontSizeSm
+                                color: Theme.textSecondary
+                            }
+
+                            Label {
+                                text: root.estimatedSizeInfo ? ("~ " + root.estimatedSizeInfo.estimatedFormatted) : ""
+                                font.pixelSize: Theme.fontSizeSm
+                                font.weight: Font.Bold
+                                font.family: Theme.monoFont
+                                color: Theme.textPrimary
+                            }
+
+                            Rectangle {
+                                visible: !!root.estimatedSizeInfo && (1.0 - (root.estimatedSizeInfo.ratio || 1.0)) > 0.05
+                                radius: 4
+                                implicitWidth: savedLabel.implicitWidth + 8
+                                implicitHeight: 18
+                                color: Qt.rgba(0.2, 0.78, 0.35, 0.15)
+                                border.width: 1
+                                border.color: Qt.rgba(0.2, 0.78, 0.35, 0.3)
+
+                                Label {
+                                    id: savedLabel
+                                    anchors.centerIn: parent
+                                    text: "-" + Math.round((1.0 - (root.estimatedSizeInfo ? root.estimatedSizeInfo.ratio : 1.0)) * 100) + "%"
+                                    font.pixelSize: Theme.fontSizeXs
+                                    font.weight: Font.DemiBold
+                                    color: "#34C759"
+                                }
+                            }
+                        }
+
+                        Label {
+                            visible: !!root.estimatedSizeInfo && !!root.estimatedSizeInfo.isMostlyCompressed
+                            text: I18n.t("archive.media_notice", "Дані вже стиснуті (медіа), економія місця мінімальна.")
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fontSizeXs
+                        }
+                    }
+                }
+            }
 
             // -------------------------------------------------------------
             // Main Action Button

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import platform
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
 
@@ -22,6 +24,7 @@ class SystemTrayService(QtCore.QObject):
         super().__init__(parent)
         self._app_title = app_title
         self._tray: QtWidgets.QSystemTrayIcon | None = None
+        self._menu: QtWidgets.QMenu | None = None
         self._default_icon = QtGui.QIcon()
         self._progress = 0.0
         self._is_running = False
@@ -45,6 +48,7 @@ class SystemTrayService(QtCore.QObject):
         self._tray.setIcon(self._default_icon)
 
         menu = QtWidgets.QMenu()
+        self._menu = menu
         show_action = menu.addAction("Показати вікно")
         show_action.triggered.connect(self._on_show)
         menu.addSeparator()
@@ -58,7 +62,8 @@ class SystemTrayService(QtCore.QObject):
         quit_action = menu.addAction("Вийти")
         quit_action.triggered.connect(self.quitRequested.emit)
 
-        self._tray.setContextMenu(menu)
+        if platform.system() != "Darwin":
+            self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._on_activated)
         self._enabled = True
         self._apply_visibility()
@@ -140,6 +145,13 @@ class SystemTrayService(QtCore.QObject):
         self.showRequested.emit()
 
     def _on_activated(self, reason: QtWidgets.QSystemTrayIcon.ActivationReason) -> None:
+        if platform.system() == "Darwin" and reason in (
+            QtWidgets.QSystemTrayIcon.Context,
+            QtWidgets.QSystemTrayIcon.Trigger,
+        ):
+            if self._menu:
+                self._menu.popup(QtGui.QCursor.pos())
+            return
         if reason == QtWidgets.QSystemTrayIcon.DoubleClick:
             self.showRequested.emit()
 

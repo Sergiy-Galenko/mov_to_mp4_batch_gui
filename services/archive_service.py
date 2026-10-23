@@ -11,9 +11,11 @@ Provides robust, cross-platform archiving and extraction supporting:
 
 from __future__ import annotations
 
+import bz2
 import contextlib
 import gzip
 import logging
+import lzma
 import os
 import shutil
 import subprocess
@@ -362,24 +364,31 @@ class ArchiveService:
                     text_count += 1
             elif src.is_dir():
                 parent_dir = src.parent
-                for root, _dirs, files in os.walk(src):
-                    for f in files:
-                        p = Path(root) / f
-                        if p.is_symlink() and not p.exists():
-                            continue
-                        try:
-                            sz = p.stat().st_size
-                            total_size += sz
-                            file_count += 1
-                            rel = str(p.relative_to(parent_dir))
-                            resolved_files.append((str(p), rel, sz))
-                            ext = p.suffix.lower()
-                            if ext in ALREADY_COMPRESSED_EXTENSIONS:
-                                already_compressed_count += 1
-                            elif ext in TEXT_OR_CODE_EXTENSIONS:
-                                text_count += 1
-                        except OSError:
-                            continue
+                stack = [src]
+                while stack:
+                    curr_dir = stack.pop()
+                    try:
+                        with os.scandir(curr_dir) as entries:
+                            for entry in entries:
+                                try:
+                                    if entry.is_dir(follow_symlinks=False):
+                                        stack.append(Path(entry.path))
+                                    elif entry.is_file(follow_symlinks=False):
+                                        p = Path(entry.path)
+                                        sz = entry.stat(follow_symlinks=False).st_size
+                                        total_size += sz
+                                        file_count += 1
+                                        rel = str(p.relative_to(parent_dir))
+                                        resolved_files.append((str(p), rel, sz))
+                                        ext = p.suffix.lower()
+                                        if ext in ALREADY_COMPRESSED_EXTENSIONS:
+                                            already_compressed_count += 1
+                                        elif ext in TEXT_OR_CODE_EXTENSIONS:
+                                            text_count += 1
+                                except OSError:
+                                    continue
+                    except OSError:
+                        continue
 
         is_mostly_compressed = file_count > 0 and (already_compressed_count / file_count) >= 0.5
         suggested_preset = "fast" if is_mostly_compressed else ("maximum" if (text_count / max(1, file_count)) > 0.5 else "balanced")
@@ -582,6 +591,26 @@ class ArchiveService:
         bytes_processed = 0
         files_processed = 0
 
+        # If password requested and pyzipper is missing, fall back to 7-Zip CLI for AES-256 ZIP
+        if password and pyzipper is None:
+            if self.has_7z:
+                return self._create_7z(
+                    resolved_files=resolved_files,
+                    output_path=output_path,
+                    preset=preset,
+                    password=password,
+                    encrypt_filenames=False,
+                    split_size_mb=0,
+                    solid=False,
+                    total_size=total_size,
+                    total_files=total_files,
+                    start_time=start_time,
+                    cancel_requested=cancel_requested,
+                    progress_callback=progress_callback,
+                    archive_type="zip",
+                )
+            raise RuntimeError("Для шифрування ZIP потрібен модуль pyzipper або встановлений 7-Zip.")
+
         # Enable Zip64 by default for archives > 4GB or with > 65535 files
         zip_class = pyzipper.AESZipFile if password else zipfile.ZipFile
         with zip_class(
@@ -691,12 +720,8 @@ class ArchiveService:
         if comp_type == "gz":
             writer_cls = gzip.open
         elif comp_type == "bz2":
-            import bz2
-
             writer_cls = bz2.open
         elif comp_type == "xz":
-            import lzma
-
             writer_cls = lzma.open
         else:
             raise ValueError(f"Unknown single-file compression: {comp_type}")
@@ -729,8 +754,9 @@ class ArchiveService:
         start_time: float,
         cancel_requested: Callable[[], bool] | None,
         progress_callback: Callable[[float, int, int, int, int, str, float], None] | None,
+        archive_type: str = "7z",
     ) -> None:
-        """Create 7Z archive using 7-Zip CLI."""
+        """Create 7Z or ZIP archive using 7-Zip CLI."""
         assert self._7z_path is not None
         level_flag = "-mx=5"
         if preset == "fast":
@@ -738,13 +764,15 @@ class ArchiveService:
         elif preset == "maximum":
             level_flag = "-mx=9"
 
-        cmd = [self._7z_path, "a", str(output_path), level_flag, "-bsp1"]
-        if not solid:
+        cmd = [self._7z_path, "a", f"-t{archive_type}", str(output_path), level_flag, "-bsp1"]
+        if archive_type == "7z" and not solid:
             cmd.append("-ms=off")
         if password:
             cmd.append(f"-p{password}")
-            if encrypt_filenames:
+            if archive_type == "7z" and encrypt_filenames:
                 cmd.append("-mhe=on")
+            elif archive_type == "zip":
+                cmd.append("-mem=AES256")
         if split_size_mb > 0:
             cmd.append(f"-v{split_size_mb}m")
 
@@ -1082,18 +1110,35 @@ class ArchiveService:
         name_lower = arc.name.lower()
         try:
             if zipfile.is_zipfile(arc):
-                return self._extract_zip(
-                    arc=arc,
-                    dest=dest,
-                    entries=entries_to_extract,
-                    password=password,
-                    overwrite_mode=overwrite_mode,
-                    total_bytes=total_uncompressed_bytes,
-                    total_files=total_files,
-                    start_time=start_time,
-                    cancel_requested=cancel_requested,
-                    progress_callback=progress_callback,
-                )
+                try:
+                    return self._extract_zip(
+                        arc=arc,
+                        dest=dest,
+                        entries=entries_to_extract,
+                        password=password,
+                        overwrite_mode=overwrite_mode,
+                        total_bytes=total_uncompressed_bytes,
+                        total_files=total_files,
+                        start_time=start_time,
+                        cancel_requested=cancel_requested,
+                        progress_callback=progress_callback,
+                    )
+                except Exception as zip_err:
+                    if self.has_7z and password:
+                        logger.warning("Standard ZIP extraction failed (%s), falling back to 7-Zip CLI...", zip_err)
+                        return self._extract_7z(
+                            arc=arc,
+                            dest=dest,
+                            selected_files=selected_files,
+                            password=password,
+                            overwrite_mode=overwrite_mode,
+                            total_bytes=total_uncompressed_bytes,
+                            total_files=total_files,
+                            start_time=start_time,
+                            cancel_requested=cancel_requested,
+                            progress_callback=progress_callback,
+                        )
+                    raise
             elif tarfile.is_tarfile(arc):
                 return self._extract_tar(
                     arc=arc,
@@ -1313,12 +1358,8 @@ class ArchiveService:
         if comp_type == "gz":
             reader_cls = gzip.open
         elif comp_type == "bz2":
-            import bz2
-
             reader_cls = bz2.open
         elif comp_type == "xz":
-            import lzma
-
             reader_cls = lzma.open
         else:
             raise ValueError(f"Unknown single-file compression: {comp_type}")

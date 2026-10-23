@@ -24,6 +24,10 @@ Rectangle {
     color: Theme.panelBackground
     clip: true
 
+    function openFileDialog() {
+        archiveFileDialog.open()
+    }
+
     function setArchive(path) {
         var clean = String(path).replace("file://", "").trim()
         if (clean.length === 0) return
@@ -338,12 +342,33 @@ Rectangle {
                                 iconColor: Theme.accent
                             }
 
-                            Label {
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                text: modelData.name || modelData.path
-                                color: Theme.textPrimary
-                                font.pixelSize: Theme.fontSizeSm
-                                elide: Text.ElideMiddle
+                                spacing: 1
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.name || modelData.path
+                                    color: Theme.textPrimary
+                                    font.pixelSize: Theme.fontSizeSm
+                                    elide: Text.ElideMiddle
+                                }
+
+                                Label {
+                                    visible: {
+                                        var p = String(modelData.path || "")
+                                        return p.indexOf("/") >= 0 || p.indexOf("\\") >= 0
+                                    }
+                                    Layout.fillWidth: true
+                                    text: {
+                                        var p = String(modelData.path || "")
+                                        var idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"))
+                                        return idx >= 0 ? p.substring(0, idx) : ""
+                                    }
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 10
+                                    elide: Text.ElideMiddle
+                                }
                             }
 
                             Label {

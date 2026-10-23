@@ -36,6 +36,28 @@ Rectangle {
         }
     }
 
+    Shortcut {
+        sequence: StandardKey.Open
+        onActivated: {
+            if (root.activeTab === "compress" && compressView) {
+                compressView.openFileDialog()
+            } else if (extractView) {
+                extractView.openFileDialog()
+            }
+        }
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        onActivated: {
+            if (archiveBackend && archiveBackend.isBusy) {
+                archiveBackend.cancelCurrentOperation()
+            } else if (root.hasResult) {
+                root.hasResult = false
+            }
+        }
+    }
+
     Connections {
         target: archiveBackend
         function onArchiveFinished(success, msg, res) {
