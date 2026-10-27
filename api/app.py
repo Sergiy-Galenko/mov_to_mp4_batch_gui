@@ -13,6 +13,8 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
@@ -20,7 +22,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import (
-    BackgroundTasks,
     FastAPI,
     File,
     Form,
@@ -30,7 +31,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from services.archive_service import ArchiveService
@@ -46,16 +47,23 @@ OUTPUT_DIR = Path(os.environ.get("ARCHIVE_OUTPUT_DIR", tempfile.gettempdir())) /
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-MAX_WORKERS = int(os.environ.get("ARCHIVE_MAX_WORKERS", "4"))
+MAX_WORKERS = max(1, int(os.environ.get("ARCHIVE_MAX_WORKERS", "4")))
+MAX_JOBS = max(1, int(os.environ.get("ARCHIVE_MAX_JOBS", "100")))
+MAX_UPLOAD_BYTES = max(1, int(os.environ.get("ARCHIVE_MAX_UPLOAD_BYTES", str(1024**3))))
+MAX_FILES = max(1, int(os.environ.get("ARCHIVE_MAX_FILES", "100")))
+JOB_TTL_SECONDS = max(1, int(os.environ.get("ARCHIVE_JOB_TTL_SECONDS", "3600")))
+CLEANUP_INTERVAL_SECONDS = max(1, int(os.environ.get("ARCHIVE_CLEANUP_INTERVAL_SECONDS", "60")))
 executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 
 service = ArchiveService()
+
 
 # -----------------------------------------------------------------------------
 # Job Store (In-Memory with thread safety)
 # -----------------------------------------------------------------------------
 class JobState:
     def __init__(self, job_id: str, op_type: str) -> None:
+        self.finished_at: float | None = None
         self.job_id = job_id
         self.op_type = op_type
         self.status: str = "pending"  # pending, running, completed, failed, cancelled
@@ -74,12 +82,109 @@ class JobState:
         self.cancel_requested: bool = False
         self.websockets: list[WebSocket] = []
 
+
 jobs: dict[str, JobState] = {}
+jobs_lock = threading.RLock()
+
+
+def _job_paths(job_id: str) -> tuple[Path, Path]:
+    return UPLOAD_DIR / job_id, OUTPUT_DIR / job_id
+
+
+def _remove_job_files(job_id: str) -> None:
+    for directory in _job_paths(job_id):
+        shutil.rmtree(directory, ignore_errors=True)
+
+
+def cleanup_jobs() -> None:
+    now = time.monotonic()
+    with jobs_lock:
+        for job_id, job in list(jobs.items()):
+            if job.finished_at is not None and now - job.finished_at >= JOB_TTL_SECONDS:
+                _remove_job_files(job_id)
+                del jobs[job_id]
+        # Reclaim files left by a previous process, but never touch active jobs
+        # or directories that do not belong to this API's UUID namespace.
+        for root in (UPLOAD_DIR, OUTPUT_DIR):
+            if not root.is_dir():
+                continue
+            for directory in root.iterdir():
+                try:
+                    identity = str(uuid.UUID(directory.name))
+                    if identity != directory.name or identity in jobs or directory.is_symlink():
+                        continue
+                    if time.time() - directory.stat().st_mtime >= JOB_TTL_SECONDS:
+                        shutil.rmtree(directory)
+                except (ValueError, OSError):
+                    continue
+
+
+def _reserve_job(op_type: str) -> JobState:
+    cleanup_jobs()
+    with jobs_lock:
+        if len(jobs) >= MAX_JOBS:
+            raise HTTPException(status_code=429, detail="Job capacity reached; retry later")
+        job = JobState(str(uuid.uuid4()), op_type)
+        jobs[job.job_id] = job
+        return job
+
+
+def _discard_job(job: JobState) -> None:
+    with jobs_lock:
+        _remove_job_files(job.job_id)
+        jobs.pop(job.job_id, None)
+
+
+def _safe_name(value: str, fallback: str) -> str:
+    # Handle both Windows and POSIX separators irrespective of the host OS.
+    name = str(value or "").replace("\\", "/").rsplit("/", 1)[-1]
+    name = "".join(c for c in name if c.isprintable() and c not in "/\\:")[:160]
+    return name if name not in {"", ".", ".."} else fallback
+
+
+async def _save_upload(upload: UploadFile, directory: Path, used_bytes: int = 0) -> tuple[Path, int]:
+    # UUID directory prevents collisions while preserving the original basename
+    # and suffix needed by archive format detection.
+    parent = directory / uuid.uuid4().hex
+    parent.mkdir(parents=True)
+    target = parent / _safe_name(upload.filename, "upload.bin")
+    if not target.resolve().is_relative_to(directory.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid upload path")
+    try:
+        with target.open("xb") as destination:
+            while chunk := await upload.read(1024 * 1024):
+                used_bytes += len(chunk)
+                if used_bytes > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="Upload size limit exceeded")
+                destination.write(chunk)
+    finally:
+        await upload.close()
+    return target, used_bytes
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    await asyncio.to_thread(cleanup_jobs)
+
+    async def cleanup_loop():
+        while True:
+            await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
+            await asyncio.to_thread(cleanup_jobs)
+
+    task = asyncio.create_task(cleanup_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
 
 # -----------------------------------------------------------------------------
 # FastAPI App
 # -----------------------------------------------------------------------------
 app = FastAPI(
+    lifespan=lifespan,
     title="Universal Archiver API",
     description="High-performance, cross-platform archiving and compression service with REST & WebSockets.",
     version="2.0.0",
@@ -92,6 +197,59 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class UploadTooLarge(Exception):
+    pass
+
+
+class UploadLimitMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        # Allow bounded multipart overhead in addition to the actual file budget.
+        limit = MAX_UPLOAD_BYTES + MAX_FILES * 4096
+        headers = dict(scope.get("headers", []))
+        try:
+            declared = int(headers.get(b"content-length", b"0"))
+        except ValueError:
+            declared = 0
+        if declared > limit:
+            return await JSONResponse({"detail": "Upload size limit exceeded"}, status_code=413)(scope, receive, send)
+        total = 0
+        exceeded = False
+        rejected = False
+
+        async def bounded_receive():
+            nonlocal total, exceeded
+            message = await receive()
+            total += len(message.get("body", b""))
+            if total > limit:
+                exceeded = True
+                raise UploadTooLarge()
+            return message
+
+        async def limited_send(message):
+            nonlocal rejected
+            if exceeded:
+                if not rejected:
+                    rejected = True
+                    await JSONResponse({"detail": "Upload size limit exceeded"}, status_code=413)(scope, receive, send)
+                return
+            await send(message)
+
+        try:
+            await self.app(scope, bounded_receive, limited_send)
+        except UploadTooLarge:
+            if not rejected:
+                await JSONResponse({"detail": "Upload size limit exceeded"}, status_code=413)(scope, receive, send)
+
+
+app.add_middleware(UploadLimitMiddleware)
+
 
 # -----------------------------------------------------------------------------
 # Schemas
@@ -109,11 +267,13 @@ class FormatInfoResponse(BaseModel):
     description: str
     recommendation: str
 
+
 class PresetInfoResponse(BaseModel):
     id: str
     label: str
     description: str
     recommended: bool = False
+
 
 class JobStatusResponse(BaseModel):
     job_id: str
@@ -131,6 +291,7 @@ class JobStatusResponse(BaseModel):
     result: dict[str, Any] = Field(default_factory=dict)
     error: str = ""
 
+
 # -----------------------------------------------------------------------------
 # Endpoints
 # -----------------------------------------------------------------------------
@@ -144,14 +305,16 @@ def health_check() -> dict[str, Any]:
         "seven_zip_path": str(service._7z_path or ""),
         "rar_path": str(service._rar_path or ""),
         "max_workers": MAX_WORKERS,
-        "active_jobs": sum(1 for j in jobs.values() if j.status == "running"),
+        "active_jobs": sum(1 for j in list(jobs.values()) if j.status == "running"),
     }
+
 
 @app.get("/api/v1/formats", response_model=list[FormatInfoResponse])
 def get_formats() -> list[dict[str, Any]]:
     """List all supported formats with compression & encryption features."""
     formats = service.get_supported_formats()
     return [asdict(f) for f in formats]
+
 
 @app.get("/api/v1/presets", response_model=list[PresetInfoResponse])
 def get_presets() -> list[dict[str, Any]]:
@@ -162,10 +325,17 @@ def get_presets() -> list[dict[str, Any]]:
         {"id": "maximum", "label": "Maximum", "description": "Максимальне стиснення, займає більше часу", "recommended": False},
     ]
 
+
 # -----------------------------------------------------------------------------
 # Compression
 # -----------------------------------------------------------------------------
-def _run_compression(job: JobState, source_paths: list[str], output_path: str, format_str: str, preset: str, password: str, split_mb: int) -> None:
+def _run_compression(
+    job: JobState, source_paths: list[str], output_path: str, format_str: str, preset: str, password: str, split_mb: int
+) -> None:
+    if job.cancel_requested:
+        job.status = "cancelled"
+        job.finished_at = time.monotonic()
+        return
     job.status = "running"
 
     def on_progress(pct: float, f_done: int, f_total: int, b_done: int, b_total: int, curr_f: str, elapsed: float) -> None:
@@ -201,6 +371,7 @@ def _run_compression(job: JobState, source_paths: list[str], output_path: str, f
             job.output_path = res.output_path
             job.result = {
                 "outputPath": res.output_path,
+                "outputPaths": res.output_paths,
                 "originalSize": res.original_size,
                 "archiveSize": res.archive_size,
                 "savedPercent": res.saved_percent,
@@ -215,10 +386,12 @@ def _run_compression(job: JobState, source_paths: list[str], output_path: str, f
         logger.exception("Compression job %s failed", job.job_id)
         job.status = "failed"
         job.error = str(e)
+    finally:
+        job.finished_at = time.monotonic()
+
 
 @app.post("/api/v1/compress")
 async def start_compression(
-    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     format: str = Form("zip"),
     preset: str = Form("balanced"),
@@ -227,45 +400,50 @@ async def start_compression(
     split_size_mb: int = Form(0),
 ) -> dict[str, str]:
     """Upload files and start an asynchronous compression task."""
-    job_id = str(uuid.uuid4())
-    job_dir = UPLOAD_DIR / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
+    format = format.lower().lstrip(".")
+    supported = {f.id for f in service.get_supported_formats() if f.can_create}
+    if format not in supported or preset not in {"fast", "balanced", "maximum"}:
+        raise HTTPException(status_code=400, detail="Unsupported archive format or preset")
+    if split_size_mb < 0 or (split_size_mb and format not in {"7z", "rar"}):
+        raise HTTPException(status_code=400, detail="Invalid split size or format")
+    if not files or len(files) > MAX_FILES:
+        raise HTTPException(status_code=400, detail="Invalid number of files")
+    job = _reserve_job("compress")
+    try:
+        job_dir, output_dir = _job_paths(job.job_id)
+        output_dir.mkdir(parents=True)
+        saved_paths = []
+        used_bytes = 0
+        names: set[str] = set()
+        for uploaded in files:
+            name = _safe_name(uploaded.filename, "upload.bin")
+            if name in names:
+                raise HTTPException(status_code=400, detail="Duplicate upload filenames; rename files before uploading")
+            names.add(name)
+            target, used_bytes = await _save_upload(uploaded, job_dir, used_bytes)
+            saved_paths.append(str(target))
+        name = _safe_name(archive_name, "archive")
+        ext = f".{format}"
+        if not name.lower().endswith(ext):
+            name += ext
+        out_file = output_dir / name
+        if not out_file.resolve().is_relative_to(output_dir.resolve()):
+            raise HTTPException(status_code=400, detail="Invalid output path")
+        executor.submit(_run_compression, job, saved_paths, str(out_file), format, preset, password, split_size_mb)
+    except BaseException:
+        _discard_job(job)
+        raise
+    return {"job_id": job.job_id, "status": "pending"}
 
-    saved_paths: list[str] = []
-    for uploaded in files:
-        target = job_dir / (uploaded.filename or "file")
-        with open(target, "wb") as buffer:
-            shutil.copyfileobj(uploaded.file, buffer)
-        saved_paths.append(str(target))
-
-    ext = f".{format.lower().lstrip('.')}"
-    if not archive_name.endswith(ext):
-        safe_name = f"{archive_name}{ext}"
-    else:
-        safe_name = archive_name
-
-    out_file = str(OUTPUT_DIR / f"{job_id}_{safe_name}")
-
-    job = JobState(job_id, "compress")
-    jobs[job_id] = job
-
-    executor.submit(
-        _run_compression,
-        job,
-        saved_paths,
-        out_file,
-        format,
-        preset,
-        password,
-        split_size_mb,
-    )
-
-    return {"job_id": job_id, "status": "pending"}
 
 # -----------------------------------------------------------------------------
 # Extraction
 # -----------------------------------------------------------------------------
 def _run_extraction(job: JobState, archive_path: str, dest_dir: str, password: str, overwrite: str) -> None:
+    if job.cancel_requested:
+        job.status = "cancelled"
+        job.finished_at = time.monotonic()
+        return
     job.status = "running"
 
     def on_progress(pct: float, f_done: int, f_total: int, b_done: int, b_total: int, curr_f: str, elapsed: float) -> None:
@@ -304,6 +482,9 @@ def _run_extraction(job: JobState, archive_path: str, dest_dir: str, password: s
         logger.exception("Extraction job %s failed", job.job_id)
         job.status = "failed"
         job.error = str(e)
+    finally:
+        job.finished_at = time.monotonic()
+
 
 @app.post("/api/v1/extract")
 async def start_extraction(
@@ -312,30 +493,20 @@ async def start_extraction(
     overwrite: str = Form("replace"),
 ) -> dict[str, str]:
     """Upload an archive and extract it in the background."""
-    job_id = str(uuid.uuid4())
-    job_dir = UPLOAD_DIR / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
+    if overwrite not in {"replace", "skip", "keep_both"}:
+        raise HTTPException(status_code=400, detail="Invalid overwrite mode")
+    job = _reserve_job("extract")
+    try:
+        job_dir, output_dir = _job_paths(job.job_id)
+        arc_path, _ = await _save_upload(archive, job_dir)
+        dest_dir = output_dir / "extracted"
+        dest_dir.mkdir(parents=True)
+        executor.submit(_run_extraction, job, str(arc_path), str(dest_dir), password, overwrite)
+    except BaseException:
+        _discard_job(job)
+        raise
+    return {"job_id": job.job_id, "status": "pending"}
 
-    arc_path = job_dir / (archive.filename or "archive.bin")
-    with open(arc_path, "wb") as buffer:
-        shutil.copyfileobj(archive.file, buffer)
-
-    dest_dir = OUTPUT_DIR / f"{job_id}_extracted"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    job = JobState(job_id, "extract")
-    jobs[job_id] = job
-
-    executor.submit(
-        _run_extraction,
-        job,
-        str(arc_path),
-        str(dest_dir),
-        password,
-        overwrite,
-    )
-
-    return {"job_id": job_id, "status": "pending"}
 
 # -----------------------------------------------------------------------------
 # Inspect Archive (Without extraction)
@@ -346,16 +517,21 @@ async def inspect_archive(
     password: str = Form(""),
 ) -> list[dict[str, Any]]:
     """View archive contents (file tree, dates, uncompressed and compressed sizes)."""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{archive.filename}") as tmp:
-        shutil.copyfileobj(archive.file, tmp)
-        tmp_path = tmp.name
-
+    job = _reserve_job("inspect")
     try:
-        entries = service.list_archive(tmp_path, password=password)
+        tmp_path, _ = await _save_upload(archive, _job_paths(job.job_id)[0])
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(executor, lambda: service.list_archive(str(tmp_path), password=password))
+        try:
+            entries = await asyncio.shield(future)
+        except asyncio.CancelledError:
+            # Keep the reservation/files alive until the thread releases them.
+            await future
+            raise
         return [asdict(e) for e in entries]
     finally:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp_path)
+        _discard_job(job)
+
 
 # -----------------------------------------------------------------------------
 # Job Status & Download & Cancel
@@ -384,6 +560,7 @@ def get_job_status(job_id: str) -> dict[str, Any]:
         "error": job.error,
     }
 
+
 @app.post("/api/v1/jobs/{job_id}/cancel")
 def cancel_job(job_id: str) -> dict[str, str]:
     """Request early cancellation of an active job."""
@@ -393,8 +570,9 @@ def cancel_job(job_id: str) -> dict[str, str]:
     job.cancel_requested = True
     return {"job_id": job_id, "status": "cancelling"}
 
+
 @app.get("/api/v1/jobs/{job_id}/download")
-def download_job_output(job_id: str):
+def download_job_output(job_id: str, part: int = 0):
     """Download the resulting archive once completed."""
     job = jobs.get(job_id)
     if not job:
@@ -402,11 +580,17 @@ def download_job_output(job_id: str):
     if job.status != "completed":
         raise HTTPException(status_code=400, detail=f"Job is not completed (current status: {job.status})")
 
-    p = Path(job.output_path)
-    if not p.exists():
+    if job.op_type != "compress":
+        raise HTTPException(status_code=400, detail="Downloads are only available for compression jobs")
+    paths = job.result.get("outputPaths") or ([job.output_path] if job.output_path else [])
+    if part < 0 or part >= len(paths):
+        raise HTTPException(status_code=404, detail="Output part not found")
+    p = Path(paths[part])
+    if not p.resolve().is_relative_to(_job_paths(job_id)[1].resolve()) or not p.is_file():
         raise HTTPException(status_code=404, detail="Output file not found on disk")
 
     return FileResponse(path=str(p), filename=p.name, media_type="application/octet-stream")
+
 
 # -----------------------------------------------------------------------------
 # Real-Time WebSocket Endpoint
@@ -423,21 +607,23 @@ async def websocket_job_progress(websocket: WebSocket, job_id: str) -> None:
 
     try:
         while True:
-            await websocket.send_json({
-                "job_id": job.job_id,
-                "status": job.status,
-                "progress": round(job.progress, 1),
-                "files_done": job.files_done,
-                "files_total": job.files_total,
-                "bytes_done": job.bytes_done,
-                "bytes_total": job.bytes_total,
-                "current_file": job.current_file,
-                "speed_bps": round(job.speed_bps, 0),
-                "eta_seconds": round(job.eta_seconds, 1),
-                "elapsed_seconds": round(job.elapsed_seconds, 1),
-                "result": job.result if job.status == "completed" else {},
-                "error": job.error if job.status in {"failed", "cancelled"} else "",
-            })
+            await websocket.send_json(
+                {
+                    "job_id": job.job_id,
+                    "status": job.status,
+                    "progress": round(job.progress, 1),
+                    "files_done": job.files_done,
+                    "files_total": job.files_total,
+                    "bytes_done": job.bytes_done,
+                    "bytes_total": job.bytes_total,
+                    "current_file": job.current_file,
+                    "speed_bps": round(job.speed_bps, 0),
+                    "eta_seconds": round(job.eta_seconds, 1),
+                    "elapsed_seconds": round(job.elapsed_seconds, 1),
+                    "result": job.result if job.status == "completed" else {},
+                    "error": job.error if job.status in {"failed", "cancelled"} else "",
+                }
+            )
 
             if job.status in {"completed", "failed", "cancelled"}:
                 break

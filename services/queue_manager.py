@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import uuid
 from collections import Counter
 from collections.abc import Iterable, Sequence
@@ -49,9 +50,42 @@ class QueueManager:
         for raw in payload:
             if not isinstance(raw, dict):
                 continue
-            path_value = str(raw.get("path") or "").strip()
-            media_kind = str(raw.get("media_type") or "").strip()
+            if not isinstance(raw.get("path"), str) or not isinstance(raw.get("media_type"), str):
+                continue
+            path_value = raw["path"].strip()
+            media_kind = raw["media_type"].strip()
             if not path_value or not media_kind:
+                continue
+            # Reject malformed records independently so one bad entry cannot
+            # prevent importing/recovering the rest of the queue.
+            raw = dict(raw)
+            try:
+                if "\0" in path_value:
+                    raise ValueError("path")
+                task_path = Path(path_value).expanduser()
+                for key in ("attempts", "input_bytes", "output_bytes", "predicted_output_bytes", "priority"):
+                    value = raw.get(key, 0)
+                    if isinstance(value, bool) or not isinstance(value, (int, str)):
+                        raise ValueError(key)
+                    raw[key] = int(value)
+                    if raw[key] < 0 or raw[key] > 2**63 - 1:
+                        raise ValueError(key)
+                for key in ("progress", "elapsed_seconds", "compression_ratio"):
+                    value = raw.get(key, 0.0)
+                    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+                        raise ValueError(key)
+                    raw[key] = float(value)
+                    if not math.isfinite(raw[key]) or raw[key] < 0:
+                        raise ValueError(key)
+                if raw["progress"] > 100 or raw["priority"] > 5:
+                    raise ValueError("progress or priority")
+                if not isinstance(raw.get("overrides", {}), dict):
+                    raise ValueError("overrides")
+                if raw.get("exit_code") is not None:
+                    if isinstance(raw["exit_code"], bool) or not isinstance(raw["exit_code"], (int, str)):
+                        raise ValueError("exit_code")
+                    raw["exit_code"] = int(raw["exit_code"])
+            except (ValueError, TypeError, OverflowError, RuntimeError):
                 continue
             status = str(raw.get("status") or TaskStatus.QUEUED)
             if status not in TASK_STATUSES:
@@ -69,7 +103,7 @@ class QueueManager:
             items.append(
                 TaskItem(
                     task_id=identity,
-                    path=Path(path_value).expanduser(),
+                    path=task_path,
                     media_type=media_kind,
                     status=status,
                     last_error=str(raw.get("last_error") or ""),

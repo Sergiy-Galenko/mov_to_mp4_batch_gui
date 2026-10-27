@@ -35,14 +35,14 @@ Rectangle {
                     palette.window: EditorTheme.bgPanel
                     palette.text: EditorTheme.textPrimary
                     palette.highlight: EditorTheme.accent
-                    MenuItem { text: I18n.t("editor.new_project"); onTriggered: editor.requestAction("new", "") }
-                    MenuItem { text: I18n.t("editor.open_project"); onTriggered: editor.requestAction("open", "") }
-                    MenuItem { text: I18n.t("editor.save"); onTriggered: editor.project.save() }
-                    MenuItem { text: I18n.t("editor.save_as"); onTriggered: editor.project.saveAs() }
+                    EditorMenuItem { iconName: "plus"; text: I18n.t("editor.new_project"); onTriggered: editor.requestAction("new", "") }
+                    EditorMenuItem { iconName: "folder"; text: I18n.t("editor.open_project"); onTriggered: editor.requestAction("open", "") }
+                    EditorMenuItem { iconName: "save"; text: I18n.t("editor.save"); onTriggered: editor.project.save() }
+                    EditorMenuItem { iconName: "copy"; text: I18n.t("editor.save_as"); onTriggered: editor.project.saveAs() }
                     MenuSeparator {}
-                    MenuItem { text: I18n.t("editor.project_settings"); onTriggered: editor.editProjectSettings() }
-                    MenuItem { text: I18n.t("editor.components"); onTriggered: editor.openComponentGallery() }
-                    MenuItem { text: I18n.t("editor.close_project"); onTriggered: editor.requestAction("empty", "") }
+                    EditorMenuItem { iconName: "settings"; text: I18n.t("editor.project_settings"); onTriggered: editor.editProjectSettings() }
+                    EditorMenuItem { iconName: "grid"; text: I18n.t("editor.components"); onTriggered: editor.openComponentGallery() }
+                    EditorMenuItem { iconName: "close"; text: I18n.t("editor.close_project"); onTriggered: editor.requestAction("empty", "") }
                 }
             }
 

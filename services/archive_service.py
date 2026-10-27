@@ -20,10 +20,11 @@ import os
 import shutil
 import subprocess
 import tarfile
+import tempfile
 import time
 import zipfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.paths import find_7z, find_rar
@@ -140,6 +141,7 @@ class ArchiveResult:
     files_count: int = 0
     elapsed_seconds: float = 0.0
     error_message: str = ""
+    output_paths: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -434,6 +436,9 @@ class ArchiveService:
         total_size = analysis["total_size"]
         total_files = analysis["file_count"]
 
+        if any(Path(disk_path).resolve() == out_file for disk_path, _, _ in resolved_files):
+            return ArchiveResult(success=False, error_message="Archive output must not overwrite a source file.")
+
         if total_files == 0:
             return ArchiveResult(success=False, error_message="No valid files selected for archiving.")
 
@@ -450,6 +455,12 @@ class ArchiveService:
         if format_clean.startswith("."):
             format_clean = format_clean[1:]
 
+        # Encode into a private directory on the destination filesystem. Never
+        # truncate an existing archive or clean up files belonging to other jobs.
+        final_file = out_file
+        staging = tempfile.TemporaryDirectory(prefix=".archive-", dir=out_file.parent)
+        out_file = Path(staging.name) / final_file.name
+        published: list[Path] = []
         # Dispatch
         try:
             if format_clean == "zip":
@@ -528,11 +539,26 @@ class ArchiveService:
             else:
                 return ArchiveResult(success=False, error_message=f"Unsupported format: {archive_format}")
 
-            # Verify output file
-            if not out_file.exists():
+            if cancel_requested and cancel_requested():
+                raise RuntimeError("Operation cancelled by user.")
+            if split_size_mb > 0 and format_clean in {"7z", "rar"}:
+                # Both numeric 7z volumes and RAR partNN.rar volumes live only
+                # in this private directory; list files without glob metacharacters.
+                outputs = sorted(p for p in out_file.parent.iterdir() if p.is_file())
+            else:
+                outputs = [out_file] if out_file.is_file() else []
+            if not outputs:
                 return ArchiveResult(success=False, error_message="Archive output file was not created.")
-
-            archive_size = out_file.stat().st_size
+            archive_size = sum(p.stat().st_size for p in outputs)
+            destinations = [final_file.parent / p.name for p in outputs]
+            if len(outputs) == 1 and outputs[0].name == final_file.name:
+                os.replace(outputs[0], final_file)
+            else:
+                # Refuse collisions rather than mix new volumes with an old set.
+                for source, destination in zip(outputs, destinations, strict=True):
+                    os.link(source, destination)
+                    published.append(destination)
+            output_paths = [str(p) for p in destinations]
             elapsed = time.time() - start_time
             saved_bytes = total_size - archive_size
             saved_percent = round((saved_bytes / total_size * 100), 1) if total_size > 0 else 0.0
@@ -540,7 +566,8 @@ class ArchiveService:
 
             return ArchiveResult(
                 success=True,
-                output_path=str(out_file),
+                output_path=output_paths[0],
+                output_paths=output_paths,
                 original_size=total_size,
                 archive_size=archive_size,
                 saved_percent=saved_percent,
@@ -550,12 +577,7 @@ class ArchiveService:
             )
 
         except Exception as exc:
-            # Cleanup on failure or cancellation
-            if out_file.exists():
-                with contextlib.suppress(OSError):
-                    out_file.unlink()
-            # Also clean up any split files if generated
-            for part in out_file.parent.glob(f"{out_file.name}.*"):
+            for part in published:
                 with contextlib.suppress(OSError):
                     part.unlink()
             msg = str(exc)
@@ -563,6 +585,8 @@ class ArchiveService:
                 return ArchiveResult(success=False, error_message="Operation cancelled by user.")
             logger.exception("Archive creation failed: %s", exc)
             return ArchiveResult(success=False, error_message=f"Compression failed: {exc}")
+        finally:
+            staging.cleanup()
 
     def _create_zip(
         self,

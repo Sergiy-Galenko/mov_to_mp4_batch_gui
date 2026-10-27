@@ -1048,5 +1048,7 @@
   "system.export_report": "Export diagnostics",
   "system.clear_cache": "Clear media cache",
   "system.report_saved": "Diagnostic report saved",
-  "system.cache_cleared": "Cache entries removed: {count}"
+  "system.cache_cleared": "Cache entries removed: {count}",
+  "archive.password_strength": "Password strength: ",
+  "archive.passwords_match": "Passwords match"
 }

@@ -416,6 +416,7 @@ class ArchiveBackend(BackgroundJob):
             result_map = {
                 "success": True,
                 "outputPath": res.output_path,
+                "outputPaths": res.output_paths,
                 "originalSize": res.original_size,
                 "originalSizeFormatted": _format_size(res.original_size),
                 "archiveSize": res.archive_size,

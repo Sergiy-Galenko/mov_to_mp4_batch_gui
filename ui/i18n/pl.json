@@ -1048,5 +1048,7 @@
   "system.export_report": "Eksportuj diagnostykę",
   "system.clear_cache": "Wyczyść pamięć mediów",
   "system.report_saved": "Zapisano raport diagnostyczny",
-  "system.cache_cleared": "Usunięte wpisy pamięci: {count}"
+  "system.cache_cleared": "Usunięte wpisy pamięci: {count}",
+  "archive.password_strength": "Siła hasła: ",
+  "archive.passwords_match": "Hasła są zgodne"
 }

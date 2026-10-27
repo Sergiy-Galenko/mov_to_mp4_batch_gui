@@ -1056,5 +1056,7 @@
   "system.export_report": "Експортувати діагностику",
   "system.clear_cache": "Очистити кеш медіа",
   "system.report_saved": "Діагностичний звіт збережено",
-  "system.cache_cleared": "Видалено записів кешу: {count}"
+  "system.cache_cleared": "Видалено записів кешу: {count}",
+  "archive.password_strength": "Надійність пароля: ",
+  "archive.passwords_match": "Паролі збігаються"
 }

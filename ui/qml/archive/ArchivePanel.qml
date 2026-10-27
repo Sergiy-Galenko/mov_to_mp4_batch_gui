@@ -37,7 +37,7 @@ Rectangle {
     }
 
     Shortcut {
-        sequence: StandardKey.Open
+        sequences: [StandardKey.Open]
         onActivated: {
             if (root.activeTab === "compress" && compressView) {
                 compressView.openFileDialog()
