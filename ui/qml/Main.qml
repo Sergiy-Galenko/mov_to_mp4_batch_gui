@@ -128,6 +128,63 @@ ApplicationWindow {
     property string selectedMediaType: ""
     property string selectedThumbnailSource: ""
     property string selectedPreviewFormat: ""
+    property bool simpleMode: true
+    readonly property int qualityProfile: {
+        var value = simpleAudio ? String(watchedSettings.audio_bitrate) : Number(watchedSettings.crf)
+        return (simpleAudio ? ["128k", "192k", "320k"] : [28, 23, 18]).indexOf(value)
+    }
+    readonly property bool simpleAudio: watchedSettings.operation === "audio_only" || selectedMediaType === "audio"
+    readonly property string simpleMediaType: simpleAudio ? "audio" : (workspaceMediaType() || selectedMediaType || "video")
+    property bool sampleBusy: false
+    property bool sampleAutoplay: false
+    property string sampleSource: ""
+    property string sampleOutput: ""
+    property string sampleError: ""
+
+    function patchSettings(patch) {
+        var settings = collectSettings()
+        for (var key in patch) settings[key] = patch[key]
+        applyPreset(settings)
+        scheduleSettingsSync()
+    }
+    function setQualityProfile(index) {
+        patchSettings({crf: [28, 23, 18][index], audio_bitrate: ["128k", "192k", "320k"][index],
+            preset: ["medium", "medium", "slow"][index], codec: "auto", audio_codec: "auto", fast_copy: false,
+            smart_convert_enabled: false, target_size_mb: ""})
+    }
+    function quickAction(action) {
+        if (action === "audio") {
+            patchSettings({operation: "audio_only", out_audio_fmt: "mp3", remove_audio: false, audio_codec: "auto", merge: false})
+            simpleMode = true
+        } else if (action === "compress") {
+            patchSettings({operation: "convert", out_video_fmt: "mp4", codec: "H.264 (AVC)", merge: false})
+            setQualityProfile(0)
+            simpleMode = true
+        } else if (action === "format") {
+            patchSettings({operation: "convert"})
+            simpleMode = true
+        } else {
+            patchSettings({operation: "subtitle_burn"})
+            simpleMode = false
+            openSidebarSection(5, "audio_subtitles", navIndexFor(5, "audio_subtitles"))
+        }
+    }
+    function requestSample(audioOnly) {
+        if (!backend || !selectedPath || sampleBusy) return
+        sampleAutoplay = !!audioOnly
+        sampleSource = selectedPath
+        sampleError = ""
+        sampleOutput = ""
+        var settings = collectSettings()
+        if (audioOnly) {
+            settings._sample_audio_only = true
+            settings.operation = "audio_only"
+            settings.out_audio_fmt = "mp3"
+            settings.audio_codec = "auto"
+        }
+        sampleBusy = backend.createConversionSample(selectedPath, settings, 15)
+        if (!sampleBusy) sampleError = I18n.t("sample_unavailable")
+    }
     property var selectedDetails: ({})
     property string selectedTextPreview: ""
     property int selectedIndex: -1
@@ -415,6 +472,8 @@ ApplicationWindow {
             root.openSidebarSection(5, "images_sheets", root.navIndexFor(5, "images_sheets"))
         } else if (root.selectedMediaType === "video") {
             root.openSidebarSection(5, "video_editor", root.navIndexFor(5, "video_editor"))
+        } else if (root.selectedMediaType === "audio") {
+            root.openSidebarSection(5, "audio_subtitles", root.navIndexFor(5, "audio_subtitles"))
         } else if (root.selectedMediaType === "text") {
             root.openSidebarSection(5, "core", root.navIndexFor(5, "core"))
         }
@@ -618,6 +677,7 @@ ApplicationWindow {
     }
 
     function openSidebarSection(pageIndex, target, navIndex) {
+        if (pageIndex === 5) root.simpleMode = false
         if (target === "montage") {
             openMontageEditor("")
             return
@@ -829,8 +889,15 @@ ApplicationWindow {
                 cpu_load_limit: data.cpu_load_limit, gpu_load_limit: data.gpu_load_limit})
             settingsHistory.restoring = false
         }
+        function onConversionSampleFinished(output, error) {
+            root.sampleBusy = false
+            root.sampleOutput = output
+            root.sampleError = error
+            if (root.sampleAutoplay && output.length > 0) backend.playLocalMedia(output)
+        }
         function onPresetLoaded(data) { applyPreset(data) }
-        function onQueueFilterChanged() { root.retainVisibleSelection() }
+        function onQueueFilterChanged() { root.retainVisibleSelection(); root.refreshSelectedDetails() }
+        function onQueueStatsChanged() { root.refreshSelectedDetails() }
         function onSelectedDetailsChanged() { root.refreshSelectedDetails() }
         function onLanguageChanged() { root._langVersion += 1 }
         function onUiLanguageChanged() {
@@ -901,6 +968,7 @@ ApplicationWindow {
 
             SidebarPanel {
                 id: appSidebar
+                visible: !root.simpleMode
                 appRoot: root
                 Layout.fillHeight: true
                 collapsed: root.sidebarCollapsed

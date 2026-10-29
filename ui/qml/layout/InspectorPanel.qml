@@ -15,6 +15,7 @@ Rectangle {
 
     property bool cropModeEnabled: false
     readonly property bool batchSelection: appRoot && appRoot.selectedPaths.length > 1
+    readonly property bool audioOutput: appRoot && (appRoot.simpleAudio || appRoot.selectedDetails.operation === "audio_only")
     readonly property bool hasSelection: appRoot && appRoot.selectedPath.length > 0
 
     function syncEditorValues() {
@@ -209,9 +210,100 @@ Rectangle {
                 id: formatCombo
                 visible: !root.batchSelection
                 Layout.fillWidth: true; Layout.minimumWidth: 0
-                model: appRoot ? appRoot.formatOptionsFor(appRoot.selectedMediaType) : []
+                model: appRoot ? appRoot.formatOptionsFor(root.audioOutput ? "audio" : appRoot.selectedMediaType) : []
                 currentIndex: appRoot ? Math.max(0, find(appRoot.selectedPreviewFormat)) : 0
-                onActivated: if (appRoot) appRoot.selectedPreviewFormat = currentText
+                onActivated: {
+                    if (!appRoot || !backend) return
+                    appRoot.selectedPreviewFormat = currentText
+                    var patch = {}
+                    patch[appRoot.outputFormatKeyFor(root.audioOutput ? "audio" : appRoot.selectedMediaType)] = currentText
+                    backend.updateTaskOverrideByPath(appRoot.selectedPath, patch)
+                    appRoot.refreshSelectedDetails()
+                }
+            }
+
+            ColumnLayout {
+                visible: !root.batchSelection && appRoot && (appRoot.selectedMediaType === "video" || appRoot.selectedMediaType === "audio")
+                Layout.fillWidth: true
+                Label { text: I18n.t("audio_track"); color: Theme.textSecondary; font.pixelSize: Theme.fontMeta }
+                AppComboBox {
+                    objectName: "inspectorAudioTrack"
+                    Layout.fillWidth: true
+                    model: {
+                        var tracks = []
+                        var count = Number(appRoot.selectedDetails.audioTracks || 0)
+                        for (var i = 0; i < count; ++i) tracks.push(I18n.t("audio_track") + " " + (i + 1))
+                        return tracks
+                    }
+                    enabled: count > 0 && backend && !backend.isRunning
+                    currentIndex: Math.min(count - 1, Number(appRoot.selectedDetails.audioTrackIndex || 0))
+                    onActivated: {
+                        backend.updateTaskOverrideByPath(appRoot.selectedPath, {audio_track_index: currentIndex})
+                        appRoot.refreshSelectedDetails()
+                    }
+                }
+                AppButton {
+                    objectName: "sampleConversionButton"
+                    Layout.fillWidth: true
+                    text: I18n.t(appRoot.sampleBusy ? "sample_busy" : "sample_create")
+                    enabled: backend && !backend.isRunning && !appRoot.sampleBusy
+                    onClicked: appRoot.requestSample()
+                }
+                AppButton {
+                    Layout.fillWidth: true
+                    text: I18n.t("sample_listen")
+                    enabled: backend && !backend.isRunning && !appRoot.sampleBusy && Number(appRoot.selectedDetails.audioTracks || 0) > 0
+                    onClicked: {
+                        appRoot.requestSample(true)
+                    }
+                }
+                Label {
+                    visible: appRoot.sampleSource === appRoot.selectedPath && appRoot.sampleError.length > 0
+                    Layout.fillWidth: true
+                    text: appRoot.sampleError
+                    color: Theme.warning
+                    wrapMode: Text.WordWrap
+                }
+                AppButton {
+                    visible: appRoot.sampleSource === appRoot.selectedPath && appRoot.sampleOutput.length > 0
+                    Layout.fillWidth: true
+                    text: I18n.t("sample_play")
+                    onClicked: backend.playLocalMedia(appRoot.sampleOutput)
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: I18n.t("sample_hint")
+                    color: Theme.textMuted
+                    font.pixelSize: Theme.fontMeta
+                    wrapMode: Text.WordWrap
+                }
+            }
+
+            ColumnLayout {
+                visible: !root.batchSelection && appRoot && !!appRoot.selectedDetails.outputExists
+                Layout.fillWidth: true
+                Label {
+                    Layout.fillWidth: true
+                    text: I18n.t("result_sizes") + ": " + (appRoot.selectedDetails.sourceSize || "—") + " → " + (appRoot.selectedDetails.outputSize || "—") + " (" + appRoot.selectedDetails.sizeChangePercent + "% " + I18n.t("size_saved") + ")"
+                    wrapMode: Text.WordWrap
+                    color: Theme.textSecondary
+                }
+                AppButton { Layout.fillWidth: true; text: I18n.t("result_play"); onClicked: backend.openOutputForPath(appRoot.selectedPath) }
+                AppButton { Layout.fillWidth: true; text: I18n.t("result_reveal"); onClicked: backend.revealOutputForPath(appRoot.selectedPath) }
+            }
+
+            ColumnLayout {
+                visible: !root.batchSelection && appRoot && !!appRoot.selectedDetails.errorText
+                Layout.fillWidth: true
+                Label { Layout.fillWidth: true; text: appRoot.selectedDetails.errorText || ""; color: Theme.warning; wrapMode: Text.WordWrap }
+                AppButton {
+                    Layout.fillWidth: true
+                    text: I18n.t("retry_failed")
+                    enabled: backend && !backend.isRunning
+                    onClicked: backend.startConversionForPath(appRoot.selectedPath, appRoot.collectSettings())
+                }
+                AppButton { Layout.fillWidth: true; text: I18n.t("result_choose_folder"); enabled: backend && !backend.isRunning; onClicked: backend.pickOutputDir() }
+                AppButton { Layout.fillWidth: true; text: I18n.t("quick_format"); enabled: backend && !backend.isRunning; onClicked: appRoot.openSelectedSettings() }
             }
 
             Rectangle { Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredHeight: 1; color: Theme.borderMuted }
@@ -381,8 +473,18 @@ Rectangle {
                 Layout.fillWidth: true; Layout.minimumWidth: 0
                 implicitHeight: Theme.buttonHeight
                 enabled: root.hasSelection && backend && !backend.isRunning
+                objectName: "inspectorConvertButton"
                 text: I18n.t("convert_this_file")
-                onClicked: appRoot && appRoot.convertSelectedFormat(formatCombo.currentText)
+                onClicked: {
+                    if (!appRoot) return
+                    var settings = appRoot.collectSettings()
+                    var key = appRoot.outputFormatKeyFor(root.audioOutput ? "audio" : appRoot.selectedMediaType)
+                    settings[key] = formatCombo.currentText
+                    var patch = {}
+                    patch[key] = formatCombo.currentText
+                    backend.updateTaskOverrideByPath(appRoot.selectedPath, patch)
+                    backend.startConversionForPath(appRoot.selectedPath, settings)
+                }
             }
 
             AppButton {

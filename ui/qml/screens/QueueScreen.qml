@@ -75,6 +75,8 @@ Item {
                 }
             }
 
+            QuickActionsPanel { Layout.fillWidth: true; appRoot: root.appRoot }
+
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.borderMuted }
 
             Rectangle {

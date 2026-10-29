@@ -46,7 +46,10 @@ ColumnLayout {
     function applyPreset(preset) {
         if (!preset)
             return
-        if (preset.operation) controller.setComboText(operationCombo, preset.operation)
+        if (preset.operation) {
+            var operationAliases = {"Конвертація": "convert", "Лише аудіо": "audio_only", "Вшити субтитри": "subtitle_burn"}
+            controller.setComboText(operationCombo, operationAliases[preset.operation] || preset.operation)
+        }
         if (preset.out_video_fmt) controller.setComboText(outVideoFmt, preset.out_video_fmt)
         if (preset.out_image_fmt) controller.setComboText(outImageFmt, preset.out_image_fmt)
         if (preset.out_audio_fmt) controller.setComboText(outAudioFmt, preset.out_audio_fmt)

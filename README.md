@@ -45,6 +45,14 @@ Python coordinates the interface and background services; FFmpeg performs media 
 - Choose how to handle existing output names: stop, add an index, include a parent folder, or overwrite explicitly.
 - Save reusable presets and import/export user presets as JSON. Built-in presets remain protected from accidental replacement.
 
+### Quick actions and simple mode
+
+The queue opens in simple mode with shortcuts for **Video → MP3**, **Compress video**, **Change format**, and **Add subtitles**. Choose the output format, quality profile, and destination directly above the queue. Switch to **Advanced mode** to access the full navigation and detailed settings. Adding subtitles opens the existing subtitle settings.
+
+Select a video or audio file to choose its audio track, trim its range, or create a **15-second conversion sample** from the trim start. Samples use the current settings and per-file overrides, run in the background, and are stored separately in the quota-controlled media cache. The audio preview opens the sample in your default player. Short sources or trim ranges produce shorter samples; disable merging and target-size mode before sampling because they depend on the full output.
+
+After conversion, the file inspector shows source/output sizes, the percentage saved (negative when the output is larger), playback, and an option to open the output folder. Failed items expose an explanation and actions to retry, choose another destination, or change settings.
+
 ### Video and audio
 
 Choose output containers, codecs, quality settings, audio bitrate, resolution, trimming, and aspect-ratio options. Extract audio from video, adjust volume, and use supported normalization and filtering options.

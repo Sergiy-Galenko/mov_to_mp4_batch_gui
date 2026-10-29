@@ -30,6 +30,53 @@ from .common import (
 
 
 class MediaDetailsMixin:
+    @QtCore.Slot(str, "QVariantMap", int, result=bool)
+    def createConversionSample(self, path_text: str, settings_map: Dict[str, Any], seconds: int = 15) -> bool:
+        if self._is_running or getattr(self, "_sample_busy", False):
+            return False
+        task = self.queue_model.item_by_path(Path(path_text).expanduser())
+        if task is None:
+            return False
+        settings = settings_map_to_model(merge_settings_maps(dict(settings_map), task.overrides), defaults=ConversionSettings())
+        if settings_map.get("_sample_audio_only"):
+            from dataclasses import replace
+
+            settings = replace(settings, operation="audio_only", out_audio_format="mp3")
+        self._sample_busy = True
+        source, media_kind = task.path, task.media_type
+        from app.paths import APP_DATA_DIR, find_ffprobe
+        from services.conversion_sample_service import create_sample
+        from services.ffmpeg_service import FfmpegService
+
+        service = FfmpegService(
+            self.ffmpegPath or self.ffmpeg_service.ffmpeg_path, find_ffprobe(self.ffmpegPath or self.ffmpeg_service.ffmpeg_path)
+        )
+
+        def run():
+            output, error = "", ""
+            try:
+                output = str(create_sample(service, source, media_kind, settings, APP_DATA_DIR / "cache", seconds))
+            except Exception as exc:
+                error = str(exc)
+            self.event_queue.put(("conversion_sample", output, error))
+
+        threading.Thread(target=run, daemon=True).start()
+        return True
+
+    @QtCore.Slot(str)
+    def playLocalMedia(self, path_text: str) -> None:
+        path = Path(path_text).expanduser()
+        if path.is_file():
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(path)))
+
+    @QtCore.Slot(str)
+    def revealOutputForPath(self, path_text: str) -> None:
+        task = self.queue_model.item_by_path(Path(path_text).expanduser())
+        if task and task.last_output:
+            output = Path(task.last_output.split(";", 1)[0].strip()).expanduser()
+            if output.parent.is_dir():
+                QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(output.parent)))
+
     def _probe_media_async(self, path: Path) -> None:
         info = self.media_analysis.probe(path)
         self.event_queue.put(("media_info", path, info))

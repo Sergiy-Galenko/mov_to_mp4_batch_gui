@@ -224,6 +224,9 @@ class EventLoopMixin:
                     _, summary = event
                     if isinstance(summary, dict):
                         self._record_history(summary)
+                elif etype == "conversion_sample":
+                    self._sample_busy = False
+                    self.conversionSampleFinished.emit(str(event[1]), str(event[2]))
                 elif etype == "preview_generated":
                     _, path_text, preview_data = event
                     self.previewGenerated.emit(str(path_text), dict(preview_data or {}))

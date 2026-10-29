@@ -365,4 +365,7 @@ class Backend(
     visibleQueuePaths = QueueViewMixin.visibleQueuePaths
     setQueueFilter = QueueViewMixin.setQueueFilter
     queueIndexForPath = QueueViewMixin.queueIndexForPath
+    createConversionSample = MediaDetailsMixin.createConversionSample
+    playLocalMedia = MediaDetailsMixin.playLocalMedia
+    revealOutputForPath = MediaDetailsMixin.revealOutputForPath
     queueItemDetails = QueueViewMixin.queueItemDetails

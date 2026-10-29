@@ -98,6 +98,7 @@ class CoreMixin:
     toastRequested = QtCore.Signal(str)
     themeChanged = QtCore.Signal()
     shortcutsChanged = QtCore.Signal()
+    conversionSampleFinished = QtCore.Signal(str, str)
     previewGenerated = QtCore.Signal(str, dict)  # path, preview_data
     trayVisibilityChanged = QtCore.Signal()
     errorStateChanged = QtCore.Signal()
