@@ -1,8 +1,8 @@
+import math
 import os
 import shutil
 import struct
 import subprocess
-from itertools import pairwise
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -110,8 +110,15 @@ def test_real_video_and_audio_samples_preserve_source_and_track(tmp_path, monkey
         timeout=30,
     ).stdout
     samples = struct.unpack("<" + "h" * (len(decoded) // 2), decoded)
-    positive_crossings = sum(a <= 0 < b for a, b in pairwise(samples))
-    assert 850 <= positive_crossings <= 910
+    # Measure the selected 880 Hz tone in the steady part of the MP3. Decoder
+    # padding and low-level ringing can add zero crossings in quiet samples.
+    steady = samples[2000:6000]
+    assert len(steady) == 4000
+    phase_step = math.tau * 880 / 8000
+    cosine = sum(value * math.cos(phase_step * i) for i, value in enumerate(steady))
+    sine = sum(value * math.sin(phase_step * i) for i, value in enumerate(steady))
+    energy = sum(value * value for value in steady)
+    assert 2 * (cosine**2 + sine**2) > 0.8 * len(steady) * energy
     assert source.read_bytes() == original
 
 
