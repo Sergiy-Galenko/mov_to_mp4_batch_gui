@@ -1,4 +1,5 @@
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -102,9 +103,9 @@ class TestTelegramNoteService(unittest.TestCase):
         self.assertNotIn("-c:a", cmd)
 
     def test_add_to_queue(self):
-        temp_file = Path("/tmp/test_telegram_input.mov")
-        temp_file.touch(exist_ok=True)
-        try:
+        with tempfile.TemporaryDirectory() as directory:
+            temp_file = Path(directory) / "test_telegram_input.mov"
+            temp_file.touch()
             initial_count = self.backend.queue_model.rowCount()
             options = {
                 "start_time": 2.0,
@@ -120,9 +121,6 @@ class TestTelegramNoteService(unittest.TestCase):
             self.assertEqual(item.overrides["trim_start"], 2.0)
             self.assertEqual(item.overrides["trim_end"], 30.0)
             self.assertTrue(item.overrides["fast_start"])
-        finally:
-            if temp_file.exists():
-                temp_file.unlink()
 
     def test_inspect_missing_file(self):
         info = self.service.inspect("/path/to/nonexistent/file.mp4")
@@ -136,18 +134,15 @@ class TestTelegramNoteService(unittest.TestCase):
             returncode=0,
             stdout='{"format": {"duration": "45.5"}, "streams": [{"codec_type": "video", "width": 1920, "height": 1080, "r_frame_rate": "30/1"}, {"codec_type": "audio"}]}',
         )
-        fake_file = Path("/tmp/fake_vid.mp4")
-        fake_file.touch(exist_ok=True)
-        try:
+        with tempfile.TemporaryDirectory() as directory:
+            fake_file = Path(directory) / "fake_vid.mp4"
+            fake_file.touch()
             info = self.service.inspect(str(fake_file))
             self.assertTrue(info["valid"])
             self.assertEqual(info["duration"], 45.5)
             self.assertEqual(info["width"], 1920)
             self.assertEqual(info["height"], 1080)
             self.assertTrue(info["has_audio"])
-        finally:
-            if fake_file.exists():
-                fake_file.unlink()
 
     def test_qml_telegram_note_screen_loads(self):
         project_root = Path(__file__).resolve().parents[1]

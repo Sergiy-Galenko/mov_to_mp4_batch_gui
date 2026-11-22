@@ -15,11 +15,11 @@ class EditorI18nTest(unittest.TestCase):
         ]
         keys = set()
         for file in qml_files:
-            keys.update(re.findall(r'I18n\.t\("(editor\.[^"]+)"', file.read_text()))
+            keys.update(re.findall(r'I18n\.t\("(editor\.[^"]+)"', file.read_text(encoding="utf-8")))
 
         for language in ("uk", "en", "pl", "de"):
             with self.subTest(language=language):
-                dictionary = json.loads((root / "ui" / "i18n" / f"{language}.json").read_text())
+                dictionary = json.loads((root / "ui" / "i18n" / f"{language}.json").read_text(encoding="utf-8"))
                 missing = sorted(key for key in keys if not dictionary.get(key))
                 self.assertEqual(missing, [], f"Missing editor translations in {language}: {missing}")
 
@@ -58,5 +58,5 @@ class EditorI18nTest(unittest.TestCase):
         }
         for language in ("uk", "en", "pl", "de"):
             with self.subTest(language=language):
-                dictionary = json.loads((root / "ui" / "i18n" / f"{language}.json").read_text())
+                dictionary = json.loads((root / "ui" / "i18n" / f"{language}.json").read_text(encoding="utf-8"))
                 self.assertEqual(sorted(key for key in expected if not dictionary.get(key)), [])

@@ -12,7 +12,8 @@ REQUIRED_CHECKS = {"qml_startup", "queue_import", "conversion_decode", "pause", 
 
 
 def verify(executable: Path, report: Path, *, timeout=180):
-    environment = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_CONTROLS_STYLE="Basic")
+    environment = dict(os.environ, QT_QUICK_CONTROLS_STYLE="Basic")
+    environment.setdefault("QT_QPA_PLATFORM", "offscreen")
     for name in (
         "MEDIA_CONVERTER_FFMPEG",
         "MEDIA_CONVERTER_FFPROBE",

@@ -124,7 +124,7 @@ class CacheManager:
                     return None
                 if source_fingerprint(source) != fingerprint:
                     return None
-                with temporary.open("rb") as handle:
+                with temporary.open("r+b") as handle:
                     os.fsync(handle.fileno())
                 os.replace(temporary, target)
                 self.register(key, namespace, target)

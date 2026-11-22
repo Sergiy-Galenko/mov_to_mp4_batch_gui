@@ -8,6 +8,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         python-version: ["3.12", "3.13"]
@@ -27,7 +28,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libpulse0 ffmpeg
+          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libpulse0 ffmpeg xvfb xauth libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xkb1
 
       - name: Install FFmpeg on macOS
         if: runner.os == 'macOS'
@@ -52,7 +53,23 @@ jobs:
       - name: Compile Python
         run: python -m compileall app services ui utils tests
 
-      - name: Run tests
+      - name: Run tests on Linux
+        if: runner.os == 'Linux'
+        run: |
+          ulimit -c unlimited
+          sudo sysctl -w "kernel.core_pattern=$RUNNER_TEMP/core.%p"
+          xvfb-run -a env QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software python -m pytest -q --tb=short --junitxml=test-results.xml
+
+      - name: Report native crash backtrace
+        if: failure() && runner.os == 'Linux'
+        run: |
+          for core in "$RUNNER_TEMP"/core.*; do
+            [[ -f "$core" ]] || continue
+            gdb --batch -ex bt "$(command -v python)" "$core"
+          done
+
+      - name: Run tests on macOS
+        if: runner.os == 'macOS'
         run: python -m pytest -q --tb=short --junitxml=test-results.xml
 
       - name: Build and verify portable application
@@ -60,7 +77,11 @@ jobs:
         if: matrix.python-version == '3.12'
         run: |
           python scripts/build_pyinstaller.py --portable --ffmpeg-dir "$(dirname "$(command -v ffmpeg)")"
-          python scripts/verify_package.py dist/MediaConverter/MediaConverter --report package-smoke.json
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            xvfb-run -a env QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software python scripts/verify_package.py dist/MediaConverter/MediaConverter --report package-smoke.json
+          else
+            python scripts/verify_package.py dist/MediaConverter/MediaConverter --report package-smoke.json
+          fi
 
       - name: Collect benchmark report
         if: matrix.python-version == '3.12'

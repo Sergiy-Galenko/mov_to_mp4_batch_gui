@@ -97,8 +97,16 @@ def missing_runtime_dependencies(requirements_path: Path) -> list[str]:
     return missing
 
 
+def _print_progress(message: str) -> None:
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        encoding = sys.stdout.encoding or "utf-8"
+        print(message.encode(encoding, errors="backslashreplace").decode(encoding))
+
+
 class BootstrapProcess:
-    def __init__(self, progress=print, cancelled=None):
+    def __init__(self, progress=_print_progress, cancelled=None):
         self.progress = progress
         self.cancelled = cancelled or threading.Event()
 
