@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -58,6 +59,7 @@ class MediaInfo:
     subtitle_streams: int = 0
     chapters: list[MediaChapter] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    source_identity: dict[str, Any] | None = None
 
 
 @dataclass
@@ -88,6 +90,7 @@ class TaskItem:
     smart_recommendation: str = ""
     pinned: bool = False
     priority: int = 0
+    task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
 
 @dataclass
@@ -173,6 +176,7 @@ class ConversionSettings:
     subtitle_language: str = "auto"
     subtitle_model: str = "base"
     subtitle_engine: str = "auto"
+    subtitle_device: str = "auto"
     subtitle_sync_ms: int = 0
     subtitle_style_enabled: bool = False
     subtitle_font_name: str = ""
@@ -208,6 +212,7 @@ class ConversionSettings:
     replace_audio_path: str = ""
     normalize_audio: str = "none"
     audio_peak_limit_db: float | None = None
+    remove_audio: bool = False
     trim_silence: bool = False
     silence_threshold_db: int = -50
     silence_duration: float = 0.3
@@ -226,8 +231,6 @@ class ConversionSettings:
     meta_genre: str = ""
     meta_year: str = ""
     meta_track: str = ""
-
-    device_profile: str = ""
 
     privacy_blur_regions: str = ""
     ai_blur_enabled: bool = False

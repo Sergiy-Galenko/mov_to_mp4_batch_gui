@@ -1,4 +1,4 @@
-﻿import tempfile
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -120,7 +120,9 @@ class FfmpegServiceTest(unittest.TestCase):
         self.assertIn("-frames:v", thumb_cmd)
         self.assertIn("1", thumb_cmd)
 
-        sheet_settings = ConversionSettings(operation="contact_sheet", contact_sheet_cols=3, contact_sheet_rows=2, contact_sheet_width=200, contact_sheet_interval=15)
+        sheet_settings = ConversionSettings(
+            operation="contact_sheet", contact_sheet_cols=3, contact_sheet_rows=2, contact_sheet_width=200, contact_sheet_interval=15
+        )
         sheet_cmd = self.service.build_contact_sheet_command(Path("/tmp/input.mp4"), Path("/tmp/output.jpg"), sheet_settings)
         self.assertIn("tile=3x2", " ".join(sheet_cmd))
         self.assertIn("fps=1/15", " ".join(sheet_cmd))

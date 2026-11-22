@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from app.paths import APP_DATA_DIR
-from app.theme_palette import COLOR_GROUPS, COLOR_KEYS, THEME_MODES, normalize_color, resolve_palette
+from app.theme_palette import COLOR_GROUPS, COLOR_KEYS, THEME_MODES, detect_platform, normalize_color, resolve_palette
 from utils.state import load_json_state, save_json_state
 
 THEME_STATE_PATH = APP_DATA_DIR / "theme_config.json"
@@ -63,8 +63,9 @@ LAYOUT_MODES = {
 class ThemeManager:
     """Manages UI theming, layout, and window state persistence."""
 
-    def __init__(self, path: Path = THEME_STATE_PATH) -> None:
+    def __init__(self, path: Path = THEME_STATE_PATH, *, platform_name: str | None = None) -> None:
         self.path = path
+        self.platform_name = detect_platform(platform_name)
         self._state = load_json_state(path)
         self._palette_cache: dict[str, dict[str, str]] = {}
 
@@ -80,7 +81,7 @@ class ThemeManager:
             if legacy_accent and "accent" not in colors:
                 with contextlib.suppress(ValueError):
                     colors["accent"] = normalize_color(legacy_accent)
-            self._palette_cache[mode] = resolve_palette(mode, colors)
+            self._palette_cache[mode] = resolve_palette(mode, colors, self.platform_name)
         return dict(self._palette_cache[mode])
 
     def color_overrides(self, mode: str | None = None) -> dict[str, str]:
@@ -155,12 +156,21 @@ class ThemeManager:
         self._state["queue_view_mode"] = "grid" if mode == "grid" else "list"
         self._save()
 
+    def auto_display_adaptation(self) -> bool:
+        """Return whether auto display adaptation is enabled (default True)."""
+        return bool(self._state.get("auto_display_adaptation", True))
+
+    def set_auto_display_adaptation(self, enabled: bool) -> None:
+        self._state["auto_display_adaptation"] = bool(enabled)
+        self._save()
+
     def layout_mode(self) -> str:
-        """Return 'compact', 'comfortable', or 'spacious'."""
+        """Return 'compact', 'comfortable', 'spacious', or 'auto'."""
         return str(self._state.get("layout_mode") or "comfortable")
 
     def set_layout_mode(self, mode: str) -> None:
-        self._state["layout_mode"] = mode if mode in LAYOUT_MODES else "comfortable"
+        valid_modes = set(LAYOUT_MODES.keys()) | {"auto"}
+        self._state["layout_mode"] = mode if mode in valid_modes else "comfortable"
         self._save()
 
     def layout_config(self) -> dict[str, Any]:
@@ -247,7 +257,7 @@ class ThemeManager:
         if "accent_color" in data and "accent" not in colors:
             colors["accent"] = normalize_color(data["accent_color"])
         layout = data.get("layout_mode", self.layout_mode())
-        if not isinstance(layout, str) or layout not in LAYOUT_MODES:
+        if not isinstance(layout, str) or (layout not in LAYOUT_MODES and layout != "auto"):
             raise ValueError("Unknown layout mode")
         scale = self._normalize_scale(data.get("font_scale", self.font_scale()))
         state = deepcopy(self._state)
@@ -301,6 +311,7 @@ class ThemeManager:
         if sys.platform == "win32":
             try:
                 import winreg
+
                 key = winreg.OpenKey(
                     winreg.HKEY_CURRENT_USER,
                     r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
@@ -313,9 +324,12 @@ class ThemeManager:
         elif sys.platform == "darwin":
             try:
                 import subprocess
+
                 result = subprocess.run(
                     ["defaults", "read", "-g", "AppleInterfaceStyle"],
-                    capture_output=True, text=True, timeout=2,
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
                 )
                 return "Dark" in result.stdout
             except Exception:

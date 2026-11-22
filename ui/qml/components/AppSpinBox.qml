@@ -5,7 +5,7 @@ import App 1.0
 
 SpinBox {
     id: control
-    property int stepperWidth: 34
+    property int stepperWidth: Theme.isMac ? 18 : 26
 
     font.pixelSize: Theme.fontSizeSm
     implicitHeight: Theme.inputHeight
@@ -49,38 +49,38 @@ SpinBox {
 
     up.indicator: Rectangle {
         x: control.width - width - 6
-        y: 6
+        y: 4
         width: control.stepperWidth
-        height: Math.floor((control.availableHeight - 8) / 2)
-        radius: 9
+        height: Math.floor((control.height - 8) / 2)
+        radius: 3
         color: control.up.pressed ? Theme.overlayPressed : control.up.hovered ? Theme.overlayHover : Theme.bgElevated
         border.width: 1
         border.color: control.up.hovered ? Theme.borderStrong : Theme.border
 
         Label {
             anchors.centerIn: parent
-            text: "+"
+            text: Theme.isMac ? "⌃" : "+"
             color: Theme.text
-            font.pixelSize: 14
+            font.pixelSize: 11
             font.weight: Font.DemiBold
         }
     }
 
     down.indicator: Rectangle {
         x: control.width - width - 6
-        y: control.height - height - 6
+        y: control.height - height - 4
         width: control.stepperWidth
-        height: Math.floor((control.availableHeight - 8) / 2)
-        radius: 9
+        height: Math.floor((control.height - 8) / 2)
+        radius: 3
         color: control.down.pressed ? Theme.overlayPressed : control.down.hovered ? Theme.overlayHover : Theme.bgElevated
         border.width: 1
         border.color: control.down.hovered ? Theme.borderStrong : Theme.border
 
         Label {
             anchors.centerIn: parent
-            text: "-"
+            text: Theme.isMac ? "⌄" : "-"
             color: Theme.text
-            font.pixelSize: 14
+            font.pixelSize: 11
             font.weight: Font.DemiBold
         }
     }

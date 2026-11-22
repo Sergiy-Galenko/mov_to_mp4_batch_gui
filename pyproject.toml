@@ -3,7 +3,8 @@ name = "media-converter"
 version = "2.0.0"
 requires-python = ">=3.12"
 description = "Desktop batch converter for video, photos, audio, subtitles, and text files."
-license = {text = "MIT"}
+license = "LicenseRef-Media-Converter-NonCommercial"
+license-files = ["LICENSE"]
 
 [tool.ruff]
 target-version = "py312"

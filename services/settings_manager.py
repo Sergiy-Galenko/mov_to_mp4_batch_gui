@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -171,6 +171,7 @@ class SettingsManager:
         if completion_action_value not in {"none", "open_output", "sleep", "shutdown"}:
             completion_action_value = "none"
         self.state = {
+            **self.state,
             "recent_folders": recent_folders[:RECENT_FOLDERS_LIMIT],
             "watch_folder": watch_folder,
             "output_dir": output_dir,

@@ -10,10 +10,19 @@ icon_path = project_root / "assets" / "app-logo-v2.ico"
 icon_arg = str(icon_path) if icon_path.exists() else None
 
 datas = [
+    (str(project_root / "LICENSE"), "."),
+    (str(project_root / "requirements.txt"), "."),
     (str(project_root / "ui" / "qml"), "ui/qml"),
     (str(project_root / "ui" / "i18n"), "ui/i18n"),
     (str(project_root / "assets"), "assets"),
 ]
+# External Whisper venvs need these stdlib-only source modules (not Qt or the frozen archive).
+for relative in (
+    "app/__init__.py", "app/models.py", "app/paths.py", "services/__init__.py",
+    "services/whisper_worker.py", "services/whisper_environment.py", "services/whisper_runtime.py",
+    "services/whisper_model_manager.py", "services/transcription_service.py",
+):
+    datas.append((str(project_root / relative), str(Path(relative).parent)))
 binaries = []
 
 if bundle_dir:
@@ -37,14 +46,8 @@ a = Analysis(
     excludes=[
         "tkinter",
         "unittest",
-        "email",
-        "html",
-        "http",
-        "xmlrpc",
         "pydoc",
         "doctest",
-        "difflib",
-        "multiprocessing.pool",
     ],
     noarchive=False,
 )
@@ -53,8 +56,6 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
     name="MediaConverter",
     debug=False,

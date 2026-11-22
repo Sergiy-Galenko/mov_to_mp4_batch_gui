@@ -6,6 +6,7 @@ import App 1.0
 
 Popup {
     id: root
+    objectName: "whatsNewPopup"
     width: parent ? Math.max(360, Math.min(parent.width - 24, Math.round(parent.width * 0.82), 680)) : 640
     height: parent ? Math.max(420, Math.min(parent.height - 24, Math.round(parent.height * 0.82), 600)) : 560
     x: parent ? Math.round((parent.width - width) / 2) : 0

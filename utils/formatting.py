@@ -1,4 +1,4 @@
-﻿import re
+import re
 
 
 def format_time(seconds: float | None) -> str:

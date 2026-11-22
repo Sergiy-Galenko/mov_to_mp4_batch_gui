@@ -98,7 +98,6 @@ class SpeechDiagnosticService:
 
         try:
             import torch  # type: ignore
-
             if hasattr(torch.backends, "mps"):
                 info.mps_built = getattr(torch.backends.mps, "is_built", lambda: False)()
                 info.mps_available = getattr(torch.backends.mps, "is_available", lambda: False)()
@@ -116,7 +115,6 @@ class SpeechDiagnosticService:
         if not info.cuda_available and self.is_package_installed("ctranslate2"):
             try:
                 import ctranslate2  # type: ignore
-
                 if ctranslate2.get_cuda_device_count() > 0:
                     info.cuda_available = True
                     info.cuda_device_count = ctranslate2.get_cuda_device_count()
@@ -134,14 +132,13 @@ class SpeechDiagnosticService:
             info.recommended_engine = "whisper"
             info.summary_text = "Apple Silicon Metal (MPS)"
         elif is_arm_mac:
+            # Running on Apple Silicon, but PyTorch with MPS not yet installed
             info.recommended_device = "cpu"
             info.recommended_engine = "whisper"
             info.summary_text = "Apple Silicon (MPS доступний після встановлення torch)"
         else:
             info.recommended_device = "cpu"
-            info.recommended_engine = (
-                "faster-whisper" if self.is_package_installed("faster_whisper") else "whisper"
-            )
+            info.recommended_engine = "faster-whisper" if self.is_package_installed("faster_whisper") else "whisper"
             info.summary_text = f"CPU ({info.cpu_arch}, {info.cpu_threads} потоків)"
 
         return info
@@ -153,7 +150,6 @@ class SpeechDiagnosticService:
         if torch_ok:
             try:
                 import torch  # type: ignore
-
                 torch_ver = str(getattr(torch, "__version__", ""))
             except Exception:
                 pass
@@ -206,10 +202,7 @@ class SpeechDiagnosticService:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
             if proc.returncode == 0:
                 return True, "Успішно встановлено: " + ", ".join(packages)
-            return (
-                False,
-                f"Помилка встановлення ({proc.returncode}): " + (proc.stderr or proc.stdout)[-500:],
-            )
+            return False, f"Помилка встановлення ({proc.returncode}): " + (proc.stderr or proc.stdout)[-500:]
         except Exception as exc:
             return False, f"Виняток при встановленні: {exc}"
 
@@ -221,6 +214,7 @@ class SpeechDiagnosticService:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(sample_rate)
+            # Generate soft 440Hz sine wave tone
             frames = bytearray()
             for i in range(total_samples):
                 val = int(math.sin(2.0 * math.pi * 440.0 * (i / sample_rate)) * 12000.0)
@@ -242,7 +236,6 @@ class SpeechDiagnosticService:
             if dev in {"cpu", "cuda"} and self.is_package_installed("faster_whisper"):
                 try:
                     from faster_whisper import WhisperModel  # type: ignore
-
                     model = WhisperModel("tiny", device=dev, compute_type="int8")
                     segments, _ = model.transcribe(str(test_wav), beam_size=1)
                     text = " ".join([s.text for s in segments]).strip()
@@ -262,7 +255,6 @@ class SpeechDiagnosticService:
             if self.is_package_installed("whisper") and self.is_package_installed("torch"):
                 try:
                     import whisper  # type: ignore
-
                     model = whisper.load_model("tiny", device=dev)
                     res = model.transcribe(str(test_wav), fp16=(dev == "cuda"))
                     text = str(res.get("text", "")).strip()

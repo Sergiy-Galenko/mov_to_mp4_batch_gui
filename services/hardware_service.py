@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import glob
 import subprocess
+import sys
 from dataclasses import dataclass, field
 
 
@@ -18,11 +20,11 @@ class HardwareCapabilities:
     amf_encoders: list[str] = field(default_factory=list)
     all_encoders: set[str] = field(default_factory=set)
     detection_error: str = ""
+    vaapi_encoders: list[str] = field(default_factory=list)
 
     @property
     def has_gpu(self) -> bool:
-        return self.nvidia_available or self.intel_qsv_available or self.amd_amf_available
-        return self.apple_available or self.nvidia_available or self.intel_qsv_available or self.amd_amf_available
+        return self.apple_available or self.nvidia_available or self.intel_qsv_available or self.amd_amf_available or bool(self.vaapi_encoders)
 
     @property
     def best_vendor(self) -> str:
@@ -34,6 +36,8 @@ class HardwareCapabilities:
             return "intel"
         if self.amd_amf_available:
             return "amd"
+        if self.vaapi_encoders:
+            return "vaapi"
         return "cpu"
 
     def summary(self) -> str:
@@ -46,6 +50,8 @@ class HardwareCapabilities:
             parts.append(f"Intel QSV ({len(self.qsv_encoders)} enc)")
         if self.amd_amf_available:
             parts.append(f"AMD AMF ({len(self.amf_encoders)} enc)")
+        if self.vaapi_encoders:
+            parts.append(f"VA-API ({len(self.vaapi_encoders)} enc)")
         if not parts:
             parts.append("CPU only")
         return " | ".join(parts)
@@ -55,6 +61,107 @@ _VIDEOTOOLBOX_ENCODERS = {"h264_videotoolbox", "hevc_videotoolbox", "prores_vide
 _NVIDIA_ENCODERS = {"h264_nvenc", "hevc_nvenc", "av1_nvenc"}
 _QSV_ENCODERS = {"h264_qsv", "hevc_qsv", "av1_qsv", "vp9_qsv"}
 _AMF_ENCODERS = {"h264_amf", "hevc_amf", "av1_amf"}
+
+
+def usable_videotoolbox_encoders(ffmpeg_path: str, encoders: set[str]) -> set[str]:
+    """Probe real hardware sessions; an encoder listed by FFmpeg may be unusable.
+
+    In particular the original M1 has no ProRes media engine. Never silently
+    count Apple's software encoder as hardware acceleration.
+    """
+    usable = set(encoders) - _VIDEOTOOLBOX_ENCODERS
+    if sys.platform != "darwin":
+        return usable
+    for encoder in sorted(encoders & _VIDEOTOOLBOX_ENCODERS):
+        pixel_format = "ayuv64le" if encoder == "prores_videotoolbox" else "yuv420p"
+        try:
+            result = subprocess.run(
+                [
+                    ffmpeg_path,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=size=64x64:rate=1",
+                    "-frames:v",
+                    "1",
+                    "-an",
+                    "-c:v",
+                    encoder,
+                    "-pix_fmt",
+                    pixel_format,
+                    "-allow_sw",
+                    "0",
+                    "-f",
+                    "null",
+                    "-",
+                ],
+                capture_output=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                usable.add(encoder)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+    return usable
+
+
+HARDWARE_ENCODERS = {
+    **{name: "apple" for name in _VIDEOTOOLBOX_ENCODERS},
+    **{name: "nvidia" for name in _NVIDIA_ENCODERS},
+    **{name: "intel" for name in _QSV_ENCODERS},
+    **{name: "amd" for name in _AMF_ENCODERS},
+    "h264_vaapi": "vaapi", "hevc_vaapi": "vaapi", "av1_vaapi": "vaapi", "vp9_vaapi": "vaapi",
+}
+
+
+def discover_encoders(ffmpeg_path: str, *, run=None, checkpoint=None) -> set[str]:
+    """List software encoders and verify hardware with the production pixel format.
+
+    A supplied runner keeps system inventory cancellable. Failed probes never
+    advertise usable hardware; runtime conversion still retains CPU fallback.
+    VA-API is inventoried separately until rendering supports device uploads.
+    """
+    if run is None:
+        def run(command, *, timeout):
+            return subprocess.run(command, capture_output=True, text=True, timeout=timeout,
+                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    listing = run([ffmpeg_path, "-hide_banner", "-encoders"], timeout=15)
+    if listing.returncode:
+        raise RuntimeError(listing.stderr.strip() or "FFmpeg encoder detection failed")
+    advertised = {parts[1] for line in listing.stdout.splitlines()
+                  if len(parts := line.split()) >= 2 and 5 <= len(parts[0]) <= 6
+                  and parts[0][0] in "VAS" and set(parts[0]) <= set("VASFDXBT.S")}
+    usable = advertised - HARDWARE_ENCODERS.keys()
+    for encoder in sorted(advertised & HARDWARE_ENCODERS.keys()):
+        if checkpoint:
+            checkpoint()
+        vendor = HARDWARE_ENCODERS[encoder]
+        if vendor == "apple" and sys.platform != "darwin":
+            continue
+        pixel = "ayuv64le" if encoder == "prores_videotoolbox" else "yuv420p"
+        command = [ffmpeg_path, "-hide_banner", "-loglevel", "error"]
+        if vendor == "vaapi":
+            devices = sorted(glob.glob("/dev/dri/renderD*")) if sys.platform.startswith("linux") else []
+            if not devices:
+                continue
+            command += ["-vaapi_device", devices[0]]
+        command += ["-f", "lavfi", "-i", "color=size=256x256:rate=1", "-frames:v", "1", "-an"]
+        if vendor == "vaapi":
+            command += ["-vf", "format=nv12,hwupload"]
+        else:
+            command += ["-pix_fmt", pixel]
+        command += ["-c:v", encoder]
+        if vendor == "apple":
+            command += ["-allow_sw", "0"]
+        try:
+            if run([*command, "-f", "null", "-"], timeout=6).returncode == 0:
+                usable.add(encoder)
+        except (OSError, TimeoutError, subprocess.TimeoutExpired):
+            continue
+    return usable
 
 
 class HardwareService:
@@ -78,6 +185,7 @@ class HardwareService:
         try:
             all_encoders = self._list_encoders()
             caps.all_encoders = all_encoders
+            caps.vaapi_encoders = sorted(e for e in all_encoders if e.endswith("_vaapi"))
             caps.videotoolbox_encoders = sorted(_VIDEOTOOLBOX_ENCODERS & all_encoders)
             caps.apple_available = bool(caps.videotoolbox_encoders)
             caps.nvidia_encoders = sorted(_NVIDIA_ENCODERS & all_encoders)
@@ -97,21 +205,7 @@ class HardwareService:
         return caps
 
     def _list_encoders(self) -> set[str]:
-        result = subprocess.run(
-            [self.ffmpeg_path, "-hide_banner", "-encoders"],
-            capture_output=True, text=True, timeout=15,
-        )
-        encoders: set[str] = set()
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if not line or line.startswith("=") or line.startswith("Encoders:"):
-                continue
-            parts = line.split()
-            if len(parts) >= 2:
-                name = parts[1]
-                if parts[0].startswith("V") or name in (_VIDEOTOOLBOX_ENCODERS | _NVIDIA_ENCODERS | _QSV_ENCODERS | _AMF_ENCODERS):
-                    encoders.add(name)
-        return encoders
+        return discover_encoders(self.ffmpeg_path)
 
     def invalidate_cache(self) -> None:
         self._cache = None

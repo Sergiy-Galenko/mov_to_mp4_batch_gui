@@ -388,11 +388,17 @@ Rectangle {
                         function py(value) { return padT + h - (Math.max(0, Math.min(100, Number(value || 0))) / 100) * h }
                         function drawSeries(key, color) {
                             ctx.beginPath()
+                            var connected = false
                             for (var i = 0; i < data.length; ++i) {
+                                if (data[i][key] === null || data[i][key] === undefined) {
+                                    connected = false
+                                    continue
+                                }
                                 var x = px(data[i])
                                 var y = py(data[i][key])
-                                if (i === 0) ctx.moveTo(x, y)
+                                if (!connected) ctx.moveTo(x, y)
                                 else ctx.lineTo(x, y)
+                                connected = true
                             }
                             ctx.strokeStyle = color
                             ctx.lineWidth = 2

@@ -80,12 +80,14 @@ def read_text_file(path: Path) -> tuple[str, str]:
             pdf_text = _read_pdf(path)
             if not pdf_text.strip():
                 from services.ocr_service import OcrService
+
                 ocr_text = OcrService().recognize_pdf_scans(path)
                 if ocr_text.strip():
                     return ocr_text, "pdf"
             return pdf_text, "pdf"
         if suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
             from services.ocr_service import OcrService
+
             ocr_text = OcrService().recognize_image(path)
             if ocr_text.strip():
                 return ocr_text, suffix.lstrip(".")
@@ -114,7 +116,18 @@ def _read_rtf(path: Path) -> str:
     ignored, unicode_count, encoding = False, 1, "cp1252"
     fallback = 0
     destinations = {"fonttbl", "colortbl", "stylesheet", "info", "pict", "object", "header", "footer", "fldinst", "datastore"}
-    symbols = {"par": "\n", "line": "\n", "tab": "\t", "emdash": "—", "endash": "–", "bullet": "•", "lquote": "‘", "rquote": "’", "ldblquote": "“", "rdblquote": "”"}
+    symbols = {
+        "par": "\n",
+        "line": "\n",
+        "tab": "\t",
+        "emdash": "—",
+        "endash": "–",
+        "bullet": "•",
+        "lquote": "‘",
+        "rquote": "’",
+        "ldblquote": "“",
+        "rdblquote": "”",
+    }
 
     def emit(value: str) -> None:
         nonlocal fallback
@@ -143,8 +156,8 @@ def _read_rtf(path: Path) -> str:
             elif token == "*":
                 ignored = True
                 i += 1
-            elif token == "'" and re.fullmatch(r"[0-9a-fA-F]{2}", raw[i + 1:i + 3]):
-                emit(bytes([int(raw[i + 1:i + 3], 16)]).decode(encoding, "replace"))
+            elif token == "'" and re.fullmatch(r"[0-9a-fA-F]{2}", raw[i + 1 : i + 3]):
+                emit(bytes([int(raw[i + 1 : i + 3], 16)]).decode(encoding, "replace"))
                 i += 3
             else:
                 match = re.match(r"([a-zA-Z]+)(-?\d+)? ?", raw[i:])
@@ -168,7 +181,7 @@ def _read_rtf(path: Path) -> str:
                     unicode_count = max(0, int(number))
                 elif word == "u" and number:
                     if not ignored:
-                        output.append(chr(int(number) & 0xffff))
+                        output.append(chr(int(number) & 0xFFFF))
                     fallback = unicode_count
                 elif word in symbols:
                     emit(symbols[word])
@@ -515,9 +528,9 @@ def _to_html(text: str, source: Path) -> str:
     body = html.escape(text)
     return (
         "<!doctype html>\n"
-        "<html lang=\"uk\">\n"
+        '<html lang="uk">\n'
         "<head>\n"
-        "  <meta charset=\"utf-8\">\n"
+        '  <meta charset="utf-8">\n'
         f"  <title>{title}</title>\n"
         "  <style>body{font-family:system-ui,sans-serif;line-height:1.5;padding:24px;}pre{white-space:pre-wrap;}</style>\n"
         "</head>\n"
@@ -691,12 +704,7 @@ def _build_basic_pdf(text: str, source: Path) -> bytes:
     out.extend(b"0000000000 65535 f \n")
     for offset in offsets[1:]:
         out.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
-    out.extend(
-        (
-            f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R /Info {info_id} 0 R >>\n"
-            f"startxref\n{xref_pos}\n%%EOF\n"
-        ).encode("ascii")
-    )
+    out.extend((f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R /Info {info_id} 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n").encode("ascii"))
     return bytes(out)
 
 
@@ -721,32 +729,32 @@ def _pdf_literal(text: str) -> str:
 def _write_docx(text: str, output: Path) -> None:
     paragraphs = "\n".join(_docx_paragraph(line) for line in text.splitlines() or [""])
     document = (
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-        "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
         "<w:body>"
         f"{paragraphs}"
-        "<w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/><w:pgMar w:top=\"1440\" w:right=\"1440\" "
-        "w:bottom=\"1440\" w:left=\"1440\" w:header=\"708\" w:footer=\"708\" w:gutter=\"0\"/></w:sectPr>"
+        '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" '
+        'w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>'
         "</w:body></w:document>"
     )
     _write_zip(
         output,
         {
             "[Content_Types].xml": (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
-                "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
-                "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
-                "<Override PartName=\"/word/document.xml\" "
-                "ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>"
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="xml" ContentType="application/xml"/>'
+                '<Override PartName="/word/document.xml" '
+                'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
                 "</Types>"
             ),
             "_rels/.rels": (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-                "<Relationship Id=\"rId1\" "
-                "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" "
-                "Target=\"word/document.xml\"/>"
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" '
+                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+                'Target="word/document.xml"/>'
                 "</Relationships>"
             ),
             "word/document.xml": document,
@@ -757,7 +765,7 @@ def _write_docx(text: str, output: Path) -> None:
 def _docx_paragraph(line: str) -> str:
     if not line:
         return "<w:p/>"
-    return f"<w:p><w:r><w:t xml:space=\"preserve\">{_xml(line)}</w:t></w:r></w:p>"
+    return f'<w:p><w:r><w:t xml:space="preserve">{_xml(line)}</w:t></w:r></w:p>'
 
 
 def _write_xlsx(text: str, output: Path) -> None:
@@ -766,11 +774,11 @@ def _write_xlsx(text: str, output: Path) -> None:
         cells_xml = []
         for col_index, value in enumerate(row, start=1):
             ref = f"{_column_name(col_index)}{row_index}"
-            cells_xml.append(f"<c r=\"{ref}\" t=\"inlineStr\"><is><t>{_xml(value)}</t></is></c>")
-        rows_xml.append(f"<row r=\"{row_index}\">{''.join(cells_xml)}</row>")
+            cells_xml.append(f'<c r="{ref}" t="inlineStr"><is><t>{_xml(value)}</t></is></c>')
+        rows_xml.append(f'<row r="{row_index}">{"".join(cells_xml)}</row>')
     sheet = (
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-        "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
         "<sheetData>"
         f"{''.join(rows_xml)}"
         "</sheetData></worksheet>"
@@ -779,37 +787,37 @@ def _write_xlsx(text: str, output: Path) -> None:
         output,
         {
             "[Content_Types].xml": (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
-                "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
-                "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
-                "<Override PartName=\"/xl/workbook.xml\" "
-                "ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
-                "<Override PartName=\"/xl/worksheets/sheet1.xml\" "
-                "ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="xml" ContentType="application/xml"/>'
+                '<Override PartName="/xl/workbook.xml" '
+                'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+                '<Override PartName="/xl/worksheets/sheet1.xml" '
+                'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
                 "</Types>"
             ),
             "_rels/.rels": (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-                "<Relationship Id=\"rId1\" "
-                "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" "
-                "Target=\"xl/workbook.xml\"/>"
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" '
+                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+                'Target="xl/workbook.xml"/>'
                 "</Relationships>"
             ),
             "xl/workbook.xml": (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-                "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
-                "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
-                "<sheets><sheet name=\"Sheet1\" sheetId=\"1\" r:id=\"rId1\"/></sheets>"
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+                'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                '<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>'
                 "</workbook>"
             ),
             "xl/_rels/workbook.xml.rels": (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-                "<Relationship Id=\"rId1\" "
-                "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" "
-                "Target=\"worksheets/sheet1.xml\"/>"
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" '
+                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+                'Target="worksheets/sheet1.xml"/>'
                 "</Relationships>"
             ),
             "xl/worksheets/sheet1.xml": sheet,
@@ -820,22 +828,20 @@ def _write_xlsx(text: str, output: Path) -> None:
 def _write_pptx(text: str, output: Path, source: Path) -> None:
     title = _xml(source.stem)
     lines = list(_wrapped_lines(text, 58))[:18]
-    paragraphs = "".join(
-        f"<a:p><a:r><a:rPr lang=\"uk-UA\" sz=\"1800\"/><a:t>{_xml(line)}</a:t></a:r></a:p>" for line in lines
-    )
+    paragraphs = "".join(f'<a:p><a:r><a:rPr lang="uk-UA" sz="1800"/><a:t>{_xml(line)}</a:t></a:r></a:p>' for line in lines)
     slide = (
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-        "<p:sld xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
-        "xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">"
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+        'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
         "<p:cSld><p:spTree>"
-        "<p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>"
-        "<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/>"
-        "<a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>"
-        "<p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"TextBox\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>"
-        "<p:spPr><a:xfrm><a:off x=\"685800\" y=\"685800\"/><a:ext cx=\"7772400\" cy=\"5486400\"/></a:xfrm>"
-        "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr>"
-        "<p:txBody><a:bodyPr wrap=\"square\"/><a:lstStyle/>"
-        f"<a:p><a:r><a:rPr lang=\"uk-UA\" sz=\"2800\" b=\"1\"/><a:t>{title}</a:t></a:r></a:p>{paragraphs}"
+        '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>'
+        '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>'
+        '<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>'
+        '<p:sp><p:nvSpPr><p:cNvPr id="2" name="TextBox"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>'
+        '<p:spPr><a:xfrm><a:off x="685800" y="685800"/><a:ext cx="7772400" cy="5486400"/></a:xfrm>'
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>'
+        '<p:txBody><a:bodyPr wrap="square"/><a:lstStyle/>'
+        f'<a:p><a:r><a:rPr lang="uk-UA" sz="2800" b="1"/><a:t>{title}</a:t></a:r></a:p>{paragraphs}'
         "</p:txBody></p:sp>"
         "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"
     )
@@ -843,40 +849,40 @@ def _write_pptx(text: str, output: Path, source: Path) -> None:
         output,
         {
             "[Content_Types].xml": (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
-                "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
-                "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
-                "<Override PartName=\"/ppt/presentation.xml\" "
-                "ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/>"
-                "<Override PartName=\"/ppt/slides/slide1.xml\" "
-                "ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>"
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="xml" ContentType="application/xml"/>'
+                '<Override PartName="/ppt/presentation.xml" '
+                'ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>'
+                '<Override PartName="/ppt/slides/slide1.xml" '
+                'ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>'
                 "</Types>"
             ),
             "_rels/.rels": (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-                "<Relationship Id=\"rId1\" "
-                "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" "
-                "Target=\"ppt/presentation.xml\"/>"
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" '
+                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+                'Target="ppt/presentation.xml"/>'
                 "</Relationships>"
             ),
             "ppt/presentation.xml": (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-                "<p:presentation xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
-                "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" "
-                "xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">"
-                "<p:sldIdLst><p:sldId id=\"256\" r:id=\"rId1\"/></p:sldIdLst>"
-                "<p:sldSz cx=\"9144000\" cy=\"6858000\" type=\"screen4x3\"/>"
-                "<p:notesSz cx=\"6858000\" cy=\"9144000\"/>"
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+                'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+                'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+                '<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>'
+                '<p:sldSz cx="9144000" cy="6858000" type="screen4x3"/>'
+                '<p:notesSz cx="6858000" cy="9144000"/>'
                 "</p:presentation>"
             ),
             "ppt/_rels/presentation.xml.rels": (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-                "<Relationship Id=\"rId1\" "
-                "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" "
-                "Target=\"slides/slide1.xml\"/>"
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" '
+                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" '
+                'Target="slides/slide1.xml"/>'
                 "</Relationships>"
             ),
             "ppt/slides/slide1.xml": slide,
@@ -893,15 +899,12 @@ def _write_odf_text(text: str, output: Path) -> None:
 def _write_odf_spreadsheet(text: str, output: Path) -> None:
     rows = []
     for row in _rows_from_text(text):
-        cells = "".join(
-            f"<table:table-cell office:value-type=\"string\"><text:p>{_xml(value)}</text:p></table:table-cell>"
-            for value in row
-        )
+        cells = "".join(f'<table:table-cell office:value-type="string"><text:p>{_xml(value)}</text:p></table:table-cell>' for value in row)
         rows.append(f"<table:table-row>{cells}</table:table-row>")
     content = _odf_document(
         "office:spreadsheet",
-        f"<table:table table:name=\"Sheet1\">{''.join(rows)}</table:table>",
-        extra_namespaces=" xmlns:table=\"urn:oasis:names:tc:opendocument:xmlns:table:1.0\"",
+        f'<table:table table:name="Sheet1">{"".join(rows)}</table:table>',
+        extra_namespaces=' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"',
     )
     _write_odf_package(output, "application/vnd.oasis.opendocument.spreadsheet", content)
 
@@ -911,14 +914,14 @@ def _write_odf_presentation(text: str, output: Path, source: Path) -> None:
     content = _odf_document(
         "office:presentation",
         (
-            "<draw:page draw:name=\"page1\" draw:style-name=\"dp1\" draw:master-page-name=\"Default\">"
-            "<draw:frame draw:name=\"Text\" draw:x=\"1cm\" draw:y=\"1cm\" draw:width=\"24cm\" draw:height=\"16cm\">"
-            f"<draw:text-box><text:h text:outline-level=\"1\">{_xml(source.stem)}</text:h>{paragraphs}</draw:text-box>"
+            '<draw:page draw:name="page1" draw:style-name="dp1" draw:master-page-name="Default">'
+            '<draw:frame draw:name="Text" draw:x="1cm" draw:y="1cm" draw:width="24cm" draw:height="16cm">'
+            f'<draw:text-box><text:h text:outline-level="1">{_xml(source.stem)}</text:h>{paragraphs}</draw:text-box>'
             "</draw:frame></draw:page>"
         ),
         extra_namespaces=(
-            " xmlns:draw=\"urn:oasis:names:tc:opendocument:xmlns:drawing:1.0\""
-            " xmlns:presentation=\"urn:oasis:names:tc:opendocument:xmlns:presentation:1.0\""
+            ' xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"'
+            ' xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0"'
         ),
     )
     _write_odf_package(output, "application/vnd.oasis.opendocument.presentation", content)
@@ -926,11 +929,11 @@ def _write_odf_presentation(text: str, output: Path, source: Path) -> None:
 
 def _odf_document(body_tag: str, body: str, *, extra_namespaces: str) -> str:
     return (
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        '<?xml version="1.0" encoding="UTF-8"?>'
         "<office:document-content "
-        "xmlns:office=\"urn:oasis:names:tc:opendocument:xmlns:office:1.0\" "
-        "xmlns:text=\"urn:oasis:names:tc:opendocument:xmlns:text:1.0\" "
-        "office:version=\"1.2\""
+        'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+        'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+        'office:version="1.2"'
         f"{extra_namespaces}>"
         f"<office:body><{body_tag}>{body}</{body_tag}></office:body>"
         "</office:document-content>"
@@ -939,11 +942,11 @@ def _odf_document(body_tag: str, body: str, *, extra_namespaces: str) -> str:
 
 def _write_odf_package(output: Path, mimetype: str, content_xml: str) -> None:
     manifest = (
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-        "<manifest:manifest xmlns:manifest=\"urn:oasis:names:tc:opendocument:xmlns:manifest:1.0\" "
-        "manifest:version=\"1.2\">"
-        f"<manifest:file-entry manifest:full-path=\"/\" manifest:media-type=\"{mimetype}\"/>"
-        "<manifest:file-entry manifest:full-path=\"content.xml\" manifest:media-type=\"text/xml\"/>"
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" '
+        'manifest:version="1.2">'
+        f'<manifest:file-entry manifest:full-path="/" manifest:media-type="{mimetype}"/>'
+        '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'
         "</manifest:manifest>"
     )
     with zipfile.ZipFile(output, "w") as zf:
@@ -959,8 +962,8 @@ def _to_excel_html(text: str, source: Path) -> str:
         rows.append(f"<tr>{cells}</tr>")
     return (
         "<!doctype html>\n"
-        "<html xmlns:x=\"urn:schemas-microsoft-com:office:excel\">\n"
-        "<head><meta charset=\"utf-8\"><title>"
+        '<html xmlns:x="urn:schemas-microsoft-com:office:excel">\n'
+        '<head><meta charset="utf-8"><title>'
         f"{html.escape(source.stem)}</title></head>\n"
         f"<body><table>{''.join(rows)}</table></body></html>\n"
     )
@@ -970,8 +973,8 @@ def _to_presentation_html(text: str, source: Path) -> str:
     paragraphs = "\n".join(f"<p>{html.escape(line)}</p>" for line in _wrapped_lines(text, 72))
     return (
         "<!doctype html>\n"
-        "<html xmlns:p=\"urn:schemas-microsoft-com:office:powerpoint\">\n"
-        "<head><meta charset=\"utf-8\"><title>"
+        '<html xmlns:p="urn:schemas-microsoft-com:office:powerpoint">\n'
+        '<head><meta charset="utf-8"><title>'
         f"{html.escape(source.stem)}</title></head>\n"
         f"<body><section><h1>{html.escape(source.stem)}</h1>{paragraphs}</section></body></html>\n"
     )
@@ -1173,7 +1176,7 @@ def _read_mobi(path: Path) -> str:
         offset = struct.unpack_from(">I", data, 78 + i * 8)[0]
         record_offsets.append(offset)
 
-    record_0_data = data[record_offsets[0]:record_offsets[1]]
+    record_0_data = data[record_offsets[0] : record_offsets[1]]
     if len(record_0_data) < 16:
         raise TextConversionError("Invalid MOBI record 0")
 
@@ -1197,7 +1200,7 @@ def _read_mobi(path: Path) -> str:
                 if b == 0:
                     out.append(0)
                 elif 1 <= b <= 8:
-                    out.extend(rec[pos:pos + b])
+                    out.extend(rec[pos : pos + b])
                     pos += b
                 elif 9 <= b <= 0x7F:
                     out.append(b)

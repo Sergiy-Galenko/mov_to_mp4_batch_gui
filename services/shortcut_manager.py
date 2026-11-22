@@ -23,7 +23,6 @@ DEFAULT_SHORTCUTS: dict[str, dict[str, str]] = {
     "pause_resume": {"key": "F6", "label": "Pause / Resume", "category": "conversion"},
     "skip_file": {"key": "F7", "label": "Skip current file", "category": "conversion"},
     "retry_failed": {"key": "F8", "label": "Retry failed files", "category": "conversion"},
-
     # Queue actions
     "add_files": {"key": "Ctrl+O", "label": "Add files", "category": "queue"},
     "add_folder": {"key": "Ctrl+Shift+O", "label": "Add folder", "category": "queue"},
@@ -34,7 +33,6 @@ DEFAULT_SHORTCUTS: dict[str, dict[str, str]] = {
     "move_up": {"key": "Alt+Up", "label": "Move selection up", "category": "queue"},
     "move_down": {"key": "Alt+Down", "label": "Move selection down", "category": "queue"},
     "queue_search": {"key": "Ctrl+F", "label": "Focus queue search", "category": "queue"},
-
     # Navigation
     "nav_queue": {"key": "Ctrl+1", "label": "Go to Queue", "category": "navigation"},
     "nav_analytics": {"key": "Ctrl+2", "label": "Go to Analytics", "category": "navigation"},
@@ -43,7 +41,6 @@ DEFAULT_SHORTCUTS: dict[str, dict[str, str]] = {
     "nav_youtube": {"key": "Ctrl+5", "label": "Go to YouTube", "category": "navigation"},
     "nav_settings": {"key": "Ctrl+6", "label": "Go to Settings", "category": "navigation"},
     "toggle_sidebar": {"key": "Ctrl+B", "label": "Toggle sidebar", "category": "navigation"},
-
     # General
     "save_preset": {"key": "Ctrl+S", "label": "Save current preset", "category": "general"},
     "export_project": {"key": "Ctrl+E", "label": "Export project", "category": "general"},
@@ -108,14 +105,16 @@ class ShortcutManager:
         """Return all shortcuts as a list of dicts."""
         result: list[dict[str, str]] = []
         for action_id, default in DEFAULT_SHORTCUTS.items():
-            result.append({
-                "action": action_id,
-                "key": self.get_key(action_id),
-                "default_key": default["key"],
-                "label": default["label"],
-                "category": default["category"],
-                "customized": action_id in self._overrides,
-            })
+            result.append(
+                {
+                    "action": action_id,
+                    "key": self.get_key(action_id),
+                    "default_key": default["key"],
+                    "label": default["label"],
+                    "category": default["category"],
+                    "customized": action_id in self._overrides,
+                }
+            )
         return result
 
     def shortcuts_by_category(self) -> dict[str, list[dict[str, str]]]:

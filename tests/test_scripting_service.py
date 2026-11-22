@@ -149,4 +149,3 @@ def test_test_script_reporting_and_snippets():
         # Default script reset
         def_rename = svc.reset_script("rename")
         assert "formatOutputName" in def_rename
-

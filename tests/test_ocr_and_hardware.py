@@ -84,8 +84,8 @@ def test_whisper_model_manager_catalog():
 
 def test_whisper_detect_devices_windows(monkeypatch):
     import sys
+
     monkeypatch.setattr(sys, "platform", "win32")
     devices = WhisperModelManager.detect_available_devices()
     assert "cpu" in devices
     assert "auto" in devices
-

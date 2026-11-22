@@ -1,434 +1,376 @@
+<p align="center">
+  <img src="assets/app-logo-v2.png" width="88" alt="Media Converter logo">
+</p>
+
+<p align="center">
+  <strong>Your files. The format you need. A workflow you can follow.</strong><br>
+  A desktop workspace for video, images, audio, subtitles, and documents.
+</p>
+
+![Media Converter: convert files, edit video, and create subtitles](docs/images/readme-banner.svg)
+
+<p align="center">
+  <strong>Python 3.12+</strong> · <strong>PySide6 / QML</strong> · <strong>FFmpeg</strong><br>
+  Interface languages: Ukrainian · English · Polish · German
+</p>
+
+<p align="center">
+  <a href="#installation">Installation</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#command-line-interface">CLI</a> ·
+  <a href="#development">Development</a> ·
+  <a href="#license">License</a>
+</p>
+
 # Media Converter
 
-Desktop batch converter for video, photos, audio, subtitles, and text files. The app is built with Python, PySide6, QML, FFmpeg, a built-in text converter, and optional Rust acceleration.
+Media Converter combines batch conversion with video editing, subtitle tools, document conversion, and media downloads. Add files to a queue, choose output settings, inspect the processing plan, and follow each task through completion. Use the graphical interface for interactive work or the CLI for repeatable jobs.
+
+The project started as a MOV-to-MP4 batch converter, which explains the repository name `mov_to_mp4_batch_gui`. Its processing tools now cover more than video container conversion.
+
+Python coordinates the interface and background services; FFmpeg performs media encoding and filtering. An optional Rust extension accelerates selected text-processing operations. A Rust toolchain, speech model, or cloud account is not required to launch the basic application.
+
+> **Licensing:** personal, educational, and other non-commercial use is permitted under [LICENSE](LICENSE). Business use and paid projects require a separate purchased commercial license. This is source-available software.
 
 ## Features
 
-- Black-and-white dark interface with customizable backgrounds, text, controls, status indicators, borders, and media icons.
-- A new monochrome app icon and rounded controls with keyboard focus, hover/press feedback, and theme-aware colors. See the [branding and button previews](docs/branding.md).
-- **Progressive Disclosure**: Advanced settings and sidebar are hidden by default to keep the main conversion screen incredibly simple and focused.
-- Outline icons and labeled statuses keep navigation and progress readable in a monochrome palette.
-- **Modern Drag & Drop Zone**: A large, interactive glassmorphism drop zone for importing files directly from the desktop.
-- Top workspace switcher for `Photo`, `Video`, and `Text` modes. Each mode filters the queue, file picker, folder import, preview, and relevant edit controls.
-- Large centered selected-file preview: photos display as a larger image, videos display their generated frame thumbnail, and text files show a readable text preview.
-- Batch conversion for video, image, audio, subtitle, and text files with automatic media-type aware output formats.
-- Right-click quick conversion: choose only the output format for one queued file and convert it immediately.
-- Queue controls for retry, skip, remove, reorder, multi-select, batch remove, and per-file overrides.
-- Crash-safe queue recovery: interrupted running or paused tasks are returned to the queue on the next launch.
-- Pause and resume active FFmpeg conversions from the bottom action bar.
-- Batch workflow automation with watch-folder auto-convert, folder rules, scheduler, completion actions, and HTTP/Discord/Telegram notifications.
-- Explicit output-folder selection before any conversion or URL download starts.
-- Start-time preflight checks file availability, output collisions and disk space, plus container/codec, audio-track, subtitle-stream, HDR, and fast-copy compatibility when FFprobe is available.
-- Presets for common formats and platform targets (iPhone, PlayStation 5, etc).
-- FFmpeg/FFprobe integration for metadata, thumbnails, progress, ETA, and previews.
-- Built-in document conversion between plain text, PDF, Word, Excel, PowerPoint, and OpenDocument-style formats; text/document-only conversion does not require FFmpeg.
-- Opt-in FFmpeg, Python dependency, and Desktop `.exe` bootstrap on Windows x64.
-- Video/source URL download support through `yt-dlp`, with direct media URL fallback: download a video or extract audio into the queue.
-- Smart Convert mode for per-file codec/CRF/preset recommendations, remux detection, two-pass target-size encoding, quality checks, and A/B samples.
-- Lightweight editor filters for deinterlace, stabilization, denoise, color correction, LUT files, and speed changes.
-- Subtitle tools for offset adjustment and styled burn-in output.
-- Privacy and security tools: manual blur regions, metadata sanitization, checksum sidecars, and secure-delete after conversion.
-- Optional cloud upload after conversion through an external `rclone` remote.
-- Commercial licensing with key activation, offline license files, trial mode, Pro feature gates, commercial export gating, and paid-build update checks.
-- GPU-aware parallel conversion when a supported hardware encoder is available.
-- Built-in analytics for speed, per-file timings, codec distribution, and system resources.
-- Full batch rename preview with copy/export to CSV before conversion starts.
-- JSON-based localization for Ukrainian, English, Polish, and German.
-- CLI mode for automation without starting the GUI.
+### Batch conversion and queue management
 
-## Appearance
+- Add files through file selection, folder scanning, or drag and drop.
+- Convert video, images, audio, subtitles, and text-based documents from one queue.
+- Apply shared settings or overrides for individual items; prioritize and pin queue entries.
+- Inspect media properties, previews, estimated output sizes, progress, speed, and remaining time.
+- Pause, resume, cancel, or skip work; review failures and conversion history.
+- Choose how to handle existing output names: stop, add an index, include a parent folder, or overwrite explicitly.
+- Save reusable presets and import/export user presets as JSON. Built-in presets remain protected from accidental replacement.
 
-Open the palette button in the top bar to customize the interface. The default **Black & white** theme uses neutral dark surfaces and white/gray controls. Other presets include Light, Obsidian, OLED, Midnight, High contrast, and System.
+### Quick actions and simple mode
 
-Choose individual colors with the color picker or enter `#RGB`, `#RRGGBB`, or `#AARRGGBB` values. Changes apply immediately and are saved separately for each base theme. The editor also provides text scaling, interface density, named schemes, and JSON import/export. Media previews retain their original colors.
+The queue opens in simple mode with shortcuts for **Video → MP3**, **Compress video**, **Change format**, and **Add subtitles**. Choose the output format, quality profile, and destination directly above the queue. Switch to **Advanced mode** to access the full navigation and detailed settings. Adding subtitles opens the existing subtitle settings.
 
-Use **Reset colors** to restore the current preset, or **Ctrl+Alt+0** anywhere in the app to restore the default black-and-white colors. Invalid theme files leave the active theme unchanged.
+Select a video or audio file to choose its audio track, trim its range, or create a **15-second conversion sample** from the trim start. Samples use the current settings and per-file overrides, run in the background, and are stored separately in the quota-controlled media cache. The audio preview opens the sample in your default player. Short sources or trim ranges produce shorter samples; disable merging and target-size mode before sampling because they depend on the full output.
 
-## Requirements
+After conversion, the file inspector shows source/output sizes, the percentage saved (negative when the output is larger), playback, and an option to open the output folder. Failed items expose an explanation and actions to retry, choose another destination, or change settings.
 
-- Python `3.12+`
-- FFmpeg, required for video, photo, audio, subtitle, URL audio extraction, and media merge workflows
-- FFprobe, recommended for metadata, ETA, thumbnails, and analytics
-- PySide6
-- yt-dlp, used for supported video-site downloads
-- Optional: `rclone`, used for Google Drive, OneDrive, Dropbox, S3/MinIO, FTP, and SFTP uploads
+### Video and audio
 
-Install dependencies:
+Choose output containers, codecs, quality settings, audio bitrate, resolution, trimming, and aspect-ratio options. Extract audio from video, adjust volume, and use supported normalization and filtering options.
+
+The processing plan distinguishes compatible stream copying, video copying with audio conversion, and full video encoding. **Fast Copy / remux** avoids re-encoding compatible streams. Resizing, burned-in subtitles, and video filters require video encoding; a new container alone does not always require it.
+
+**Target size** aims for a per-file byte limit using CPU H.264 and two-pass encoding. One MB means 1,000,000 bytes. The application budgets for audio and container overhead, checks the finished file before publication, and can retry at a lower bitrate. An oversized result is not published as a successful output. This mode supports MP4, MOV, MKV, and AVI, requires H.264 or Auto, and is incompatible with merging and ProRes. An unrealistically small limit can still fail.
+
+### Video editing and previews
+
+The montage workspace combines a media library, preview, properties panel, and timeline. Arrange and split clips, trim ranges, use transitions, add titles and subtitles, and mix voice with background music. Save an editable project separately from the exported video.
+
+Preview strips, waveforms, snapshots, and proxy media help navigate source material. Proxy mappings survive application restarts. Additional workflows include portrait reframing, object blur, GIF/sticker creation, and Telegram-style video notes; some analysis tools require optional models or packages.
+
+### Subtitles and speech recognition
+
+Work with SRT, VTT, and ASS subtitles, edit text and timing, and burn subtitles into video where the selected FFmpeg build supports it. Styles may not survive conversion between subtitle formats.
+
+Optional local speech recognition is available through a model manager:
+
+| Engine | Device choices | Notes |
+| --- | --- | --- |
+| OpenAI Whisper | CPU, NVIDIA CUDA, Apple MPS | Device availability depends on the selected runtime and hardware. |
+| Faster Whisper | CPU, NVIDIA CUDA | Uses CTranslate2; MPS is not supported by this engine. |
+
+The application supports a managed isolated Python environment for speech tools, model downloads, runtime checks, and explicit device selection. Model downloads need network access and disk space; inference can run locally after installation. Large models need substantially more memory than small models.
+
+### Images and documents
+
+Convert image formats, resize and crop images, and apply watermarks or text overlays.
+
+Document conversion focuses on extracting and transferring **text content**. Supported families include plain text, Markdown, HTML, PDF, Office, OpenDocument, and ebooks. It is not a full office layout engine: complex page layouts, formulas, macros, interactive elements, and formatting may be lost. Keep original files and inspect the result. Basic text-document conversion does not require FFmpeg.
+
+### Downloads and automation
+
+Download video or audio through `yt-dlp` from supported websites and supported direct media links. Available options include quality selection, playlists, subtitles, cookies files, and rate limits. Actual availability depends on the source site, authentication, and installed downloader version.
+
+For repeatable workflows, use saved presets, watched folders, scheduling, batch rules, CLI settings files, and reports. Optional cloud uploads use an independently installed and configured `rclone`. Archive operations may require external 7-Zip or RAR tools. Some automation and advanced functions are gated by the application's Pro license state.
+
+## Screenshots
+
+### Conversion queue
+
+![Conversion queue in the dark theme with demonstration files](docs/images/queue-dark.png)
+
+Inspect input files, choose settings and an output folder, then process one item or the entire queue.
+
+### Montage editor
+
+![Montage editor with media library, preview, properties, and timeline](docs/images/montage-editor.png)
+
+Saving a project preserves editing decisions; exporting produces a media file.
+
+<details>
+<summary>Light appearance</summary>
+
+![Conversion queue in the light theme](docs/images/queue-light.png)
+
+Appearance settings include colors, text scale, and interface density. The interface adapts its controls and window presentation to the host platform.
+
+</details>
+
+Screenshots show the actual QML interface with demonstration data, not private media. Some screenshots use the Ukrainian interface; the application also provides English, Polish, and German. Native dialogs and window frames vary by operating system.
+
+## Installation
+
+### Requirements
+
+| Component | Needed for |
+| --- | --- |
+| Python 3.12+ and `requirements.txt` | Running the application from source. |
+| FFmpeg and FFprobe | Media conversion, inspection, filtering, and previews. Encoder/filter support depends on the build. |
+| Whisper runtime and downloaded model | Optional speech recognition. |
+| Rust and Maturin | Building the optional native extension from source. |
+| `rclone`, 7-Zip, or RAR tools | The corresponding optional integrations. |
+
+The interface includes platform adaptations for macOS and Windows. CI is configured for Linux, macOS, and Windows, including headless tests and portable package checks. Hardware acceleration, native dialogs, and driver behavior still depend on the actual machine. Packaged builds do not require a separate Python installation; model runtimes and external integrations may still need setup.
+
+### Get the source
 
 ```bash
+git clone https://github.com/Sergiy-Galenko/mov_to_mp4_batch_gui.git
+cd mov_to_mp4_batch_gui
+```
+
+Alternatively, download and extract the repository ZIP from GitHub.
+
+### macOS and Linux
+
+Check that `python3 --version` reports Python 3.12 or newer, then run:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install -r requirements.txt
-```
-
-### Rust acceleration and responsiveness
-
-The optional Rust extension accelerates RTF export and PDF literal decoding and releases Python's GIL during these loops. RTF export correctly preserves non-BMP characters such as emoji. Video/audio encoding continues to use FFmpeg and its configured hardware encoders.
-
-With a Rust toolchain installed, build the extension into the same Python environment as the application:
-
-```bash
-python -m pip install ./native
-python -c "from services.native_acceleration import NATIVE_AVAILABLE; print(NATIVE_AVAILABLE)"
-```
-
-For development:
-
-```bash
-python -m pip install 'maturin>=1.9,<2'
-maturin develop --manifest-path native/Cargo.toml --release
-cargo test --manifest-path native/Cargo.toml
-python scripts/benchmark_performance.py
-```
-
-Build the extension before running PyInstaller to include it in the distribution. Wheels use Python's stable ABI for Python 3.12+ and must match the target OS/architecture. Without the extension, the application uses the Python implementation; set `MEDIA_CONVERTER_DISABLE_NATIVE=1` to test that path explicitly.
-
-On an Apple Silicon development machine with Python 3.14, a release build measured **9–11× faster RTF serialization** (1.15 million input characters) and **115–122× faster PDF literal decoding** (2.9 MB). These ranges come from two benchmark runs, each using five-run median timings for individual kernels, including the Python/Rust call, rather than whole-document or FFmpeg conversion speeds. The benchmark checks identical outputs and also measures queue updates at 100 and 10,000 rows.
-
-The interface now uses indexed queue lookups, targeted progress signals, bounded event processing, cached statistics, background resource sampling, and at most two simultaneous thumbnail jobs. Hidden queue views detach their models; thumbnails decode at display-appropriate sizes. Search is debounced, list/grid views have scrollbars, filter reset and keyboard selection are available, and live logs retain the latest 2,000 entries. Metadata preview refreshes and task-state saves are coalesced, with state flushed on completion and exit.
-
-On Windows, `run_windows.cmd` checks Python automatically and starts the app when Python 3.12+ is already available.
-System Python installation, package installation, and launch-time Desktop `.exe` creation are explicit opt-in actions:
-
-```powershell
-.\scripts\python_bootstrap.ps1 -Mode run -AllowSystemInstall -AllowDependencyInstall -AllowDesktopBuild
-```
-
-The app checks imports at startup, but does not run `pip install` unless this is explicitly enabled:
-
-```bash
-MEDIA_CONVERTER_AUTO_INSTALL_DEPS=1
-```
-
-Check FFmpeg:
-
-```bash
-ffmpeg -version
-ffprobe -version
-```
-
-On Windows x64 the GUI can install FFmpeg automatically into the app data folder:
-
-```text
-%LOCALAPPDATA%\MediaConverter\ffmpeg\current
-```
-
-The app does not modify the system `PATH`. If you manually choose an external FFmpeg binary, that path is respected and the app does not overwrite it.
-
-### Portable Windows package
-
-Build a portable `dist/MediaConverter/` folder with verified `ffmpeg.exe` and `ffprobe.exe` bundled beside the executable:
-
-```powershell
-python scripts\build_pyinstaller.py --portable --ffmpeg-dir C:\tools\ffmpeg\bin
-```
-
-The portable build writes its settings, history, and managed data to `dist\MediaConverter\data\`; it does not require Python, PIP, or changes to the system `PATH`. Keep `portable.ini`, the executable, and the `ffmpeg` folder together.
-
-### Batch safety
-
-- **Collision policy**: choose `index`, `parent`, `stop`, or `overwrite`. CLI users can pass `--collision-policy` with the same values.
-- **Disk preflight**: conversion is blocked when the estimated outputs, temporary files, A/B samples, two-pass passlogs, and configured disk reserve do not fit in the output volume.
-- **Reports**: the History panel exports the most recent batch as CSV, JSON, or HTML. JSON records include source/output byte counts, source codecs, duration, and compression ratio when available.
-
-Text-only conversion does not require FFmpeg or FFprobe.
-
-## Run The GUI
-
-```bash
 python main.py
 ```
 
-Or on Windows with Python bootstrap:
+### Windows
 
-```bat
-run_windows.cmd
+Run these commands in PowerShell inside the project directory:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe main.py
 ```
 
-Launch-time Desktop `.exe` creation is disabled by default. To build or refresh `MediaConverter.exe` on the Desktop
-while starting the app:
+Replace `-3.12` with the version selector for your installed Python if necessary. Calling the virtual environment's interpreter directly does not require PowerShell script activation.
 
-```bat
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\python_bootstrap.ps1 -Mode run -AllowDependencyInstall -AllowDesktopBuild
-```
+### Configure FFmpeg and FFprobe
 
-Basic workflow:
+Obtain executables for your operating system from the [FFmpeg download page](https://ffmpeg.org/download.html). In application settings, select the full path to `ffmpeg` or `ffmpeg.exe`, and keep the matching `ffprobe` executable beside it.
 
-1. Choose the output folder where all converted files and downloads will be saved.
-2. Choose the top workspace mode: `Conversion` for everything, or `Photo`, `Video`, or `Text` for focused work.
-3. Drag files or a folder into the queue, or use the mode-aware add buttons.
-4. Select a photo, video, or text file to see it larger in the center preview and adjust the matching output/edit settings.
-5. Choose a preset or configure the output settings.
-6. Use `Convert all` on the Queue screen to start the whole queue.
-7. Right-click a queued file to open Quick convert for that one file.
-8. Watch progress, session stats, logs, and analytics.
-
-## Photo, Video, And Text Workspaces
-
-The top toolbar includes focused workspace modes:
-
-- `Photo`: shows image files, opens image-aware file filters, and puts photo quality, resize/crop, watermark, and text overlay controls close to the preview workflow.
-- `Video`: shows video files, opens video-aware file filters, and links directly to video editor, trim/resize, and audio/subtitle controls.
-- `Text`: shows text files, opens text-aware file filters, previews text content in the center panel, and exposes text output formats.
-
-The default `Conversion` mode still shows every supported file type in one queue.
-
-## Video URL Downloads
-
-The Downloads screen includes a video/source URL download panel. Paste or drag a URL into the URL field and choose:
-
-- `Download video`: downloads the best practical video and adds it to the queue.
-- `Download audio`: extracts audio, defaults to MP3 behavior in the backend, and adds it to the queue.
-- Quality: `best`, `1080p`, `720p`, or `audio_only`.
-- Batch URL import from `.txt` or `.csv` files.
-- Automatic preview with detected source type, title, duration, available quality summary, and thumbnail when the source exposes one.
-- Optional playlist downloads.
-- Optional subtitle download.
-- Optional `cookies.txt` file for private, age-restricted, or account-bound videos.
-- Optional download speed limit.
-- Failed/cancelled download retry and a separate download log.
-- Built-in `yt-dlp` update button.
-- Download history for recent URLs.
-- Cancel button for an active download.
-
-The app uses `yt-dlp` for supported video sites and falls back to plain HTTP(S) for direct media links such as `.mp4`, `.mov`, `.webm`, `.mp3`, or `.m4a`. DRM-protected streams, paywalled content, or sources that require bypassing access controls are not supported. Downloaded files are saved to the configured output directory. Audio extraction and some video merges require FFmpeg, so keep the FFmpeg path configured.
-
-If no output folder has been selected yet, the GUI asks for it before starting the download.
-
-## Quick Convert
-
-Right-click any item in the queue to open a focused conversion panel. The panel shows only the selected file, its media type, and the matching output formats.
-
-- Image files show formats such as `jpg`, `png`, `webp`, `bmp`, and `tiff`.
-- Video files show formats such as `mp4`, `mkv`, `webm`, `mov`, `avi`, and `gif`.
-- Audio files show formats such as `mp3`, `m4a`, `aac`, `wav`, `flac`, and `opus`.
-- Subtitle files show formats such as `srt`, `ass`, and `vtt`.
-- Text/document files show formats such as `txt`, `md`, `html`, `pdf`, `docx`, `xlsx`, `pptx`, `odt`, `ods`, and `odp`.
-
-Use `Save format` to store the format as a per-file override, or `Convert this file` to save the override and run only that file.
-
-## Text Conversion
-
-Text and document files are first-class queue items. Supported input extensions include:
-
-```text
-.txt .md .markdown .html .htm .json .csv .tsv .xml .yaml .yml .log .rtf
-.pdf .docx .docm .dotx .doc .odt .ott
-.xlsx .xlsm .xltx .xls .ods .ots
-.pptx .pptm .ppsx .potx .ppt .odp .otp
-```
-
-Supported output formats are:
-
-```text
-txt md html json csv tsv rtf pdf docx doc odt xlsx xls ods pptx ppt odp
-```
-
-Text/document conversion uses Python document handlers instead of FFmpeg, so a text-only queue can run even when FFmpeg is not configured. `docx`, `xlsx`, `pptx`, `odt`, `ods`, and `odp` are generated as real document packages; legacy `doc`, `xls`, and `ppt` use compatibility fallbacks.
-
-## Device Profiles
-
-The Settings sidebar includes a Device profiles screen. Profiles apply practical container, video codec, audio codec, CRF, and preset defaults for targets such as:
-
-- iPhone 14/15/16, iPad Pro, Apple TV 4K HDR, and Android phones.
-- Samsung TV, PlayStation 5, Xbox Series X, Chromecast / Fire TV, and Steam Deck.
-- GoPro and DJI import workflows.
-- DVD-compatible MPEG-2 output and Blu-ray-oriented H.264/AC3 output.
-
-Profiles intentionally override generic performance defaults. Leave the profile as `None` when you want fully manual codec/CRF/preset control.
-
-## Smart Convert
-
-The Settings sidebar includes a Smart Convert screen. When enabled, each video can be analyzed before conversion and the app can:
-
-- Detect likely content type: automatic, live action, animation, or screencast.
-- Recommend codec, CRF, and preset based on resolution, FPS, HDR hints, target container, and quality target.
-- Avoid unnecessary re-encoding when the source is already compatible, using remux where possible.
-- Use two-pass encoding when a target output size is set.
-- Run a post-conversion corruption check with FFmpeg.
-- Measure output quality with SSIM or VMAF.
-- Generate short A/B sample files with several CRF values for quick visual comparison.
-
-VMAF depends on an FFmpeg build that includes the `libvmaf` filter. If that filter is missing, conversion still finishes and the app logs a warning for the metric step.
-
-## Editor, Subtitles, And Privacy
-
-The new side tabs expose FFmpeg-backed controls:
-
-- Video editor: deinterlace, deshake stabilization, `hqdn3d`/`nlmeans` denoise, brightness, contrast, saturation, gamma, and `.cube`/`.3dl` LUT files.
-- Subtitle tools: millisecond offset for subtitle conversion plus burn-in style controls for font, size, color, outline, shadow, and alignment.
-- Privacy / Security: manual `x:y:w:h` blur rectangles, metadata sanitization, MD5/SHA256 sidecar generation, and secure-delete of the original after a successful conversion.
-
-Manual blur regions use FFmpeg `delogo`. Automatic face/body/license-plate detection, profanity detection, OCR subtitles, translation APIs, and speaker diarization are not bundled yet; those need separate ML/API integrations.
-
-## Cloud Integration
-
-Cloud upload is implemented through `rclone copy` after a successful conversion. Configure credentials and remotes yourself in `rclone` or the provider tool, then set:
-
-- Provider label.
-- rclone executable path.
-- Remote path such as `drive:converted`, `s3:bucket/path`, or `sftp:server/out`.
-
-The app does not store provider secrets directly.
-
-## Commercial License
-
-The Settings sidebar includes a Commercial License screen for paid/commercial builds:
-
-- Activate a license key or load an offline JSON license file.
-- Start a local trial mode for Pro features.
-- View license status, plan, holder, expiry, trial time, and commercial export availability.
-- Enable paid auto-update checks from a configured manifest URL.
-
-Pro-gated features include AI blur, batch automation, cloud upload, and advanced JSON/HTML reports. Watermark-free commercial export is blocked unless an active Commercial license is present. AI blur is license-gated here, but the automatic ML detector itself still requires a separate integration.
-
-Production licensing must set `MEDIA_CONVERTER_LICENSE_SECRET` during paid-build packaging. The development fallback
-secret is disabled unless `MEDIA_CONVERTER_ALLOW_DEV_LICENSE_SECRET=1` is set.
-
-## Reports And History
-
-Conversion history is stored locally and can be rerun or reused for settings. The latest run can be exported from Analytics as CSV, JSON, or HTML.
-
-## Batch Workflow Automation
-
-The FFmpeg / Watch settings panel includes automation controls for longer unattended runs:
-
-- Watch-folder auto-convert starts conversion for newly detected stable files.
-- Folder rules can apply per-file overrides such as `Downloads -> mp4`, `Camera -> h265 priority=3`, or `Audio -> mp3`.
-- Scheduler modes can start queued work by time, by low CPU/GPU load, or by both conditions.
-- Completion actions can do nothing, open the output folder, sleep, or schedule shutdown.
-- Notifications can be sent through desktop tray notifications, a generic webhook, Discord webhook, or Telegram bot/chat.
-- Output preview can be copied or exported as `rename-preview.csv` before conversion.
-
-## CLI Mode
-
-CLI mode uses `--cli` and does not initialize PySide or QML.
+The source application does **not** search the system PATH by default. You can select explicit paths in settings, set environment variables, or opt into PATH lookup:
 
 ```bash
-python main.py --cli -i input.mov -o ./converted --profile Balanced
+# macOS / Linux: explicit paths
+export MEDIA_CONVERTER_FFMPEG="/path/to/bin/ffmpeg"
+export MEDIA_CONVERTER_FFPROBE="/path/to/bin/ffprobe"
+python main.py
+
+# Alternatively, allow lookup in PATH
+export MEDIA_CONVERTER_ALLOW_PATH_BINARIES=1
 ```
 
-Examples:
+```powershell
+# Windows PowerShell: explicit paths
+$env:MEDIA_CONVERTER_FFMPEG = 'C:\Tools\ffmpeg\bin\ffmpeg.exe'
+$env:MEDIA_CONVERTER_FFPROBE = 'C:\Tools\ffmpeg\bin\ffprobe.exe'
+.\.venv\Scripts\python.exe main.py
+```
+
+Verify the chosen executables with `-version`. For burned-in subtitles, the FFmpeg build must include the `subtitles` filter and libass support. The macOS CI configuration uses `ffmpeg-full` for this purpose.
+
+### Optional speech runtime
+
+The model manager can set up the managed runtime and download a model. To install OpenAI Whisper directly into an activated source environment instead:
 
 ```bash
-python main.py --cli -i a.mov b.mov -o ./out --preset "Discord - Compact MP4"
-python main.py --cli -i input.mp4 -o ./out --profile "Small file" --target-size-mb 25
-python main.py --cli -i input.mov -o ./out --settings-json settings.json --language en
-python main.py --cli -o ./downloads --download-url "https://youtu.be/VIDEO_ID" --download-mode video
-python main.py --cli -o ./downloads --download-url "https://youtu.be/VIDEO_ID" --download-mode audio --download-audio-format mp3
-python main.py --cli -o ./downloads --download-url "https://youtu.be/PLAYLIST_ID" --download-playlist --download-quality 720p
+python -m pip install -r requirements-whisper.txt
 ```
 
-Useful CLI arguments:
+For Faster Whisper, install `faster-whisper` in the runtime you intend to use, then select that engine in the model manager. Verify the runtime and device before starting a long transcription. Installing the base requirements alone does not install speech engines or model weights.
 
-- `--preset`: use a saved GUI preset.
-- `--settings-json`: load GUI-compatible settings from JSON.
-- `--profile`: choose `Quality`, `Balanced`, `Fast`, or `Small file`.
-- `--target-size-mb`: estimate bitrate for a target output size.
-- `--cpu-load-limit` and `--gpu-load-limit`: delay new tasks when system load is above the limit.
-- `--ffmpeg` and `--ffprobe`: set explicit binary paths.
-- `--language`: choose `uk`, `en`, `pl`, or `de`.
-- `--download-url`: download a video/source URL before conversion, or download only when no `--input` is provided.
-- `--download-mode`: choose `video` or `audio`.
-- `--download-quality`: choose `best`, `1080p`, `720p`, or `audio_only`.
-- `--download-audio-format`: choose `mp3`, `m4a`, `opus`, `wav`, `flac`, or `aac`.
-- `--download-playlist`: allow playlist downloads.
-- `--download-subtitles`: download subtitles next to the media.
-- `--download-cookies`: use a Netscape `cookies.txt` file.
-- `--download-rate-limit-kbps`: limit download speed in KB/s; `0` means unlimited.
-- `--download-only`: download URL(s) and exit without conversion.
+## First conversion
 
-## Localization
+1. Choose a writable output folder.
+2. Add one or more source files, such as MOV videos.
+3. Select MP4 as the output video format and choose a profile such as `Balanced`.
+4. Check trimming, resolution, audio, and collision settings. Use Fast Copy only when the streams are compatible and video filtering is unnecessary.
+5. Start the selected item or the queue and follow its progress.
+6. Open the output file and inspect it. If a task fails, review its error and the application log.
 
-Translations are stored in:
+## Formats and compatibility
 
-```text
-ui/i18n/
-  uk.json
-  en.json
-  pl.json
-  de.json
-```
+These are representative formats, not a promise that every codec, document structure, or filter is supported by every installation.
 
-`ui/qml/App/I18n.qml` reads translations through the backend. Python services use the same dictionaries through `app/localization.py`, so key logs, status messages, and dialogs can follow the selected UI language.
+| Category | Examples | Important limits |
+| --- | --- | --- |
+| Video | MP4, MOV, MKV, WEBM, AVI, GIF | Container/codec compatibility and installed FFmpeg encoders matter. ProRes requires MOV or MKV. |
+| Images | JPG, PNG, WEBP, BMP, TIFF | Transparency and quality depend on the destination format. |
+| Audio | MP3, M4A, AAC, WAV, FLAC, OPUS | Repeated lossy conversion can reduce quality. |
+| Subtitles | SRT, ASS, VTT | Format conversion can discard styling. |
+| Documents | TXT, MD, HTML, PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP | Text-oriented conversion; legacy DOC/XLS/PPT paths are simplified. |
+| Ebooks | EPUB, FB2, MOBI | Results depend on book structure and extractable content. |
 
-## Project Structure
+## Hardware acceleration and resource management
 
-```text
-mov_to_mp4_batch_gui/
-  main.py                 # GUI entry point
-  cli.py                  # CLI mode for automation
-  requirements.txt
-  requirements-dev.txt
-  pytest.ini
-  app/                    # config, models, presets, settings
-  services/               # FFmpeg, conversion, text conversion, URL download, transcription, validation
-  ui/                     # Python backend and QML UI
-    backend.py
-    i18n/
-    qml/
-      App/
-      components/
-      Main.qml
-  utils/                  # file helpers, formatting, persisted state
-  assets/                 # icons and images
-  tests/                  # automated tests
-  scripts/                # helper/build scripts
-  build/                  # PyInstaller spec
-```
+Hardware encoders are probed through real encoding attempts rather than advertised solely because their names appear in FFmpeg. Supported paths include Apple VideoToolbox, NVIDIA NVENC/CUDA, Intel QSV, AMD AMF, and Linux VA-API when the device, drivers, codec, and build are compatible.
 
-## Performance Profiles
+Compatible inputs can use hardware decoding and supported GPU scaling on CUDA, QSV, and VA-API paths. Unsupported filters use CPU processing. An enabled CPU fallback can recover from hardware failures, but probing one frame cannot establish compatibility with every source profile.
 
-Profiles set practical defaults for CRF, preset, codec, and hardware encoder behavior:
+The adaptive scheduler reserves estimated CPU threads, RAM, hardware encoding sessions, and disk slots before admitting work. It coordinates concurrent FFmpeg processes with their internal thread budgets. The concurrency setting is an upper bound, not a guarantee that all slots will run simultaneously.
 
-- `Quality`: lower CRF and slower preset for better visual quality.
-- `Balanced`: default profile for everyday work.
-- `Fast`: faster encoding.
-- `Small file`: more aggressive size reduction.
+Successful measured workloads refine memory and initial timing estimates after enough comparable samples. Reservations and estimates are not hard operating-system quotas. GPU load is shown as unknown when no telemetry provider is available; missing telemetry is not treated as zero utilization. Disk slots are conservative limits rather than per-drive throughput measurements.
 
-When `target_size_mb` is set, the command builder estimates bitrate from duration and desired size. Audio-only output can also use estimated bitrate when duration is known.
+## Data, recovery, and privacy
 
-## Analytics
+| Platform | Default application data folder |
+| --- | --- |
+| macOS | `~/Library/Application Support/MediaConverter` |
+| Windows | `%USERPROFILE%\AppData\Local\MediaConverter` |
+| Linux | `~/.local/share/MediaConverter` |
+| Portable package | `data` beside the executable when `portable.ini` is present. |
 
-The QML analytics screen includes:
+Set `MEDIA_CONVERTER_PORTABLE_DIR` to a writable root to isolate application data in its `data` subfolder. Back up settings, presets, queue state, and history together when moving an installation.
 
-- Throughput timeline.
-- Top completed files by processing time.
-- Codec distribution chart.
-- CPU, GPU, and RAM timeline.
+Queue items have persistent identities, and a SQLite journal records task transitions and output publication. Recovery checks source/output filesystem identities and output size. It does not perform a full content hash or decode of every recovered file, and interrupted multi-output or post-processing jobs may need attention.
 
-CPU and RAM metrics use `psutil`. GPU metrics use `nvidia-smi` when available.
+A shared disk cache stores previews, waveforms, thumbnails, proxies, and probe metadata. Keys account for source identity, processing parameters, and tool identity. Its default artifact quota is 2 GiB with expiration after 30 days of inactivity. Active readers are protected from eviction, so the quota can be temporarily exceeded. Cache clearing in the system details dialog removes managed cache entries; previews may then need regeneration.
 
-## Tests
+Diagnostic export writes a local support report with versions, hardware capabilities, cache totals, sanitized plan summaries, and categorized failures. It excludes source paths, filenames, raw commands, raw logs, hostnames, and secrets, and is not automatically uploaded. Downloads, model installation, updates, and enabled cloud features make their own network requests.
+
+## Command-line interface
+
+Run CLI commands from the prepared Python environment. Media jobs also need configured FFmpeg and FFprobe. Add `--language en` for English CLI messages.
 
 ```bash
-python -m pytest -q
+# Convert one file
+python main.py --cli -i input.mov -o ./converted --profile Balanced --language en
+
+# Convert several files and add an index on output name collisions
+python main.py --cli -i first.mov second.mov -o ./converted --collision-policy index
+
+# Aim for an 8 MB video, using explicit tool paths
+python main.py --cli -i input.mov -o ./converted --target-size-mb 8 \
+  --ffmpeg /path/to/ffmpeg --ffprobe /path/to/ffprobe
+
+# Reuse a saved preset or GUI-compatible settings JSON
+python main.py --cli -i input.mov -o ./converted --preset "My preset"
+python main.py --cli -i input.mov -o ./converted --settings-json settings.json
+
+# Download audio without a conversion-queue run
+python main.py --cli --download-url "https://example.com/video" \
+  --download-mode audio --download-audio-format mp3 --download-only -o ./downloads
+
+# Show all arguments
+python main.py --cli --help
 ```
 
-Current expected result:
+The URL above is a placeholder: replace it with a supported media URL. In PowerShell, put multiline examples on one line or use PowerShell's continuation syntax. Additional arguments control playlists, downloaded subtitles, cookies, rate limits, and CPU/GPU admission thresholds.
 
-```text
-124 passed, 3 subtests passed
-```
+## Development
 
-## Build
+### Project structure
 
-The PyInstaller spec is in `build/media_converter.spec` and includes QML, translations, and assets.
+| Directory or entry point | Responsibility |
+| --- | --- |
+| `main.py`, `cli.py` | GUI startup, self-test entry point, and command-line workflows. |
+| `app/` | Models, settings, localization, paths, constants, and profiles. |
+| `services/` | Conversion plans, FFmpeg commands, scheduling, monitoring, cache, task recovery, editing, downloads, and integrations. |
+| `ui/backend_components/` | Python backend components exposed to QML through the Qt facade. |
+| `ui/qml/` | Screens, reusable controls, timeline, themes, and application window. |
+| `utils/` | Shared process, persistence, locking, and utility code. |
+| `native/` | Optional Rust/PyO3 text-processing extension with Python fallbacks. |
+| `tests/` | Unit, QML, service, and actual FFmpeg integration tests. |
+| `scripts/`, `build/` | Packaging, profiling, benchmarks, smoke verification, and screenshot tools. |
+| `assets/`, `docs/images/` | Application artwork and README screenshots. |
+
+### Checks
+
+Install development dependencies in the same environment:
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-dev.txt
-python scripts/find_ffmpeg.py
-python scripts/build_pyinstaller.py
+python -m ruff check app services ui utils tests cli.py main.py
+python -m compileall -q app services ui utils tests
+python -m pytest -q --tb=short
 ```
 
-Or on Windows with Python bootstrap and explicit dependency install:
+Tests isolate application data in a temporary portable root. On headless systems, set `QT_QPA_PLATFORM=offscreen` and `QT_QUICK_CONTROLS_STYLE=Basic`. Configure `MEDIA_CONVERTER_TEST_FFMPEG` for real encoder tests. Set `MEDIA_CONVERTER_REQUIRE_FFMPEG_TESTS=1` to require those integrations; CI enables this and must provide subtitle-capable FFmpeg. Some optional or platform-specific checks can still be skipped.
 
-```bat
-build_exe_windows.cmd
+When changing the Qt backend, preserve property notifications and signal contracts. For QML startup failures, inspect the first unresolved component or property in the error chain. Localization changes should keep all four language dictionaries consistent.
+
+### Optional Rust extension
+
+With a Rust toolchain installed, build the extension in the activated environment:
+
+```bash
+python -m pip install 'maturin>=1.9,<2'
+maturin develop --release --manifest-path native/Cargo.toml
 ```
 
-The PyInstaller build output is created in:
+The extension accelerates selected RTF processing and PDF literal decoding. Python fallbacks remain available if it cannot be imported. Set `MEDIA_CONVERTER_DISABLE_NATIVE=1` to use those fallbacks explicitly. It does not replace FFmpeg or accelerate encoding by itself.
 
-```text
-dist/MediaConverter.exe
+### Portable packaging and smoke checks
+
+Build on the operating system you intend to target, with matching FFmpeg and FFprobe binaries in one directory:
+
+```bash
+python scripts/build_pyinstaller.py --portable --ffmpeg-dir /path/to/ffmpeg/bin
+python scripts/verify_package.py dist/MediaConverter/MediaConverter --report package-smoke.json
 ```
 
-The built `.exe` includes the Python runtime, so end users do not need Python installed to run it.
+On Windows, use `dist\MediaConverter\MediaConverter.exe` for verification. A portable build includes `portable.ini` and the media tools. Package verification clears external tool overrides, loads the real QML, imports generated media, checks probing and conversion, and exercises pause/resume and cancellation cleanup in an isolated data directory.
+
+CI separates required package uploads from diagnostic reports, including JUnit test results. Headless verification does not replace native desktop checks, real GPU testing, distribution signing, or macOS notarization.
+
+### Profiling and benchmarks
+
+```bash
+python scripts/profile_pipeline.py --ffmpeg /path/to/ffmpeg --repeats 5
+python scripts/performance_suite.py --ffmpeg /path/to/ffmpeg --report performance.json --repeats 3
+python scripts/performance_suite.py --ffmpeg /path/to/ffmpeg --write-baseline baseline.json
+python scripts/performance_suite.py --ffmpeg /path/to/ffmpeg --baseline baseline.json --max-regression 1.5
+```
+
+The performance suite covers a synthetic 4K encode, process peak memory, large queue imports, progress updates, previews, waveforms, and QML startup. Optional speech benchmarks accept `--speech-audio` and `--speech-model`; they require an installed runtime and downloaded model and do not download models automatically.
+
+Baseline comparison requires a matching machine, tool identity, and workload schema. Pull-request CI runs the base revision on the same runner when a comparable suite exists. Missing or incompatible baselines are reported explicitly; timings vary with hardware contention.
+
+Use `scripts/capture_readme.py` to refresh screenshots with demonstration files and inspect them before publication. The documentation banner is SVG artwork. Screenshot fixtures use generated text/subtitles and the project's logo, without private media. The current logo is `assets/app-logo-v2.png`, originally generated with an image-generation tool; artwork and screenshots are covered by the repository license.
+
+## Troubleshooting
+
+| Problem | What to check |
+| --- | --- |
+| `No module named PySide6` | Install `requirements.txt` with the interpreter used to launch the application. |
+| FFmpeg works in a terminal but is not found in the app | Select its full path, set the explicit environment variables, or enable PATH lookup. |
+| Subtitles fail to render | Check that the selected FFmpeg includes the `subtitles` filter/libass and that the subtitle file is readable. |
+| Hardware encoding fails | Verify driver and encoder support; try CPU encoding or enable the supported fallback. |
+| A conversion will not start | Check the output folder, permissions, free space, preflight messages, and resource thresholds. |
+| Whisper fails or runs on an unexpected device | Verify the selected runtime, installed model, engine/device pairing, and available memory in the model manager. |
+| `QQmlApplicationEngine failed to load component` | Inspect the first relevant error in the QML chain and run the QML loading tests. |
+| Portable package verification fails | Confirm that both bundled media executables run and that the package has a writable data location. |
+
+Report reproducible issues through [GitHub Issues](https://github.com/Sergiy-Galenko/mov_to_mp4_batch_gui/issues). Include the OS, application/Python version, reproduction steps, and relevant error text. Review attached reports and logs before sharing; do not include license keys, cookies, or private media.
+
+## License
+
+The project uses a **Source-Available Non-Commercial License**. The source is available for inspection and permitted non-commercial use under [LICENSE](LICENSE).
+
+| Use | Terms |
+| --- | --- |
+| Personal files, education, testing, and non-commercial research | Permitted subject to LICENSE. |
+| Non-commercial modification and redistribution | Retain license/copyright notices and identify modifications as required by LICENSE. |
+| Business workflows, paid client work, sales, or commercial product integration | Requires a separate purchased commercial license. |
+| Third-party libraries, tools, and codecs | Their own licenses also apply. |
+
+This explanation does not replace the license text. An in-app Pro trial does not independently grant commercial rights. Contact the [repository maintainer](https://github.com/Sergiy-Galenko) about commercial licensing.

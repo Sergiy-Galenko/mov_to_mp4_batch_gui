@@ -1,14 +1,14 @@
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from PySide6.QtCore import QMetaObject, QObject, QPointF, QSettings, Qt, QUrl
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QEvent, QMetaObject, QObject, QPointF, QSettings, Qt, QUrl
+from PySide6.QtGui import QColor, QMouseEvent, QPalette
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -22,7 +22,6 @@ class QmlLoadTest(unittest.TestCase):
     def setUpClass(cls):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
-        QQuickStyle.setStyle("Basic")
         cls._app = QApplication.instance() or QApplication([])
         cls._app.setOrganizationName("MediaConverterTests")
         cls._app.setApplicationName("MediaConverterTests")
@@ -30,6 +29,72 @@ class QmlLoadTest(unittest.TestCase):
         import tempfile
 
         QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, tempfile.gettempdir())
+
+    def wait_until(self, condition, message):
+        deadline = time.monotonic() + 5
+        while not condition() and time.monotonic() < deadline:
+            QTest.qWait(10)
+        self.assertTrue(condition(), message)
+
+    def test_presets_full_form_and_target_size_estimate(self):
+        from app.models import MediaInfo
+        from services.preset_manager import PresetManager
+
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        with tempfile.TemporaryDirectory() as temporary:
+            backend = Backend()
+            backend.settings_manager.save = Mock()
+            backend.preset_manager = PresetManager(Path(temporary) / "presets.json")
+            source = Path(temporary) / "demo.mp4"
+            source.write_bytes(b"demo")
+            backend.queue_model.set_items(
+                [TaskItem(source, "video", probe_data=MediaInfo(duration=180, width=1920, height=1080, audio_streams=1, fps=30))]
+            )
+            engine = QQmlApplicationEngine()
+            engine.addImportPath(str(qml_dir))
+            engine.rootContext().setContextProperty("backend", backend)
+            warnings = []
+            engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
+            try:
+                engine.load(QUrl.fromLocalFile(str(qml_dir / "Main.qml")))
+                self.assertTrue(engine.rootObjects(), warnings)
+                window = engine.rootObjects()[0]
+                QMetaObject.invokeMethod(
+                    window, "openSidebarSection", Q_ARG("QVariant", 5), Q_ARG("QVariant", "core"), Q_ARG("QVariant", -1)
+                )
+                QTest.qWait(100)
+                field = window.findChild(QObject, "targetSizeField")
+                field.setProperty("text", "8")
+                QMetaObject.invokeMethod(field, "editingFinished")
+                QTest.qWait(200)
+                settings = QMetaObject.invokeMethod(window, "collectSettings", Q_RETURN_ARG("QVariant"))
+                if hasattr(settings, "toVariant"):
+                    settings = settings.toVariant()
+                backend.preset_manager.save("Full form", settings)
+                backend._refresh_presets()
+                self.assertIn("Full form", backend.customPresetNames)
+                self.assertNotIn("Full form", backend.builtinPresetNames)
+                saved = backend.preset_manager.get("Full form")
+                self.assertEqual(saved["target_size_mb"], 8)
+                self.assertEqual(saved["editor_brightness"], "")
+                label = window.findChild(QObject, "targetSizeEstimateLabel")
+                for _ in range(20):
+                    if "142" in label.property("text"):
+                        break
+                    QTest.qWait(50)
+                self.assertIn("142", label.property("text"))
+                button = window.findChild(QObject, "targetSizeResizeButton")
+                self.assertTrue(button.property("visible"))
+                self.assertTrue(QMetaObject.invokeMethod(button, "clicked"))
+                settings = QMetaObject.invokeMethod(window, "collectSettings", Q_RETURN_ARG("QVariant"))
+                if hasattr(settings, "toVariant"):
+                    settings = settings.toVariant()
+                self.assertEqual(settings["resize_w"], "640")
+                self.assertEqual(settings["resize_h"], "360")
+                self.assertFalse([warning for warning in warnings if "ReferenceError" in warning or "TypeError" in warning])
+                self.assertEqual(backend.targetSizeEstimate({"target_size_mb": "inf"}), {})
+            finally:
+                backend.shutdown()
 
     def test_main_qml_loads(self):
         project_root = Path(__file__).resolve().parents[1]
@@ -58,6 +123,59 @@ class QmlLoadTest(unittest.TestCase):
         )
         backend.settings_manager.save = Mock()
         backend.shutdown()
+
+    def test_whisper_manager_selection_progress_errors_and_reopening(self):
+        from services.whisper_model_manager import WhisperModelManager
+
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        with tempfile.TemporaryDirectory() as temporary:
+            backend = Backend()
+            backend.settings_manager.save = Mock()
+            backend.whisper_model_manager.shutdown()
+            backend.whisper_model_manager = WhisperModelManager(Path(temporary))
+            engine = QQmlApplicationEngine()
+            engine.addImportPath(str(qml_dir))
+            engine.rootContext().setContextProperty("backend", backend)
+            warnings = []
+            engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
+            try:
+                engine.load(QUrl.fromLocalFile(str(qml_dir / "Main.qml")))
+                self.assertTrue(engine.rootObjects())
+                root = engine.rootObjects()[0]
+                manager = root.findChild(QObject, "whisperModelManager")
+                self.assertIsNotNone(manager)
+                self.assertTrue(QMetaObject.invokeMethod(manager, "open"))
+                QTest.qWait(80)
+                self.assertTrue(manager.property("visible"))
+                self.assertEqual(root.findChild(QObject, "whisperModelsList").property("count"), 6)
+                self.assertTrue(QMetaObject.invokeMethod(manager, "chooseModel", Q_ARG("QVariant", "tiny")))
+                self.assertTrue(QMetaObject.invokeMethod(manager, "chooseDevice", Q_ARG("QVariant", "cpu")))
+                for _ in range(20):
+                    QTest.qWait(50)
+                    if backend._last_settings_map.get("subtitle_device") == "cpu":
+                        break
+                self.assertEqual(manager.property("selectedModel"), "tiny")
+                self.assertEqual(manager.property("selectedDevice"), "cpu")
+                self.assertEqual(backend._last_settings_map["subtitle_model"], "tiny")
+                self.assertEqual(backend._last_settings_map["subtitle_device"], "cpu")
+                # A zero-percent event is still an active transfer, not completion.
+                manager.setProperty("activeDownloadingModel", "tiny")
+                backend.whisperDownloadProgress.emit("tiny", 0.0, "tiny.pt")
+                QTest.qWait(20)
+                self.assertTrue(manager.property("downloading"))
+                QMetaObject.invokeMethod(manager, "close")
+                backend.whisper_model_manager._states[("tiny", "whisper")] = {
+                    "state": "error",
+                    "error": "Checksum mismatch",
+                    "progress": 0.0,
+                }
+                QMetaObject.invokeMethod(manager, "open")
+                QTest.qWait(80)
+                self.assertFalse(manager.property("downloading"))
+                self.assertEqual(manager.property("selectedDevice"), "cpu")
+                self.assertFalse([warning for warning in warnings if "WhisperModelManagerModal.qml" in warning], warnings)
+            finally:
+                backend.shutdown()
 
     def test_queue_views_search_and_status_filter_remain_in_sync(self):
         qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
@@ -153,12 +271,13 @@ QueueItemCard {
                 root.setProperty("visibility", 2)
                 root.setWidth(1100)
                 root.setHeight(800)
+                QMetaObject.invokeMethod(root.findChild(QObject, "whatsNewPopup"), "close")
                 self.assertTrue(QMetaObject.invokeMethod(root, "openAppearance"))
                 QTest.qWait(100)
                 editor = root.findChild(QObject, "themeEditorDialog")
                 self.assertIsNotNone(editor)
                 self.assertTrue(editor.property("visible"))
-                self.assertEqual(root.property("color").name(), "#0c0c0c")
+                self.assertEqual(root.property("color").name(), backend.themePalette["windowBackground"].lower())
 
                 def find_visual(item, name):
                     if item.objectName() == name:
@@ -197,11 +316,12 @@ QueueItemCard {
                 self.assertTrue(backend.loadNamedTheme("Test colors"))
                 QTest.qWait(30)
                 self.assertEqual(root.property("color").name(), "#112233")
+                self.wait_until(lambda: not picker.property("visible"), "Color picker should close before sending keys")
                 root.requestActivate()
-                QTest.qWait(30)
+                self.assertTrue(QTest.qWaitForWindowActive(root, 5000))
                 QTest.keyClick(root, Qt.Key_0, Qt.ControlModifier | Qt.AltModifier)
-                QTest.qWait(30)
-                self.assertEqual(root.property("color").name(), "#0c0c0c")
+                self.wait_until(lambda: not backend.themeColorOverrides, "Theme recovery shortcut should reset overrides")
+                self.assertEqual(root.property("color").name(), backend.themePalette["windowBackground"].lower())
                 self.assertEqual(backend.themeColorOverrides, {})
             finally:
                 backend.shutdown()
@@ -210,18 +330,22 @@ QueueItemCard {
         qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
         engine = QQmlApplicationEngine()
         engine.addImportPath(str(qml_dir))
-        engine.loadData(b'''
+        engine.loadData(
+            b"""
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import "components"
 ApplicationWindow {
-    visible: true; width: 640; height: 160
+    visible: true; width: 640; height: 200
     property int activationCount: 0
     PrimaryButton { objectName: "primaryAction"; x: 20; y: 50; text: "Convert"; iconName: "play"; onClicked: activationCount++ }
     SecondaryButton { objectName: "disabledAction"; x: 220; y: 50; text: "Unavailable"; enabled: false; onClicked: activationCount++ }
     GhostButton { objectName: "toggleAction"; x: 420; y: 50; text: "Preview"; checkable: true }
+    AppSwitch { objectName: "featureSwitch"; x: 20; y: 120; width: 260; text: "Enable feature" }
 }
-''', QUrl.fromLocalFile(str(qml_dir / "ButtonInteractionTest.qml")))
+""",
+            QUrl.fromLocalFile(str(qml_dir / "ButtonInteractionTest.qml")),
+        )
         self.assertTrue(engine.rootObjects())
         window = engine.rootObjects()[0]
         try:
@@ -252,20 +376,212 @@ ApplicationWindow {
             primary.setProperty("enabled", False)
             QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, center(primary))
             self.assertEqual(window.property("activationCount"), 2)
+            feature_switch = window.findChild(QQuickItem, "featureSwitch")
+            QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, center(feature_switch))
+            self.assertTrue(feature_switch.property("checked"))
+            feature_switch.forceActiveFocus()
+            QTest.keyClick(window, Qt.Key_Space)
+            self.assertFalse(feature_switch.property("checked"))
+            feature_switch.setProperty("enabled", False)
+            QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, center(feature_switch))
+            self.assertFalse(feature_switch.property("checked"))
         finally:
             window.close()
+
+    def test_settings_navigation_preserves_values_and_history(self):
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        with tempfile.TemporaryDirectory() as temporary:
+            backend = Backend()
+            backend.settings_manager.save = Mock()
+            backend.theme_manager = ThemeManager(Path(temporary) / "theme.json")
+            engine = QQmlApplicationEngine()
+            engine.addImportPath(str(qml_dir))
+            engine.rootContext().setContextProperty("backend", backend)
+            warnings = []
+            engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
+            try:
+                engine.load(QUrl.fromLocalFile(str(qml_dir / "Main.qml")))
+                self.assertTrue(engine.rootObjects(), warnings)
+                window = engine.rootObjects()[0]
+                window.setProperty("visibility", 2)
+                window.setWidth(1240)
+                window.setHeight(840)
+                QMetaObject.invokeMethod(window.findChild(QObject, "whatsNewPopup"), "close")
+
+                def open_page(target):
+                    self.assertTrue(
+                        QMetaObject.invokeMethod(
+                            window, "openSidebarSection", Q_ARG("QVariant", 5), Q_ARG("QVariant", target), Q_ARG("QVariant", -1)
+                        )
+                    )
+                    page = window.findChild(QQuickItem, "settingsPage_" + target)
+                    self.wait_until(lambda: page.isVisible() and page.width() > 0, f"Settings page {target} should be laid out")
+                    return page
+
+                open_page("core")
+                field = window.findChild(QObject, "targetSizeField")
+                field.setProperty("text", "125")
+                open_page("smart_convert")
+                switch = window.findChild(QQuickItem, "smartConvertSwitch")
+                switch.setProperty("checked", True)
+                pages = [
+                    "output",
+                    "video",
+                    "video_editor",
+                    "audio_subtitles",
+                    "subtitle_tools",
+                    "images_sheets",
+                    "watermark_text",
+                    "metadata_hooks",
+                    "privacy_security",
+                    "cloud_integration",
+                    "ffmpeg_watch",
+                    "commercial_license",
+                ]
+                for target in pages:
+                    with self.subTest(page=target):
+                        current = open_page(target)
+                        for page in window.findChildren(QQuickItem):
+                            if page.objectName().startswith("settingsPage_") and page is not current:
+                                self.assertFalse(page.isVisible(), page.objectName())
+                viewport = window.findChild(QObject, "navigationScroll").property("contentItem")
+                self.wait_until(lambda: viewport.property("contentY") > 0, "Last section must scroll into view")
+                open_page("smart_convert")
+                self.assertTrue(switch.property("checked"))
+                open_page("core")
+                self.assertEqual(field.property("text"), "125")
+                cursor = window.property("navigationCursor")
+                open_page("core")
+                self.assertEqual(window.property("navigationCursor"), cursor, "Reopening a page must not duplicate history")
+                self.assertTrue(QMetaObject.invokeMethod(window, "navigateHistory", Q_ARG("QVariant", -1)))
+                self.assertEqual(window.property("pendingSettingsTarget"), "smart_convert")
+                self.assertTrue(window.property("canNavigateForward"))
+                self.assertTrue(QMetaObject.invokeMethod(window, "navigateHistory", Q_ARG("QVariant", 1)))
+                self.assertEqual(window.property("pendingSettingsTarget"), "core")
+                QMetaObject.invokeMethod(window, "navigateHistory", Q_ARG("QVariant", -1))
+                open_page("output")
+                self.assertFalse(window.property("canNavigateForward"), "New page replaces the forward branch")
+                self.assertEqual(window.findChild(QObject, "languageMenu").property("count"), 4)
+                window.requestActivate()
+                search = window.findChild(QQuickItem, "sidebarSearchField")
+                search.forceActiveFocus()
+                search.setProperty("text", "audio")
+                QTest.qWait(60)
+                self.assertTrue(search.property("activeFocus"), "Search results must not steal typing focus")
+                QTest.keyClick(window, Qt.Key_Return)
+                self.assertEqual(window.property("pendingSettingsTarget"), "audio_subtitles")
+                search.setProperty("text", "")
+                window.setProperty("sidebarCollapsed", True)
+                QTest.qWait(60)
+                self.assertLess(window.findChild(QQuickItem, "appSidebar").width(), 100)
+                self.assertFalse(warnings, warnings)
+            finally:
+                backend.shutdown()
 
     def test_media_editing_components_load(self):
         qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
         engine = QQmlApplicationEngine()
         engine.addImportPath(str(qml_dir))
-        for name in ("ABCompareSlider", "TimelineTrimSlider", "CropOverlay"):
+        for name in (
+            "ABCompareSlider",
+            "TimelineTrimSlider",
+            "CropOverlay",
+            "InOutMarker",
+            "Timeline",
+            "MontageAudioMeter",
+            "MontageMediaPool",
+            "MontageDualTimeline",
+        ):
             with self.subTest(component=name):
                 component = QQmlComponent(engine, QUrl.fromLocalFile(str(qml_dir / "components" / f"{name}.qml")))
                 self.assertFalse(component.isError(), "\n".join(error.toString() for error in component.errors()))
                 item = component.create()
                 self.assertIsNotNone(item)
                 item.deleteLater()
+
+    def test_montage_editor_dialog_loads(self):
+        qml_dir = Path(__file__).resolve().parents[1] / "ui" / "qml"
+        backend = Backend()
+        backend.settings_manager.save = Mock()
+        try:
+            engine = QQmlApplicationEngine()
+            engine.addImportPath(str(qml_dir))
+            engine.rootContext().setContextProperty("backend", backend)
+            component = QQmlComponent(engine, QUrl.fromLocalFile(str(qml_dir / "components" / "MontageEditorDialog.qml")))
+            self.assertFalse(component.isError(), "\n".join(error.toString() for error in component.errors()))
+            dialog = component.create()
+            self.assertIsNotNone(dialog)
+            self.assertEqual(dialog.property("duration"), 0.0)
+            self.assertFalse(dialog.property("cropEnabled"))
+            dialog.deleteLater()
+        finally:
+            backend.shutdown()
+
+    def test_title_bar_dragging(self):
+        project_root = Path(__file__).resolve().parents[1]
+        qml_dir = project_root / "ui" / "qml"
+        main_qml = qml_dir / "Main.qml"
+
+        engine = QQmlApplicationEngine()
+        engine.addImportPath(str(qml_dir))
+        backend = Backend()
+        backend.settings_manager.save = Mock()
+        try:
+            engine.rootContext().setContextProperty("backend", backend)
+            engine.load(QUrl.fromLocalFile(str(main_qml)))
+            self.assertTrue(engine.rootObjects(), "QML root objects should be created")
+            root = engine.rootObjects()[0]
+            root.show()
+
+            root.setX(100)
+            root.setY(100)
+
+            drag_area = root.findChild(QObject, "titleBarDragArea")
+            self.assertIsNotNone(drag_area, "titleBarDragArea should exist in AppTitleBar")
+
+            # Drag the title label, whose position depends on the toolbar width.
+            title_label = root.findChild(QQuickItem, "currentPageTitle")
+            click_pos = title_label.mapToScene(QPointF(title_label.width() / 2, title_label.height() / 2))
+            global_pos = QPointF(root.x() + click_pos.x(), root.y() + click_pos.y())
+            press_ev = QMouseEvent(
+                QEvent.Type.MouseButtonPress,
+                click_pos,
+                global_pos,
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+            QApplication.sendEvent(drag_area, press_ev)
+
+            # Move mouse by +50 in x and +30 in y
+            move_pos = click_pos + QPointF(50, 30)
+            global_move_pos = global_pos + QPointF(50, 30)
+            move_ev = QMouseEvent(
+                QEvent.Type.MouseMove,
+                move_pos,
+                global_move_pos,
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+            QApplication.sendEvent(drag_area, move_ev)
+
+            self.assertEqual(root.x(), 150)
+            self.assertEqual(root.y(), 130)
+
+            # Release mouse
+            release_ev = QMouseEvent(
+                QEvent.Type.MouseButtonRelease,
+                move_pos,
+                global_move_pos,
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.NoButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+            QApplication.sendEvent(drag_area, release_ev)
+            self.assertFalse(drag_area.property("manualDragging"))
+        finally:
+            backend.shutdown()
 
 
 if __name__ == "__main__":

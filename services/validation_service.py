@@ -1,5 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import math
 import shutil
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -9,7 +10,9 @@ from app.constants import OUT_AUDIO_FORMATS, OUT_IMAGE_FORMATS, OUT_SUBTITLE_FOR
 from app.models import ConversionSettings, MediaInfo, TaskItem
 from app.paths import find_ffprobe
 from app.settings import merge_settings_maps, settings_map_to_model
+from app.target_size import target_mode_error, target_size_bytes
 from services.ffmpeg_service import FfmpegService
+from services.media_processing_plan import select_merge_inputs
 from utils.files import build_merge_output_path, build_output_path, is_subtitle, sanitize_file_stem
 from utils.formatting import parse_float, parse_time_to_seconds
 
@@ -79,6 +82,10 @@ class ValidationService:
         queue_items = [item for item in tasks if only_paths is None or item.path in only_paths]
         settings = settings_map_to_model(raw, defaults=ConversionSettings())
 
+        if settings.target_size_mb and settings.operation in {"convert", "subtitle_burn"}:
+            error = target_mode_error(settings.video_codec, settings.out_video_format, settings.merge)
+            if error:
+                add_error("target_size_mb", error)
         if settings.trim_start is not None and settings.trim_end is not None and settings.trim_end <= settings.trim_start:
             add_error("trim_end", "Кінець обрізання має бути більшим за початок.")
         if settings.smart_two_pass and not settings.target_size_mb:
@@ -92,7 +99,8 @@ class ValidationService:
             if not queue_items:
                 add_error("queue", "Черга порожня.")
             needs_ffmpeg = not queue_items or any(
-                item.media_type != "text" or settings_map_to_model(merge_settings_maps(raw, item.overrides), defaults=ConversionSettings()).operation != "convert"
+                item.media_type != "text"
+                or settings_map_to_model(merge_settings_maps(raw, item.overrides), defaults=ConversionSettings()).operation != "convert"
                 for item in queue_items
             )
             if needs_ffmpeg:
@@ -120,6 +128,11 @@ class ValidationService:
         return {"ok": not errors, "errors": errors, "warnings": warnings, "summary": summary}
 
     def _validate_fields(self, raw: dict[str, Any], add_error) -> None:
+        target = str(raw.get("target_size_mb", "")).strip()
+        if target:
+            value = parse_float(target)
+            if value is None or not math.isfinite(value) or value <= 0:
+                add_error("target_size_mb", "Цільовий розмір має бути додатним скінченним числом.")
         positive_int_fields = {
             "resize_w": "Ширина resize",
             "resize_h": "Висота resize",
@@ -224,11 +237,9 @@ class ValidationService:
                 if resolved.audio_codec == "copy" and self.ffmpeg.has_audio_processing(resolved):
                     add_error("audio_codec", f"{item.path.name}: обробка аудіо потребує перекодування; зміни audio codec з copy на auto.")
 
-        merge_candidates = [
-            item
-            for item in queue_items
-            if item.media_type == "video" and resolved_by_path[item.path].operation == "convert"
-        ]
+        merge_candidates, is_audio_merge = select_merge_inputs(
+            (task, resolved_by_path[task.path].operation) for task in queue_items
+        )
         merge_enabled = settings.merge and len(merge_candidates) >= 2
         merge_paths = {item.path for item in merge_candidates} if merge_enabled else set()
 
@@ -237,13 +248,15 @@ class ValidationService:
             desired = build_merge_output_path(
                 output_dir,
                 settings.merge_name,
-                settings.out_video_format,
+                settings.out_audio_format if is_audio_merge else settings.out_video_format,
                 overwrite=True,
                 skip_existing=True,
             )
-            seen_outputs[desired] = f"merge ({len(merge_candidates)} відео)"
+            seen_outputs[desired] = f"merge ({len(merge_candidates)} файлів)"
             if desired.exists():
-                if settings.overwrite:
+                if settings.output_collision_policy == "stop":
+                    add_error("merge_name", f"{desired.name}: файл уже існує, batch зупинено політикою колізій.")
+                elif settings.overwrite:
                     add_warning(f"{desired.name}: буде перезаписано.")
                 elif settings.skip_existing:
                     add_warning(f"{desired.name}: буде пропущено.")
@@ -324,11 +337,7 @@ class ValidationService:
             if item.probe_data is not None:
                 cached_info.setdefault(item.path, item.probe_data)
 
-        missing_paths = [
-            item.path
-            for item in queue_items
-            if item.media_type in {"video", "audio"} and item.path not in cached_info
-        ]
+        missing_paths = [item.path for item in queue_items if item.media_type in {"video", "audio"} and item.path not in cached_info]
         probe_batch = getattr(self.ffmpeg, "probe_media_batch", None)
         if missing_paths and getattr(self.ffmpeg, "ffprobe_path", None) and callable(probe_batch):
             try:
@@ -339,12 +348,17 @@ class ValidationService:
         for item in queue_items:
             if item.media_type not in {"video", "audio"}:
                 continue
+            settings = settings_map_to_model(merge_settings_maps(raw, item.overrides), defaults=ConversionSettings())
+            if settings.target_size_mb and item.media_type == "video" and settings.operation in {"convert", "subtitle_burn"}:
+                error = target_mode_error(settings.video_codec, settings.out_video_format, settings.merge)
+                if error:
+                    add_error("target_size_mb", f"{item.path.name}: {error}")
             info = cached_info.get(item.path)
             if info is None:
                 add_warning(f"{item.path.name}: не вдалося перевірити контейнер і потоки через FFprobe.")
+                if settings.target_size_mb and item.media_type == "video":
+                    add_error("target_size_mb", f"{item.path.name}: Target size потребує визначеної тривалості (FFprobe).")
                 continue
-
-            settings = settings_map_to_model(merge_settings_maps(raw, item.overrides), defaults=ConversionSettings())
             operation = settings.operation
             audio_track = max(0, int(settings.audio_track_index))
             subtitle_stream = max(0, int(settings.subtitle_stream))
@@ -353,7 +367,9 @@ class ValidationService:
                 if not info.audio_streams:
                     add_error("audio_stream", f"{item.path.name}: у джерелі немає аудіодоріжки для вилучення.")
                 elif audio_track >= info.audio_streams:
-                    add_error("audio_stream", f"{item.path.name}: аудіодоріжка #{audio_track + 1} відсутня (доступно: {info.audio_streams}).")
+                    add_error(
+                        "audio_stream", f"{item.path.name}: аудіодоріжка #{audio_track + 1} відсутня (доступно: {info.audio_streams})."
+                    )
 
             if operation == "subtitle_extract":
                 if not info.subtitle_streams:
@@ -371,6 +387,16 @@ class ValidationService:
             if item.media_type != "video" or operation not in {"convert", "subtitle_burn"}:
                 continue
 
+            if settings.target_size_mb:
+                duration = self.ffmpeg.target_duration(settings, info)
+                if not duration:
+                    add_error("target_size_mb", f"{item.path.name}: Target size потребує відомої тривалості.")
+                else:
+                    minimum = self.ffmpeg.minimum_target_size_mb(settings, info)
+                    if settings.target_size_mb < minimum:
+                        message = f"{item.path.name}: цільовий розмір замалий; мінімально розумне значення {minimum:.2f} МБ."
+                        add_warning(message)
+                        add_error("target_size_mb", message)
             out_format = settings.out_video_format.lower()
             if not info.audio_streams:
                 add_warning(f"{item.path.name}: у результаті не буде аудіо — у джерелі немає аудіодоріжок.")
@@ -378,7 +404,11 @@ class ValidationService:
                 add_warning(f"{item.path.name}: обрана аудіодоріжка #{audio_track + 1} відсутня; FFmpeg виведе відео без аудіо.")
 
             requested_codec = str(settings.video_codec or "auto")
-            effective_codec = self.ffmpeg.resolve_codec(f".{out_format}", requested_codec)
+            try:
+                effective_codec = self.ffmpeg.resolve_codec(f".{out_format}", requested_codec)
+            except ValueError as exc:
+                add_error("codec", f"{item.path.name}: {exc}")
+                continue
             if out_format == "webm" and requested_codec not in {"auto", "AV1", "VP9 (WebM)"}:
                 add_warning(f"{item.path.name}: WebM замінить {requested_codec} на {effective_codec.upper()}.")
             if out_format in {"mp4", "mov", "avi"} and requested_codec == "VP9 (WebM)":
@@ -388,9 +418,7 @@ class ValidationService:
             if out_format == "webm" and settings.audio_codec == "copy":
                 add_warning(f"{item.path.name}: WebM перекодує аудіо в Opus; копіювання аудіопотоку не застосовується.")
             if info.dynamic_range == "HDR":
-                add_warning(
-                    f"{item.path.name}: HDR-джерело. Автоматичний тонмапінг не увімкнено; перевір результат на SDR-пристрої."
-                )
+                add_warning(f"{item.path.name}: HDR-джерело. Автоматичний тонмапінг не увімкнено; перевір результат на SDR-пристрої.")
             if settings.fast_copy and info.vcodec:
                 supports_copy, reason = self.ffmpeg.fast_copy_allowed(
                     item.path,
@@ -416,13 +444,13 @@ class ValidationService:
             free = shutil.disk_usage(output_dir).free
             if not source_size:
                 return
-            target_bytes = int(settings.target_size_mb * 1024 * 1024) if settings.target_size_mb else 0
+            target_bytes = target_size_bytes(settings.target_size_mb) if settings.target_size_mb else 0
             estimated_outputs = target_bytes * len(queue_items) if target_bytes else source_size
             largest_output = target_bytes or max(item.path.stat().st_size for item in queue_items if item.path.exists())
             temporary_bytes = largest_output
             if settings.smart_ab_test:
                 temporary_bytes += largest_output * 3
-            if settings.smart_two_pass:
+            if settings.target_size_mb:
                 temporary_bytes += max(64 * 1024 * 1024, largest_output // 20)
             margin = settings.disk_safety_margin_mb * 1024 * 1024
             required = estimated_outputs + temporary_bytes + margin
@@ -434,8 +462,7 @@ class ValidationService:
                 )
             elif free < required + 256 * 1024 * 1024:
                 add_warning(
-                    "Малий запас місця: потрібно приблизно "
-                    f"{required / 1024 / 1024:.0f} MiB, доступно {free / 1024 / 1024:.0f} MiB."
+                    f"Малий запас місця: потрібно приблизно {required / 1024 / 1024:.0f} MiB, доступно {free / 1024 / 1024:.0f} MiB."
                 )
         except Exception:
             return

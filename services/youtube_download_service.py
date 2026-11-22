@@ -218,9 +218,7 @@ class YouTubeDownloadService:
                 raise
             except YouTubeDownloadError as direct_exc:
                 if ytdlp_error:
-                    raise YouTubeDownloadError(
-                        f"{ytdlp_error} Direct media fallback failed: {direct_exc}"
-                    ) from direct_exc
+                    raise YouTubeDownloadError(f"{ytdlp_error} Direct media fallback failed: {direct_exc}") from direct_exc
                 raise
 
         if ytdlp_error:
@@ -266,7 +264,9 @@ class YouTubeDownloadService:
             count = 1
         title = str(info.get("title") or info.get("playlist_title") or "") if isinstance(info, dict) else ""
         preview_item = self._preview_item(info)
-        duration = self._optional_float(preview_item.get("duration") if preview_item else info.get("duration") if isinstance(info, dict) else None)
+        duration = self._optional_float(
+            preview_item.get("duration") if preview_item else info.get("duration") if isinstance(info, dict) else None
+        )
         thumbnail = str(preview_item.get("thumbnail") or info.get("thumbnail") or "") if isinstance(info, dict) else ""
         formats = preview_item.get("formats") if isinstance(preview_item, dict) else None
         media_kind = self._detect_media_kind(preview_item or info)
@@ -293,12 +293,7 @@ class YouTubeDownloadService:
         return YoutubeDL
 
     def _can_try_direct_download(self, url: str, mode: str, playlist: bool, subtitles: bool) -> bool:
-        return (
-            not playlist
-            and not subtitles
-            and mode in {"audio", "video"}
-            and self._is_http_url(url)
-        )
+        return not playlist and not subtitles and mode in {"audio", "video"} and self._is_http_url(url)
 
     def _download_direct_media(
         self,
@@ -317,9 +312,7 @@ class YouTubeDownloadService:
                 headers = getattr(response, "headers", {})
                 content_type = self._content_type(headers)
                 if not self._direct_response_is_supported(url, headers, content_type, mode):
-                    raise YouTubeDownloadError(
-                        "URL does not point to a supported downloadable media file for this mode."
-                    )
+                    raise YouTubeDownloadError("URL does not point to a supported downloadable media file for this mode.")
 
                 filename = self._direct_filename(url, headers, content_type, mode, audio_format)
                 output_path = self._unique_output_path(output_dir / filename)
@@ -417,9 +410,7 @@ class YouTubeDownloadService:
             validated_url,
             headers={
                 "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/126.0 Safari/537.36"
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
                 ),
                 "Accept": "video/*,audio/*,*/*;q=0.8",
                 "Referer": origin,
@@ -629,9 +620,7 @@ class YouTubeDownloadService:
             charset, separator, encoded_value = encoded_filename.partition("''")
             if separator:
                 try:
-                    return self._last_path_segment(
-                        urllib.parse.unquote(encoded_value, encoding=charset or "utf-8")
-                    )
+                    return self._last_path_segment(urllib.parse.unquote(encoded_value, encoding=charset or "utf-8"))
                 except LookupError:
                     return self._last_path_segment(urllib.parse.unquote(encoded_value))
             return self._last_path_segment(urllib.parse.unquote(encoded_filename))

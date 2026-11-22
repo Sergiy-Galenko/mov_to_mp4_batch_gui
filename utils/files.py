@@ -1,11 +1,13 @@
 import hashlib
+import json
 import os
 import re
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.constants import AUDIO_EXTS, IMAGE_EXTS, SUBTITLE_EXTS, TEXT_EXTS, VIDEO_EXTS
+from app.constants import AUDIO_EXTS, IMAGE_EXTS, OUT_AUDIO_FORMATS, SUBTITLE_EXTS, TEXT_EXTS, VIDEO_EXTS
 
 
 def is_video(path: Path) -> bool:
@@ -31,8 +33,11 @@ def is_text(path: Path) -> bool:
 _MEDIA_TYPES = {
     extension: kind
     for kind, extensions in (
-        ("text", TEXT_EXTS), ("subtitle", SUBTITLE_EXTS), ("audio", AUDIO_EXTS),
-        ("image", IMAGE_EXTS), ("video", VIDEO_EXTS),
+        ("text", TEXT_EXTS),
+        ("subtitle", SUBTITLE_EXTS),
+        ("audio", AUDIO_EXTS),
+        ("image", IMAGE_EXTS),
+        ("video", VIDEO_EXTS),
     )
     for extension in extensions
 }
@@ -40,6 +45,38 @@ _MEDIA_TYPES = {
 
 def media_type(path: Path) -> str | None:
     return _MEDIA_TYPES.get(path.suffix.lower())
+
+
+def format_output_paths(paths: list[str]) -> str:
+    if len(paths) == 1:
+        return paths[0]
+    if any(";" in path for path in paths):
+        return json.dumps(paths, ensure_ascii=False)
+    return "; ".join(paths)
+
+
+def parse_output_paths(value: str) -> list[Path]:
+    if not value:
+        return []
+    if value.startswith('["'):
+        with suppress(ValueError):
+            paths = json.loads(value)
+            if isinstance(paths, list) and all(isinstance(path, str) for path in paths):
+                return [Path(path).expanduser() for path in paths]
+    path = Path(value).expanduser()
+    if "; " in value:
+        with suppress(OSError):
+            if path.is_file():
+                return [path]
+        # Older chapter exports stored absolute paths separated by "; ".
+        parts = re.split(r"; (?=/|[A-Za-z]:[\\/]|\\\\)", value)
+        if len(parts) > 1:
+            return [Path(part).expanduser() for part in parts]
+        relative = [Path(part).expanduser() for part in value.split("; ")]
+        with suppress(OSError):
+            if all(part.is_file() for part in relative):
+                return relative
+    return [path]
 
 
 def safe_output_path(out_path: Path) -> Path:
@@ -224,13 +261,13 @@ def build_merge_output_path(
     *,
     overwrite: bool,
     skip_existing: bool,
+    collision_policy: str = "",
+    strict_collisions: bool = True,
+    reserved: set[Path] | None = None,
 ) -> Path:
     name = str(merge_name or "").strip() or "merged"
-    out_path = Path(name)
-    if not out_path.suffix:
-        out_path = out_dir / f"{name}.{out_video_format.lstrip('.')}"
-    else:
-        out_path = out_dir / out_path.name
-    if overwrite or skip_existing:
-        return out_path
-    return safe_output_path(out_path)
+    out_path = out_dir / Path(name).name
+    if not out_path.suffix or out_video_format in OUT_AUDIO_FORMATS:
+        out_path = out_path.with_suffix(f".{out_video_format.lstrip('.')}")
+    policy = collision_policy or ("overwrite" if overwrite else "skip" if skip_existing else "index")
+    return resolve_output_collision(out_path, policy, reserved if reserved is not None else set(), strict=strict_collisions)

@@ -37,7 +37,37 @@ Canvas {
         ctx.lineCap = "round"
         ctx.lineJoin = "round"
 
-        if (name === "queue") {
+        if (name === "sparkles") {
+            ctx.beginPath(); ctx.moveTo(pt(12), pt(2)); ctx.lineTo(pt(14.5), pt(9)); ctx.lineTo(pt(21), pt(12)); ctx.lineTo(pt(14.5), pt(14)); ctx.lineTo(pt(12), pt(22)); ctx.lineTo(pt(9.5), pt(14)); ctx.lineTo(pt(3), pt(12)); ctx.lineTo(pt(9.5), pt(9)); ctx.closePath(); ctx.stroke(); line(20, 2, 20, 6); line(18, 4, 22, 4)
+        } else if (name === "lock") {
+            rect(5, 10, 14, 11, 2); ctx.beginPath(); ctx.arc(pt(12), pt(9), 4 * u, Math.PI, 0); ctx.stroke(); line(12, 14, 12, 17)
+        } else if (name === "key") {
+            ctx.beginPath(); ctx.arc(pt(8), pt(8), 5 * u, 0, Math.PI * 2); ctx.stroke(); line(12, 12, 21, 21); line(17, 17, 20, 14); line(19, 19, 22, 16)
+        } else if (name === "clock") {
+            ctx.beginPath(); ctx.arc(pt(12), pt(12), 9 * u, 0, Math.PI * 2); ctx.stroke(); line(12, 6, 12, 12); line(12, 12, 16, 15)
+        } else if (name === "copy") {
+            rect(7, 7, 14, 14, 2); line(4, 17, 3, 17); line(3, 17, 3, 3); line(3, 3, 17, 3); line(17, 3, 17, 4)
+        } else if (name === "skip-back") {
+            ctx.beginPath(); ctx.moveTo(pt(19), pt(5)); ctx.lineTo(pt(8), pt(12)); ctx.lineTo(pt(19), pt(19)); ctx.closePath(); ctx.fill(); line(5, 5, 5, 19)
+        } else if (name === "skip" || name === "skip-forward") {
+            ctx.beginPath(); ctx.moveTo(pt(5), pt(5)); ctx.lineTo(pt(16), pt(12)); ctx.lineTo(pt(5), pt(19)); ctx.closePath(); ctx.fill(); line(19, 5, 19, 19)
+        } else if (name === "back" || name === "chevron-left") {
+            line(15, 5, 8, 12); line(8, 12, 15, 19)
+        } else if (name === "chevron" || name === "chevron-right") {
+            line(8, 5, 15, 12); line(15, 12, 8, 19)
+        } else if (name === "chevron-down") {
+            line(5, 8, 12, 15); line(12, 15, 19, 8)
+        } else if (name === "chevron-up") {
+            line(5, 15, 12, 8); line(12, 8, 19, 15)
+        } else if (name === "arrow-left") {
+            line(20, 12, 5, 12); line(5, 12, 11, 6); line(5, 12, 11, 18)
+        } else if (name === "arrow-right") {
+            line(4, 12, 19, 12); line(19, 12, 13, 6); line(19, 12, 13, 18)
+        } else if (name === "sidebar") {
+            rect(3, 4, 18, 16, 2); line(10, 4, 10, 20); line(5, 8, 8, 8); line(5, 12, 8, 12)
+        } else if (name === "share") {
+            line(12, 3, 12, 15); line(8, 7, 12, 3); line(16, 7, 12, 3); line(5, 11, 5, 21); line(5, 21, 19, 21); line(19, 21, 19, 11)
+        } else if (name === "queue") {
             rect(3, 4, 18, 16, 2); line(7, 9, 17, 9); line(7, 13, 17, 13); line(7, 17, 13, 17)
         } else if (name === "download") {
             line(12, 3, 12, 15); line(8, 11, 12, 15); line(16, 11, 12, 15); line(4, 20, 20, 20)
@@ -70,6 +100,9 @@ Canvas {
         } else if (name === "image") {
             rect(3, 4, 18, 16, 2); line(4, 18, 10, 11); line(10, 11, 15, 17); line(15, 17, 18, 13); line(18, 13, 21, 17)
             ctx.beginPath(); ctx.arc(pt(16), pt(8), 1.5 * u, 0, Math.PI * 2); ctx.stroke()
+        } else if (name === "eye") {
+            ctx.beginPath(); ctx.moveTo(pt(3), pt(12)); ctx.bezierCurveTo(pt(6), pt(6), pt(9), pt(4), pt(12), pt(4)); ctx.bezierCurveTo(pt(15), pt(4), pt(18), pt(6), pt(21), pt(12)); ctx.bezierCurveTo(pt(18), pt(18), pt(15), pt(20), pt(12), pt(20)); ctx.bezierCurveTo(pt(9), pt(20), pt(6), pt(18), pt(3), pt(12)); ctx.closePath(); ctx.stroke()
+            ctx.beginPath(); ctx.arc(pt(12), pt(12), 3 * u, 0, Math.PI * 2); ctx.stroke()
         } else if (name === "music" || name === "audio") {
             line(10, 17, 10, 5); line(10, 5, 20, 3); line(20, 3, 20, 15)
             ctx.beginPath(); ctx.arc(pt(7), pt(18), 3 * u, 0, Math.PI * 2); ctx.stroke()
@@ -80,16 +113,23 @@ Canvas {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 8 * u, Math.PI * .2, Math.PI * 1.85); ctx.stroke()
             line(20, 3, 20, 8); line(15, 8, 20, 8)
         } else if (name === "palette") {
-            ctx.beginPath(); ctx.arc(pt(12), pt(12), 9 * u, 0, Math.PI * 2); ctx.stroke()
+            ctx.beginPath()
+            ctx.moveTo(pt(12), pt(3))
+            ctx.bezierCurveTo(pt(17), pt(3), pt(21), pt(7), pt(21), pt(12))
+            ctx.bezierCurveTo(pt(21), pt(15), pt(19), pt(15), pt(17), pt(15))
+            ctx.bezierCurveTo(pt(14), pt(15), pt(14), pt(17), pt(16), pt(19))
+            ctx.bezierCurveTo(pt(17), pt(21), pt(14), pt(21), pt(12), pt(21))
+            ctx.bezierCurveTo(pt(7), pt(21), pt(3), pt(17), pt(3), pt(12))
+            ctx.bezierCurveTo(pt(3), pt(7), pt(7), pt(3), pt(12), pt(3))
+            ctx.closePath(); ctx.stroke()
             for (var dot = 0; dot < 3; ++dot) {
                 ctx.beginPath(); ctx.arc(pt(7 + dot * 5), pt(dot === 1 ? 7 : 11), 1.5 * u, 0, Math.PI * 2); ctx.fill()
             }
-            ctx.beginPath(); ctx.arc(pt(12), pt(17), 2 * u, 0, Math.PI * 2); ctx.stroke()
         } else if (name === "search") {
             ctx.beginPath(); ctx.arc(pt(10), pt(10), 5.5 * u, 0, Math.PI * 2); ctx.stroke(); line(14, 14, 20, 20)
         } else if (name === "bell") {
-            ctx.beginPath(); ctx.arc(pt(12), pt(18.5), 1.2 * u, 0, Math.PI * 2); ctx.fill()
-            ctx.beginPath(); ctx.moveTo(pt(5), pt(17)); ctx.lineTo(pt(7), pt(15)); ctx.lineTo(pt(7), pt(10)); ctx.bezierCurveTo(pt(7), pt(4), pt(17), pt(4), pt(17), pt(10)); ctx.lineTo(pt(17), pt(15)); ctx.lineTo(pt(19), pt(17)); ctx.closePath(); ctx.stroke()
+            ctx.beginPath(); ctx.arc(pt(12), pt(18), 2 * u, 0, Math.PI); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(pt(4), pt(18)); ctx.lineTo(pt(6), pt(15)); ctx.lineTo(pt(6), pt(9)); ctx.bezierCurveTo(pt(6), pt(1), pt(18), pt(1), pt(18), pt(9)); ctx.lineTo(pt(18), pt(15)); ctx.lineTo(pt(20), pt(18)); ctx.closePath(); ctx.stroke()
         } else if (name === "sun") {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 4.4 * u, 0, Math.PI * 2); ctx.stroke()
             for (var ray = 0; ray < 8; ++ray) {
@@ -108,24 +148,79 @@ Canvas {
             ctx.beginPath(); ctx.ellipse(pt(12), pt(12), 3.5 * u, 8 * u, 0, 0, Math.PI * 2); ctx.stroke()
         } else if (name === "more") {
             for (var i = 0; i < 3; ++i) { ctx.beginPath(); ctx.arc(pt(6 + i * 6), pt(12), 1.35 * u, 0, Math.PI * 2); ctx.fill() }
-        } else if (name === "plus") {
+        } else if (name === "plus" || name === "add") {
             line(12, 5, 12, 19); line(5, 12, 19, 12)
-        } else if (name === "chevron") {
-            line(8, 5, 15, 12); line(15, 12, 8, 19)
+        } else if (name === "minus") {
+            line(5, 12, 19, 12)
+        } else if (name === "list") {
+            line(8, 6, 20, 6); line(8, 12, 20, 12); line(8, 18, 20, 18)
+            ctx.beginPath(); ctx.arc(pt(4), pt(6), 1 * u, 0, Math.PI * 2); ctx.fill()
+            ctx.beginPath(); ctx.arc(pt(4), pt(12), 1 * u, 0, Math.PI * 2); ctx.fill()
+            ctx.beginPath(); ctx.arc(pt(4), pt(18), 1 * u, 0, Math.PI * 2); ctx.fill()
+        } else if (name === "expand") {
+            line(4, 9, 4, 4); line(4, 4, 9, 4); line(15, 4, 20, 4); line(20, 4, 20, 9)
+            line(20, 15, 20, 20); line(20, 20, 15, 20); line(9, 20, 4, 20); line(4, 20, 4, 15)
+        } else if (name === "safe-area") {
+            rect(3, 3, 18, 18, 2); rect(7, 7, 10, 10, 1)
+        } else if (name === "cursor") {
+            ctx.beginPath(); ctx.moveTo(pt(5), pt(3)); ctx.lineTo(pt(5), pt(18)); ctx.lineTo(pt(9), pt(14)); ctx.lineTo(pt(13), pt(21)); ctx.lineTo(pt(16), pt(19)); ctx.lineTo(pt(12), pt(12)); ctx.lineTo(pt(19), pt(12)); ctx.closePath(); ctx.fill()
+        } else if (name === "cut") {
+            ctx.beginPath(); ctx.arc(pt(7), pt(17), 3 * u, 0, Math.PI * 2); ctx.stroke()
+            ctx.beginPath(); ctx.arc(pt(7), pt(7), 3 * u, 0, Math.PI * 2); ctx.stroke()
+            line(9, 9, 20, 20); line(9, 15, 20, 4)
+        } else if (name === "magnet") {
+            ctx.beginPath(); ctx.moveTo(pt(6), pt(4)); ctx.lineTo(pt(10), pt(4)); ctx.lineTo(pt(10), pt(13)); ctx.arc(pt(12), pt(13), 6 * u, Math.PI, 0); ctx.lineTo(pt(14), pt(4)); ctx.lineTo(pt(18), pt(4)); ctx.lineTo(pt(18), pt(13)); ctx.arc(pt(12), pt(13), 6 * u, 0, Math.PI); ctx.closePath(); ctx.stroke()
+            line(6, 8, 10, 8); line(14, 8, 18, 8)
         } else if (name === "play") {
             ctx.beginPath(); ctx.moveTo(pt(8), pt(5)); ctx.lineTo(pt(19), pt(12)); ctx.lineTo(pt(8), pt(19)); ctx.closePath(); ctx.fill()
         } else if (name === "pause") {
             ctx.fillRect(pt(7), pt(5), 3 * u, 14 * u); ctx.fillRect(pt(14), pt(5), 3 * u, 14 * u)
         } else if (name === "stop") {
             ctx.fillRect(pt(6), pt(6), 12 * u, 12 * u)
+        } else if (name === "check") {
+            line(5, 12, 10, 17); line(10, 17, 19, 6)
+        } else if (name === "save") {
+            rect(4, 3, 16, 18, 2); rect(7, 3, 9, 6, 1); rect(7, 14, 10, 7, 1)
+        } else if (name === "trash") {
+            line(4, 6, 20, 6); line(9, 3, 15, 3); line(6, 6, 7, 21); line(18, 6, 17, 21); line(7, 21, 17, 21); line(10, 10, 10, 17); line(14, 10, 14, 17)
+        } else if (name === "shield") {
+            ctx.beginPath(); ctx.moveTo(pt(12),pt(3)); ctx.lineTo(pt(21),pt(7)); ctx.lineTo(pt(19),pt(16)); ctx.lineTo(pt(12),pt(22)); ctx.lineTo(pt(5),pt(16)); ctx.lineTo(pt(3),pt(7)); ctx.closePath(); ctx.stroke(); line(8,12,11,15); line(11,15,16,9)
+        } else if (name === "cpu") {
+            rect(6,6,12,12,2); rect(9,9,6,6,1)
+            for (var pin = 8; pin <= 16; pin += 4) { line(pin,3,pin,6); line(pin,18,pin,21); line(3,pin,6,pin); line(18,pin,21,pin) }
+        } else if (name === "cloud") {
+            ctx.beginPath(); ctx.moveTo(pt(6),pt(19)); ctx.bezierCurveTo(pt(-1),pt(19),pt(0),pt(9),pt(7),pt(10)); ctx.bezierCurveTo(pt(6),pt(0),pt(21),pt(0),pt(20),pt(12)); ctx.bezierCurveTo(pt(26),pt(14),pt(23),pt(19),pt(19),pt(19)); ctx.closePath(); ctx.stroke()
+        } else if (name === "text") {
+            line(4,5,20,5); line(4,5,4,8); line(20,5,20,8); line(12,5,12,20); line(8,20,16,20)
+        } else if (name === "subtitle") {
+            rect(2,5,20,14,3); line(5,13,10,13); line(13,13,19,13); line(5,16,8,16); line(11,16,19,16)
+        } else if (name === "device") {
+            rect(5,2,14,20,3); line(10,18,14,18)
+        } else if (name === "crop") {
+            line(6,2,6,18); line(6,18,22,18); line(2,6,18,6); line(18,6,18,22)
         } else if (name === "close") {
             line(6, 6, 18, 18); line(18, 6, 6, 18)
         } else if (name === "sort") {
             line(5, 7, 19, 7); line(5, 12, 15, 12); line(5, 17, 10, 17)
         } else if (name === "info") {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 8 * u, 0, Math.PI * 2); ctx.stroke(); line(12, 11, 12, 17); ctx.beginPath(); ctx.arc(pt(12), pt(7.5), 1 * u, 0, Math.PI * 2); ctx.fill()
+        } else if (name === "undo" || name === "redo") {
+            ctx.save()
+            if (name === "redo") { ctx.translate(width, 0); ctx.scale(-1, 1) }
+            ctx.beginPath(); ctx.moveTo(pt(9), pt(5)); ctx.lineTo(pt(4), pt(10)); ctx.lineTo(pt(9), pt(15)); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(pt(4), pt(10)); ctx.lineTo(pt(14), pt(10)); ctx.bezierCurveTo(pt(18), pt(10), pt(20), pt(12), pt(20), pt(16)); ctx.lineTo(pt(20), pt(19)); ctx.stroke()
+            ctx.restore()
         } else if (name === "history") {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 8 * u, Math.PI * .72, Math.PI * 2.15); ctx.stroke(); line(12, 7, 12, 12); line(12, 12, 16, 14); line(4, 7, 4, 12); line(4, 7, 8, 7)
+        } else if (name === "telegram") {
+            ctx.beginPath(); ctx.arc(pt(12), pt(12), 9 * u, 0, Math.PI * 2); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(pt(7), pt(11.5)); ctx.lineTo(pt(17.5), pt(7)); ctx.lineTo(pt(13.5), pt(17.5)); ctx.lineTo(pt(11), pt(13.5)); ctx.closePath(); ctx.stroke()
+            line(11, 13.5, 17.5, 7)
+        } else if (name === "archive" || name === "box" || name === "zip") {
+            rect(3, 8, 18, 13, 2)
+            rect(2, 4, 20, 4.5, 1.5)
+            line(10, 13, 14, 13)
+            line(12, 4, 12, 8.5)
         } else {
             ctx.beginPath(); ctx.arc(pt(12), pt(12), 2 * u, 0, Math.PI * 2); ctx.fill()
         }

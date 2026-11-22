@@ -20,6 +20,7 @@ from app.constants import (
     APP_TITLE,
     APP_VERSION,
     EVENT_POLL_INTERVAL_MS,
+    MONTAGE_MEDIA_FILTER,
     RECENT_FOLDERS_LIMIT,
     RESOURCE_SAMPLE_INTERVAL_SEC,
     WATCH_SCAN_INTERVAL_MS,
@@ -29,7 +30,10 @@ from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
 from app.paths import find_ffmpeg, find_ffprobe
 from app.performance_profiles import prediction_factor
 from app.settings import merge_settings_maps, settings_map_to_model
+from app.target_size import target_size_bytes
+from services.archive_backend import ArchiveBackend
 from services.batch_workflow_service import DEFAULT_FOLDER_RULES, BatchWorkflowService
+from services.display_service import DisplayService
 from services.event_queue import UiEventQueue
 from services.ffmpeg_auto_installer import FfmpegAutoInstaller, FfmpegAutoInstallResult
 from services.ffmpeg_service import FfmpegService
@@ -37,6 +41,8 @@ from services.folder_scanner import FolderScanner
 from services.history_store import HistoryStore
 from services.license_service import LicenseInfo, LicenseService
 from services.media_preview_service import MediaPreviewService
+from services.montage_editing import MontageEditing
+from services.montage_service import MontageService, MontageSessionStore
 from services.notification_service import NotificationService
 from services.paid_update_service import PaidUpdateInfo, PaidUpdateService
 from services.preset_manager import PresetManager
@@ -47,12 +53,16 @@ from services.scripting_service import ScriptingService
 from services.settings_manager import SettingsManager
 from services.shortcut_manager import ShortcutManager
 from services.smart_convert_service import recommend_settings
+from services.source_update_service import SourceUpdateInfo, SourceUpdateService
 from services.speech_diagnostic_service import SpeechDiagnosticService
+from services.system_profile import SystemProfile
 from services.system_tray_service import SystemTrayService
 from services.taskbar_service import TaskbarService
+from services.telegram_note_service import TelegramNoteService
 from services.theme_manager import ThemeManager
 from services.watch_service import WatchService
 from services.whisper_model_manager import WhisperModelManager
+from services.whisper_setup import WhisperSetup
 from services.youtube_download_service import (
     DownloadProgress,
     YouTubeDownloadCancelled,
@@ -72,13 +82,16 @@ __all__ = [
     "APP_VERSION",
     "DEFAULT_FOLDER_RULES",
     "EVENT_POLL_INTERVAL_MS",
+    "MONTAGE_MEDIA_FILTER",
     "RECENT_FOLDERS_LIMIT",
     "RESOURCE_SAMPLE_INTERVAL_SEC",
     "WATCH_SCAN_INTERVAL_MS",
     "Any",
+    "ArchiveBackend",
     "BatchWorkflowService",
     "ConversionSettings",
     "Dict",
+    "DisplayService",
     "DownloadProgress",
     "FfmpegAutoInstallResult",
     "FfmpegAutoInstaller",
@@ -92,6 +105,9 @@ __all__ = [
     "LogModel",
     "MediaInfo",
     "MediaPreviewService",
+    "MontageEditing",
+    "MontageService",
+    "MontageSessionStore",
     "NotificationService",
     "Optional",
     "PaidUpdateInfo",
@@ -109,16 +125,21 @@ __all__ = [
     "ScriptingService",
     "SettingsManager",
     "ShortcutManager",
+    "SourceUpdateInfo",
+    "SourceUpdateService",
     "SpeechDiagnosticService",
+    "SystemProfile",
     "SystemTrayService",
     "TaskItem",
     "TaskStatus",
     "TaskbarService",
+    "TelegramNoteService",
     "ThemeManager",
     "ThreadPoolExecutor",
     "UiEventQueue",
     "WatchService",
     "WhisperModelManager",
+    "WhisperSetup",
     "YouTubeDownloadCancelled",
     "YouTubeDownloadError",
     "YouTubeDownloadService",
@@ -140,6 +161,7 @@ __all__ = [
     "shutil",
     "subprocess",
     "sys",
+    "target_size_bytes",
     "threading",
     "time",
     "translate",

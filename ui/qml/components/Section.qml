@@ -9,7 +9,7 @@ Rectangle {
     default property alias content: bodyLayout.data
 
     color: Theme.section
-    border.width: 1
+    border.width: Theme.panelBorderWidth
     border.color: Theme.border
     radius: Theme.radiusSection
     implicitWidth: bodyLayout.implicitWidth + Theme.sectionPadding * 2

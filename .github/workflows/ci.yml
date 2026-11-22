@@ -6,13 +6,16 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         python-version: ["3.12", "3.13"]
     env:
       QT_QPA_PLATFORM: offscreen
       QT_QUICK_CONTROLS_STYLE: Basic
+      MEDIA_CONVERTER_REQUIRE_FFMPEG_TESTS: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -22,9 +25,25 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install system packages
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libxkbcommon-x11-0
+          sudo apt-get install -y libegl1 libxkbcommon-x11-0 pulseaudio pulseaudio-utils ffmpeg
+          pulseaudio --start --exit-idle-time=-1
+          pactl info
+          echo "QT_AUDIO_BACKEND=pulseaudio" >> "$GITHUB_ENV"
+
+      - name: Install FFmpeg on macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg-full
+          echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
+
+      - name: Expose FFmpeg for integration tests
+        run: |
+          echo "MEDIA_CONVERTER_TEST_FFMPEG=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+          echo "MEDIA_CONVERTER_FFMPEG=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+          echo "MEDIA_CONVERTER_FFPROBE=$(command -v ffprobe)" >> "$GITHUB_ENV"
 
       - name: Install Python dependencies
         run: |
@@ -38,4 +57,47 @@ jobs:
         run: python -m compileall app services ui utils tests
 
       - name: Run tests
-        run: python -m pytest -q --tb=short
+        timeout-minutes: 12
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            python -c 'import os, sys, pytest; result = pytest.main(["-q", "--tb=short", "--junitxml=test-results.xml"]); sys.stdout.flush(); sys.stderr.flush(); os._exit(int(result))'
+          else
+            python -m pytest -q --tb=short --junitxml=test-results.xml
+          fi
+
+      - name: Build and verify portable application
+        id: package
+        if: matrix.python-version == '3.12'
+        run: |
+          python scripts/build_pyinstaller.py --portable --ffmpeg-dir "$(dirname "$(command -v ffmpeg)")"
+          python scripts/verify_package.py dist/MediaConverter/MediaConverter --report package-smoke.json
+
+      - name: Collect benchmark report
+        if: matrix.python-version == '3.12'
+        run: python scripts/performance_suite.py --ffmpeg "$(command -v ffmpeg)" --report performance.json --repeats 3
+
+      - name: Check performance against PR base on the same runner
+        if: matrix.python-version == '3.12' && github.event_name == 'pull_request'
+        env:
+          PERFORMANCE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python scripts/check_performance_regression.py --base-sha "$PERFORMANCE_BASE_SHA" --ffmpeg "$(command -v ffmpeg)" --head-report performance.json
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.package.outcome == 'success'
+        with:
+          name: MediaConverter-${{ matrix.os }}
+          path: |
+            dist/MediaConverter
+          if-no-files-found: error
+
+      - name: Upload diagnostic reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: CI-reports-${{ matrix.os }}-python-${{ matrix.python-version }}
+          path: |
+            test-results.xml
+            package-smoke.json
+            performance.json
+            regression.json
+          if-no-files-found: warn

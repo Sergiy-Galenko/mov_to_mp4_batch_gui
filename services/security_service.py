@@ -4,7 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 
-SUPPORTED_CHECKSUMS = {"md5", "sha256"}
+SUPPORTED_CHECKSUMS = {"md5", "sha256", "sha512"}
 
 
 def checksum_file(path: Path, algorithm: str, *, checkpoint=None) -> str:

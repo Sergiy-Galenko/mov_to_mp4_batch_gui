@@ -1,14 +1,21 @@
 from __future__ import annotations
 
-BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
+from utils.files import parse_output_paths
+
+from .common import Any, ConversionSettings, Dict, List, Path, QtCore, QueueModel, merge_settings_maps, settings_map_to_model
+from .core import CoreMixin
+
+
+class QueueViewMixin:
+    @QtCore.Property(QtCore.QObject, constant=True)
     def filteredQueueModel(self) -> QtCore.QObject:
         return self.queue_filter_model
 
-    @QtCore.Property(int, notify=queueFilterChanged)
+    @QtCore.Property(int, notify=CoreMixin.queueFilterChanged)
     def visibleQueueCount(self) -> int:
         return self.queue_filter_model.rowCount()
 
-    @QtCore.Property("QVariantList", notify=queueFilterChanged)
+    @QtCore.Property("QVariantList", notify=CoreMixin.queueFilterChanged)
     def visibleQueuePaths(self) -> List[str]:
         model = self.queue_filter_model
         return [str(model.data(model.index(row, 0), QueueModel.PathRole)) for row in range(model.rowCount())]
@@ -29,7 +36,33 @@ BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
         if item is None:
             return {}
         settings = settings_map_to_model(merge_settings_maps(self._last_settings_map, item.overrides), defaults=ConversionSettings())
+        info = self.media_info_cache.get(item.path) or item.probe_data
+        output = next(iter(parse_output_paths(item.last_output)), None)
+        from utils.error_classifier import classify_stderr_block
+        from utils.formatting import format_bytes
+
+        errors = classify_stderr_block(item.last_error or "")
+        error = next((e for e in errors if e.category != "unknown"), None)
+
+        def file_size(path):
+            try:
+                return path.stat().st_size if path and path.is_file() else None
+            except OSError:
+                return None
+
+        source_size = file_size(item.path)
+        output_size = file_size(output)
         return {
+            "operation": settings.operation,
+            "durationSec": info.duration if info else 0,
+            "audioTracks": info.audio_streams if info else 0,
+            "audioTrackIndex": settings.audio_track_index,
+            "outputExists": output_size is not None,
+            "sourceSize": format_bytes(source_size or 0),
+            "outputSize": format_bytes(output_size or 0),
+            "sizeChangePercent": round((1 - output_size / source_size) * 100, 1) if source_size and output_size else 0,
+            "errorText": (error.message + ". " + error.suggestion) if error else item.last_error,
+            "errorCategory": error.category if error else "unknown",
             "name": item.path.name,
             "mediaType": item.media_type,
             "thumbnail": self.queue_model.data(self.queue_model.index(index, 0), QueueModel.ThumbnailRole),
@@ -38,4 +71,3 @@ BODY = r'''    @QtCore.Property(QtCore.QObject, constant=True)
             "trimEnd": settings.trim_end or 0,
             "fastCopy": settings.fast_copy,
         }
-'''

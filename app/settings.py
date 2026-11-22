@@ -15,7 +15,6 @@ from app.constants import (
     VIDEO_CODEC_MAP,
     VIDEO_CODEC_OPTIONS,
 )
-from app.device_profiles import DEVICE_PROFILE_NAMES, apply_device_profile
 from app.models import ConversionSettings
 from app.performance_profiles import apply_performance_profile, normalize_profile
 from utils.formatting import parse_float, parse_int, parse_time_to_seconds
@@ -131,6 +130,10 @@ def _apply_hw_encoder(settings: ConversionSettings, value: Any) -> None:
         hw = "auto"
     elif hw in HW_ENCODER_MAP and HW_ENCODER_MAP[hw] == "cpu":
         hw = "cpu"
+    elif HW_ENCODER_MAP.get(hw) == "apple":
+        hw = "Apple (VideoToolbox)"
+    if HW_ENCODER_MAP.get(hw) == "vaapi":
+        hw = "Linux (VA-API)"
     if hw in HW_ENCODER_OPTIONS:
         settings.hw_encoder = str(hw)
 
@@ -171,11 +174,9 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     if out_audio_format in OUT_AUDIO_FORMATS:
         settings.out_audio_format = out_audio_format
 
-    out_subtitle_format = str(
-        settings_map.get("out_subtitle_fmt")
-        or settings_map.get("subtitle_out_fmt")
-        or settings.out_subtitle_format
-    ).strip().lower()
+    out_subtitle_format = (
+        str(settings_map.get("out_subtitle_fmt") or settings_map.get("subtitle_out_fmt") or settings.out_subtitle_format).strip().lower()
+    )
     if out_subtitle_format in OUT_SUBTITLE_FORMATS:
         settings.out_subtitle_format = out_subtitle_format
         settings.subtitle_out_format = out_subtitle_format
@@ -239,7 +240,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.smart_two_pass = _coerce_bool(settings_map.get("smart_two_pass"), settings.smart_two_pass)
     settings.smart_integrity_check = _coerce_bool(settings_map.get("smart_integrity_check"), settings.smart_integrity_check)
     quality_metric = str(settings_map.get("smart_quality_metric") or settings.smart_quality_metric).strip().lower()
-    settings.smart_quality_metric = quality_metric if quality_metric in {"none", "ssim", "vmaf"} else "none"
+    settings.smart_quality_metric = quality_metric if quality_metric in {"none", "ssim", "psnr", "vmaf"} else "none"
     settings.smart_ab_test = _coerce_bool(settings_map.get("smart_ab_test"), settings.smart_ab_test)
     settings.smart_ab_crfs = str(settings_map.get("smart_ab_crfs") or settings.smart_ab_crfs).strip() or "18,23,28"
     settings.smart_ab_duration = _coerce_int(settings_map.get("smart_ab_duration"), settings.smart_ab_duration, minimum=1, maximum=120)
@@ -268,7 +269,11 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.subtitle_language = str(settings_map.get("subtitle_language") or settings.subtitle_language).strip() or "auto"
     settings.subtitle_model = str(settings_map.get("subtitle_model") or settings.subtitle_model).strip() or "base"
     settings.subtitle_engine = str(settings_map.get("subtitle_engine") or settings.subtitle_engine).strip() or "auto"
-    settings.subtitle_sync_ms = _coerce_int(settings_map.get("subtitle_sync_ms"), settings.subtitle_sync_ms, minimum=-600000, maximum=600000)
+    device = str(settings_map.get("subtitle_device") or settings.subtitle_device).strip().lower()
+    settings.subtitle_device = device if device in {"auto", "mps", "cuda", "cpu"} else "auto"
+    settings.subtitle_sync_ms = _coerce_int(
+        settings_map.get("subtitle_sync_ms"), settings.subtitle_sync_ms, minimum=-600000, maximum=600000
+    )
     settings.subtitle_style_enabled = _coerce_bool(settings_map.get("subtitle_style_enabled"), settings.subtitle_style_enabled)
     settings.subtitle_font_name = str(settings_map.get("subtitle_font_name") or settings.subtitle_font_name).strip()
     settings.subtitle_font_size = _coerce_int(settings_map.get("subtitle_font_size"), settings.subtitle_font_size, minimum=6, maximum=200)
@@ -276,7 +281,9 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.subtitle_outline = _coerce_int(settings_map.get("subtitle_outline"), settings.subtitle_outline, minimum=0, maximum=20)
     settings.subtitle_shadow = _coerce_int(settings_map.get("subtitle_shadow"), settings.subtitle_shadow, minimum=0, maximum=20)
     settings.subtitle_alignment = _coerce_int(settings_map.get("subtitle_alignment"), settings.subtitle_alignment, minimum=1, maximum=9)
-    subtitle_out_format = str(settings_map.get("out_subtitle_fmt") or settings_map.get("subtitle_out_fmt") or settings.subtitle_out_format).strip().lower()
+    subtitle_out_format = (
+        str(settings_map.get("out_subtitle_fmt") or settings_map.get("subtitle_out_fmt") or settings.subtitle_out_format).strip().lower()
+    )
     if subtitle_out_format in OUT_SUBTITLE_FORMATS:
         settings.subtitle_out_format = subtitle_out_format
         settings.out_subtitle_format = subtitle_out_format
@@ -337,14 +344,10 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.meta_year = str(settings_map.get("meta_year", settings.meta_year))
     settings.meta_track = str(settings_map.get("meta_track", settings.meta_track))
 
-    device_profile = str(settings_map.get("device_profile") or "").strip()
-    if device_profile in DEVICE_PROFILE_NAMES:
-        settings.device_profile = "" if device_profile == "None" else device_profile
-
     settings.privacy_blur_regions = str(settings_map.get("privacy_blur_regions") or settings.privacy_blur_regions).strip()
     settings.ai_blur_enabled = _coerce_bool(settings_map.get("ai_blur_enabled"), settings.ai_blur_enabled)
     checksum_algorithm = str(settings_map.get("checksum_algorithm") or settings.checksum_algorithm).strip().lower()
-    settings.checksum_algorithm = checksum_algorithm if checksum_algorithm in {"none", "md5", "sha256"} else "none"
+    settings.checksum_algorithm = checksum_algorithm if checksum_algorithm in {"none", "md5", "sha256", "sha512"} else "none"
     settings.secure_delete_original = _coerce_bool(settings_map.get("secure_delete_original"), settings.secure_delete_original)
 
     settings.editor_deinterlace = _coerce_bool(settings_map.get("editor_deinterlace"), settings.editor_deinterlace)
@@ -371,8 +374,6 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
         _apply_video_codec(settings, settings_map.get("codec"))
     if _has_setting_value(settings_map, "hw"):
         _apply_hw_encoder(settings, settings_map.get("hw"))
-    if settings.device_profile:
-        settings = apply_device_profile(settings, settings.device_profile)
     return settings
 
 

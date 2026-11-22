@@ -122,7 +122,13 @@ function Install-Requirements {
     param([Parameter(Mandatory = $true)]$Python)
 
     if ($SkipDependencyInstall -or $env:MEDIA_CONVERTER_SKIP_DEP_BOOTSTRAP -in @("1", "true", "yes")) {
+        $env:MEDIA_CONVERTER_SKIP_DEP_BOOTSTRAP = "1"
         Write-Host "Skipping Python package installation."
+        return
+    }
+    if ($Mode -eq "run") {
+        # main.py prepares missing runtime libraries and an isolated environment.
+        # Keep build tools and global Python installations out of normal startup.
         return
     }
     if (-not $AllowDependencyInstall -and $env:MEDIA_CONVERTER_AUTO_INSTALL_DEPS -notin @("1", "true", "yes")) {

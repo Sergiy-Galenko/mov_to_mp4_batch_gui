@@ -7,8 +7,8 @@ Button {
     property string iconName: "more"
     property string accessibleLabel: ""
     property bool prominent: false
-    implicitWidth: 36
-    implicitHeight: 36
+    implicitWidth: Theme.buttonHeight
+    implicitHeight: Theme.buttonHeight
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.name: accessibleLabel

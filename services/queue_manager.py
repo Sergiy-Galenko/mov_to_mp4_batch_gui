@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import uuid
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from contextlib import suppress
@@ -13,6 +15,7 @@ from utils.files import file_sha256, media_type
 class QueueManager:
     def serialize_task(self, item: TaskItem) -> dict[str, Any]:
         return {
+            "task_id": item.task_id,
             "path": str(item.path),
             "media_type": item.media_type,
             "status": item.status,
@@ -43,12 +46,46 @@ class QueueManager:
         if not isinstance(payload, list):
             return []
         items: list[TaskItem] = []
+        identities: set[str] = set()
         for raw in payload:
             if not isinstance(raw, dict):
                 continue
-            path_value = str(raw.get("path") or "").strip()
-            media_kind = str(raw.get("media_type") or "").strip()
+            if not isinstance(raw.get("path"), str) or not isinstance(raw.get("media_type"), str):
+                continue
+            path_value = raw["path"].strip()
+            media_kind = raw["media_type"].strip()
             if not path_value or not media_kind:
+                continue
+            # Reject malformed records independently so one bad entry cannot
+            # prevent importing/recovering the rest of the queue.
+            raw = dict(raw)
+            try:
+                if "\0" in path_value:
+                    raise ValueError("path")
+                task_path = Path(path_value).expanduser()
+                for key in ("attempts", "input_bytes", "output_bytes", "predicted_output_bytes", "priority"):
+                    value = raw.get(key, 0)
+                    if isinstance(value, bool) or not isinstance(value, (int, str)):
+                        raise ValueError(key)
+                    raw[key] = int(value)
+                    if raw[key] < 0 or raw[key] > 2**63 - 1:
+                        raise ValueError(key)
+                for key in ("progress", "elapsed_seconds", "compression_ratio"):
+                    value = raw.get(key, 0.0)
+                    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+                        raise ValueError(key)
+                    raw[key] = float(value)
+                    if not math.isfinite(raw[key]) or raw[key] < 0:
+                        raise ValueError(key)
+                if raw["progress"] > 100 or raw["priority"] > 5:
+                    raise ValueError("progress or priority")
+                if not isinstance(raw.get("overrides", {}), dict):
+                    raise ValueError("overrides")
+                if raw.get("exit_code") is not None:
+                    if isinstance(raw["exit_code"], bool) or not isinstance(raw["exit_code"], (int, str)):
+                        raise ValueError("exit_code")
+                    raw["exit_code"] = int(raw["exit_code"])
+            except (ValueError, TypeError, OverflowError, RuntimeError):
                 continue
             status = str(raw.get("status") or TaskStatus.QUEUED)
             if status not in TASK_STATUSES:
@@ -56,9 +93,17 @@ class QueueManager:
             was_interrupted = pending_recovery and status in {TaskStatus.ANALYZING, TaskStatus.RUNNING, TaskStatus.PAUSED}
             if was_interrupted:
                 status = TaskStatus.QUEUED
+            try:
+                identity = uuid.UUID(str(raw.get("task_id") or "")).hex
+            except ValueError:
+                identity = uuid.uuid4().hex
+            if identity in identities:
+                identity = uuid.uuid4().hex
+            identities.add(identity)
             items.append(
                 TaskItem(
-                    path=Path(path_value).expanduser(),
+                    task_id=identity,
+                    path=task_path,
                     media_type=media_kind,
                     status=status,
                     last_error=str(raw.get("last_error") or ""),
@@ -120,39 +165,42 @@ class QueueManager:
             unique.append(item)
         return unique, removed
 
-    def deduplicate_by_hash(self, items: Sequence[TaskItem]) -> tuple[list[TaskItem], int, list[str]]:
-        seen: dict[tuple[int, str], TaskItem] = {}
-        unique: list[TaskItem] = []
-        removed = 0
-        log_lines: list[str] = []
-        sizes: dict[Path, int] = {}
+    def hash_candidates(self, items: Sequence[TaskItem]) -> tuple[dict[tuple[str, Path], str], list[str]]:
+        hashes = {}
+        log_lines = []
+        sizes = {}
         for item in items:
             with suppress(OSError):
                 sizes[item.path] = item.path.stat().st_size
-        counts = Counter(sizes.get(item.path) for item in items)
+        counts = Counter(sizes.values())
         for item in items:
             size = sizes.get(item.path)
-            if size is None or counts[size] < 2:
-                unique.append(item)
-                continue
-            # Hash only size-collision candidates. Re-read their contents: cached
-            # hashes can be stale after an external edit of the source file.
-            item.content_hash = ""
-            try:
-                item.content_hash = file_sha256(item.path)
-            except Exception as exc:
-                log_lines.append(f"Не вдалося порахувати hash для {item.path.name}: {exc}")
-                unique.append(item)
-                continue
-            key = (size, item.content_hash)
-            if item.content_hash and key in seen:
-                removed += 1
-                log_lines.append(f"Hash duplicate: {item.path.name} == {seen[key].path.name}")
-                continue
-            if item.content_hash:
-                seen[key] = item
+            if size is not None and counts[size] > 1:
+                try:
+                    hashes[item.task_id, item.path] = file_sha256(item.path)
+                except OSError as exc:
+                    log_lines.append(f"Не вдалося порахувати hash для {item.path.name}: {exc}")
+        return hashes, log_lines
+
+    def apply_hashes(self, items: Sequence[TaskItem], hashes: dict[tuple[str, Path], str]) -> tuple[list[TaskItem], int, list[str]]:
+        seen = {}
+        unique = []
+        log_lines = []
+        for item in items:
+            digest = hashes.get((item.task_id, item.path))
+            if digest:
+                item.content_hash = digest
+                if digest in seen:
+                    log_lines.append(f"Hash duplicate: {item.path.name} == {seen[digest].name}")
+                    continue
+                seen[digest] = item.path
             unique.append(item)
-        return unique, removed, log_lines
+        return unique, len(items) - len(unique), log_lines
+
+    def deduplicate_by_hash(self, items: Sequence[TaskItem]) -> tuple[list[TaskItem], int, list[str]]:
+        hashes, errors = self.hash_candidates(items)
+        unique, removed, log_lines = self.apply_hashes(items, hashes)
+        return unique, removed, errors + log_lines
 
     def paths_from_payload(self, paths: Iterable[Any]) -> set[Path]:
         normalized: set[Path] = set()

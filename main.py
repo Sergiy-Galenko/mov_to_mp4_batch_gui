@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -5,17 +6,34 @@ from pathlib import Path
 def _bootstrap_dependencies() -> None:
     base_dir = Path(__file__).resolve().parent
     try:
-        from app.dependency_bootstrap import ensure_runtime_dependencies
+        from app.bootstrap_window import run_bootstrap
 
-        installed = ensure_runtime_dependencies(base_dir / "requirements.txt")
-        if installed:
-            print("Installed missing Python libraries: " + ", ".join(installed))
+        result = run_bootstrap(base_dir / "requirements.txt", gui="--cli" not in sys.argv)
+        if result.installed or result.python != sys.executable:
+            os.execv(result.python, [result.python, *sys.argv])
     except Exception as exc:
         print(f"Dependency bootstrap failed: {exc}", file=sys.stderr)
         raise
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["--self-test"]:
+        import argparse
+        import tempfile
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--self-test", action="store_true")
+        parser.add_argument("--report", type=Path)
+        parser.add_argument("--allow-missing-ffprobe", action="store_true")
+        args = parser.parse_args()
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        with tempfile.TemporaryDirectory(prefix="media-converter-self-test-") as temporary:
+            os.environ["MEDIA_CONVERTER_PORTABLE_DIR"] = temporary
+            from services.package_smoke import run_smoke
+            sys.exit(run_smoke(args.report, require_tools=not args.allow_missing_ffprobe))
+    if sys.argv[1:2] == ["--whisper-setup-worker"]:
+        from services.whisper_worker import main as whisper_main
+
+        sys.exit(whisper_main(sys.argv[2:]))
     if sys.argv[1:2] == ["--transcribe-worker"]:
         from services.transcription_service import run_transcription_worker
 
@@ -27,15 +45,17 @@ def main() -> None:
 
         sys.exit(cli_main(sys.argv[1:]))
 
+    os.environ["QML_DISABLE_DISK_CACHE"] = "1"
     from PySide6 import QtCore, QtGui, QtQml, QtWidgets
     from PySide6.QtQuickControls2 import QQuickStyle
 
     from ui.backend import Backend
 
     QQuickStyle.setStyle("Basic")
-    QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_DontUseNativeDialogs)
     app = QtWidgets.QApplication(sys.argv)
-    app.setStyle("Fusion")
+    # QApplication selects the native widget style for the host OS. Keep that
+    # style for system dialogs; the QML controls use our platform theme.
+    app.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.GeneralFont))
     app.setOrganizationName("MediaConverter")
     app.setApplicationName("MediaConverter")
 
@@ -57,6 +77,7 @@ def main() -> None:
     if not engine.rootObjects():
         sys.exit(1)
 
+    QtCore.QTimer.singleShot(0, backend.startDependencySetup)
     sys.exit(app.exec())
 
 

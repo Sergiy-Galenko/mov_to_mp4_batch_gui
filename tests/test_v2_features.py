@@ -9,7 +9,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
-from PySide6 import QtWidgets
 from PySide6.QtTest import QAbstractItemModelTester
 
 from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
@@ -92,16 +91,6 @@ class Version2UpgradesTest(unittest.TestCase):
 
 if __name__ == "__main_":
     unittest.main()
-
-
-_APP = None
-
-
-@pytest.fixture
-def qt_app():
-    global _APP
-    _APP = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    return _APP
 
 
 def test_progress_does_not_refilter_or_invalidate_thumbnails(qt_app):
@@ -263,14 +252,14 @@ def test_backend_stats_never_reads_disk_and_event_processing_yields(qt_app):
         backend.shutdown()
 
 
-def test_default_theme_is_complete_monochrome_and_readable(tmp_path):
-    manager = ThemeManager(tmp_path / "theme.json")
+@pytest.mark.parametrize("platform_name", ["macos", "windows", "linux"])
+@pytest.mark.parametrize("mode", ["dark", "light"])
+def test_platform_theme_is_complete_and_readable(tmp_path, platform_name, mode):
+    manager = ThemeManager(tmp_path / "theme.json", platform_name=platform_name)
+    manager.set_theme_mode(mode)
     palette = manager.palette()
-    assert manager.theme_mode() == "dark"
+    assert manager.theme_mode() == mode
     assert palette.keys() == COLOR_KEYS
-    for value in palette.values():
-        rgb = value[-6:]
-        assert rgb[:2] == rgb[2:4] == rgb[4:]
     for text, background in (("textPrimary", "windowBackground"), ("textSecondary", "panelBackground"), ("textOnAccent", "accent")):
         assert contrast_ratio(palette[text], palette[background]) >= 4.5
 
@@ -329,13 +318,20 @@ def test_named_themes_and_json_preserve_every_color_and_layout(tmp_path):
     assert ThemeManager(manager.path).saved_themes() == []
 
 
-@pytest.mark.parametrize("invalid", [
-    {}, {"schema_version": 99, "theme_mode": "dark"}, {"theme_mode": "unknown"},
-    {"colors": {"accent": "red"}}, {"colors": {"notAColor": "#fff"}},
-    {"colors": []}, {"theme_mode": "light", "font_scale": float("nan")},
-    {"theme_mode": "light", "layout_mode": "unknown"},
-    {"theme_mode": "light", "sidebar_collapsed": "false"},
-])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {},
+        {"schema_version": 99, "theme_mode": "dark"},
+        {"theme_mode": "unknown"},
+        {"colors": {"accent": "red"}},
+        {"colors": {"notAColor": "#fff"}},
+        {"colors": []},
+        {"theme_mode": "light", "font_scale": float("nan")},
+        {"theme_mode": "light", "layout_mode": "unknown"},
+        {"theme_mode": "light", "sidebar_collapsed": "false"},
+    ],
+)
 def test_invalid_theme_import_leaves_disk_and_active_theme_unchanged(tmp_path, invalid):
     manager = ThemeManager(tmp_path / "theme.json")
     manager.set_color("accent", "#456789")
@@ -374,3 +370,34 @@ def test_all_theme_colors_and_modes_have_translations():
         for prefix, values in (("color", COLOR_KEYS), ("mode", THEME_MODES), ("group", groups)):
             for value in values:
                 assert messages[f"appearance.{prefix}.{value}"], (locale, prefix, value)
+
+
+@pytest.mark.parametrize("system, expected", [("darwin", "macos"), ("win32", "windows"), ("linux", "linux")])
+def test_theme_detects_host_and_preserves_custom_colors(tmp_path, monkeypatch, system, expected):
+    monkeypatch.setattr("app.theme_palette.sys.platform", system)
+    manager = ThemeManager(tmp_path / "theme.json")
+    assert manager.platform_name == expected
+    manager.set_color("accent", "#9955BB", "dark")
+    restored = ThemeManager(tmp_path / "theme.json")
+    assert restored.palette("dark")["accent"] == "#9955BB"
+    restored.reset_colors("dark")
+    assert restored.palette("dark")["accent"] != "#9955BB"
+
+
+def test_async_hash_dedup_reconciles_the_current_queue(tmp_path, qt_app):
+    from ui.backend import Backend
+
+    backend = Backend()
+    try:
+        tasks = [TaskItem(tmp_path / f"{name}.txt", "text") for name in "abcd"]
+        for task in tasks:
+            task.path.write_text("same")
+        backend.queue_model.set_items(tasks[:3])
+        backend._deduplicate_hash_async(backend.queue_model.items())
+        # The original keeper was removed, two candidates reordered, and a new job added.
+        backend.queue_model.set_items([tasks[3], tasks[2], tasks[1]])
+        for _ in range(10):
+            backend._poll_events()
+        assert backend.queue_model.items() == [tasks[3], tasks[2]]
+    finally:
+        backend.shutdown()
