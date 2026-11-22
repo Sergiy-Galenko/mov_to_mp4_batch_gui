@@ -1076,5 +1076,6 @@
   "result_choose_folder": "Anderen Ordner wählen",
   "audio_track": "Audiospur",
   "quality_custom": "Eigene Einstellungen",
-  "quality_custom_hint": "Eigene Qualitätseinstellungen sind aktiv."
+  "quality_custom_hint": "Eigene Qualitätseinstellungen sind aktiv.",
+  "nav_scripting": "JS-Skripte & Plugins"
 }

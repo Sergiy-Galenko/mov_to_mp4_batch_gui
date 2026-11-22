@@ -266,6 +266,7 @@ ApplicationWindow {
     }
 
     function showSection(pageIndex, target, navIndex) {
+        if (target === "scripting") { scriptModal.open(); return }
         activeSection = pageIndex
         activeNavIndex = navIndex >= 0 ? navIndex : navIndexFor(pageIndex, target)
         if (pageIndex === 5) {
@@ -294,6 +295,7 @@ ApplicationWindow {
         { title: "nav_ffmpeg", icon: "settings", tint: "#8E8E93", page: 3, target: "", group: "nav_automation" },
         { title: "nav_ffmpeg_watch", icon: "clock", tint: "#5856D6", page: 5, target: "ffmpeg_watch", group: "nav_automation" },
         { title: "nav_cloud_integration", icon: "cloud", tint: "#32ADE6", page: 5, target: "cloud_integration", group: "nav_automation" },
+        { title: "nav_scripting", icon: "sliders", tint: "#AF52DE", page: 5, target: "scripting", group: "nav_automation" },
         { title: "nav_metadata_hooks", icon: "file", tint: "#8E8E93", page: 5, target: "metadata_hooks", group: "nav_automation" },
         { title: "nav_app_update", icon: "refresh", tint: "#007AFF", page: 5, target: "app_update", group: "nav_application" },
         { title: "nav_commercial_license", icon: "key", tint: "#FF9500", page: 5, target: "commercial_license", group: "nav_application" }
@@ -2067,6 +2069,8 @@ ApplicationWindow {
         montageEditorDialog.openForFile(target || "")
     }
 
+
+    ScriptEditorModal { id: scriptModal }
 
     function shortcutAllowed(action) {
         var editing = root.activeFocusItem && (root.activeFocusItem.selectByMouse !== undefined || root.activeFocusItem.inputMethodHints !== undefined)

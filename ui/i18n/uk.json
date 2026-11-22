@@ -1084,5 +1084,6 @@
   "result_choose_folder": "Вибрати іншу папку",
   "audio_track": "Аудіодоріжка",
   "quality_custom": "Власні параметри",
-  "quality_custom_hint": "Використовуються власні параметри якості."
+  "quality_custom_hint": "Використовуються власні параметри якості.",
+  "nav_scripting": "JS-скрипти та плагіни"
 }

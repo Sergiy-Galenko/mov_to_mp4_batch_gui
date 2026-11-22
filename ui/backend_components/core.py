@@ -36,9 +36,11 @@ from .common import (
     QueueManager,
     QueueModel,
     ResourceMonitor,
+    ScriptingService,
     SettingsManager,
     ShortcutManager,
     SourceUpdateService,
+    SpeechDiagnosticService,
     SystemProfile,
     SystemTrayService,
     TaskbarService,
@@ -118,6 +120,11 @@ class CoreMixin:
     autoDisplayAdaptationChanged = QtCore.Signal()
     whisperModelsChanged = QtCore.Signal()
     whisperDownloadProgress = QtCore.Signal(str, float, str)
+    scriptingConfigChanged = QtCore.Signal()
+    speechDiagnosticChanged = QtCore.Signal()
+    speechInstallProgress = QtCore.Signal(str)
+    speechInstallFinished = QtCore.Signal(bool, str)
+    speechTestFinished = QtCore.Signal(dict)
     montageWaveformReady = QtCore.Signal(str, str)
     montageSessionUpdated = QtCore.Signal(str)
     montageProxyReady = QtCore.Signal(str, str)
@@ -127,7 +134,10 @@ class CoreMixin:
         super().__init__()
         self.whisper_model_manager = WhisperModelManager()
         self.event_queue: queue.Queue[tuple] = UiEventQueue()
+        self.scripting_service = ScriptingService()
+        self.speech_diagnostic = SpeechDiagnosticService()
         self.ffmpeg_service = FfmpegService(find_ffmpeg(), None)
+        self.ffmpeg_service.scripting_service = self.scripting_service
         self.ffmpeg_service.ffprobe_path = find_ffprobe(self.ffmpeg_service.ffmpeg_path)
         self.montage_service = MontageService(self.ffmpeg_service.ffmpeg_path, self.ffmpeg_service.ffprobe_path)
         self._montage_editing = MontageEditing(self)
@@ -399,6 +409,7 @@ class CoreMixin:
             from services.converter_service import ConverterService
 
             self._converter_service = ConverterService(self.ffmpeg_service, self.event_queue)
+            self._converter_service.scripting_service = self.scripting_service
             self._converter_service.resource_monitor = self._resource_monitor
         return self._converter_service
 

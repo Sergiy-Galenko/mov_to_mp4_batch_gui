@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from queue import Queue
+from typing import Any
 
 import psutil
 
@@ -80,6 +81,7 @@ class ConverterService:
         self._active_settings = ConversionSettings()
         self._calibration_paused = False
         self.processing_plans: list[dict] = []
+        self.scripting_service: Any = None
 
     def _result_output_paths(self, result_output: str) -> list[Path]:
         return [path for path in parse_output_paths(result_output) if path.is_file()]
@@ -643,6 +645,7 @@ class ConverterService:
                 info=self.media_info.get(task.path),
                 collision_policy=collision_policy,
                 reserved=self._reserved_output_paths,
+                script_service=self.scripting_service,
             )
 
     def _reserve_output_path(self, output_path: Path, collision_policy: str = "index") -> Path:
