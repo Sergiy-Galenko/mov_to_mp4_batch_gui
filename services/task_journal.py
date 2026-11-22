@@ -10,6 +10,7 @@ from pathlib import Path
 from app.models import TaskStatus
 from app.paths import APP_DATA_DIR
 from services.cache_manager import source_fingerprint
+from utils.files import parse_output_paths
 from utils.sqlite_store import database
 
 TERMINAL = {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.SKIPPED, TaskStatus.CANCELLED}
@@ -65,11 +66,8 @@ class TaskJournal:
             raise ValueError("Invalid journal status")
         published = None
         if status == TaskStatus.SUCCESS and output:
-            with database(self.path) as db:
-                row = db.execute("SELECT output FROM tasks WHERE id=?", (task_id,)).fetchone()
-            paths = [output] if row and row["output"] == output else output.split(";")
             try:
-                published = json.dumps([source_fingerprint(Path(value.strip())) for value in paths if value.strip()], sort_keys=True)
+                published = json.dumps([source_fingerprint(path) for path in parse_output_paths(output)], sort_keys=True)
             except OSError:
                 status, message = TaskStatus.FAILED, "Published output is missing"
         with database(self.path) as db:

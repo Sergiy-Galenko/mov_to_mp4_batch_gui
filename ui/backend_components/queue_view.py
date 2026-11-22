@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from utils.files import parse_output_paths
+
 from .common import Any, ConversionSettings, Dict, List, Path, QtCore, QueueModel, merge_settings_maps, settings_map_to_model
 from .core import CoreMixin
 
@@ -35,7 +37,7 @@ class QueueViewMixin:
             return {}
         settings = settings_map_to_model(merge_settings_maps(self._last_settings_map, item.overrides), defaults=ConversionSettings())
         info = self.media_info_cache.get(item.path) or item.probe_data
-        output = Path(item.last_output.split(";", 1)[0].strip()) if item.last_output else None
+        output = next(iter(parse_output_paths(item.last_output)), None)
         from utils.error_classifier import classify_stderr_block
         from utils.formatting import format_bytes
 

@@ -5,9 +5,11 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from app.constants import OUT_AUDIO_FORMATS
 from app.models import ConversionSettings, MediaInfo, PreviewItem, PreviewSummary, TaskItem
 from app.settings import merge_settings_maps, settings_map_to_model
 from services.ffmpeg_service import FfmpegService
+from services.media_processing_plan import select_merge_inputs
 from services.smart_convert_service import apply_smart_settings
 from services.validation_service import OPERATION_LABELS, operation_supports_media
 from utils.files import build_merge_output_path, build_output_path
@@ -51,7 +53,9 @@ class PreviewBuilder:
                 source_path=task.path,
             )
 
-        merge_candidates = [task for task in tasks if task.media_type == "video" and resolved_by_path[task.path].operation == "convert"]
+        merge_candidates, is_audio_merge = select_merge_inputs(
+            (task, resolved_by_path[task.path].operation) for task in tasks
+        )
         merge_enabled = base_settings.merge and len(merge_candidates) >= 2
         merge_paths = {task.path for task in merge_candidates} if merge_enabled else set()
         merge_desired_path: Path | None = None
@@ -61,16 +65,18 @@ class PreviewBuilder:
             merge_desired_path = build_merge_output_path(
                 out_dir,
                 base_settings.merge_name,
-                base_settings.out_video_format,
+                base_settings.out_audio_format if is_audio_merge else base_settings.out_video_format,
                 overwrite=True,
                 skip_existing=True,
             )
             merge_preview_path = build_merge_output_path(
                 out_dir,
                 base_settings.merge_name,
-                base_settings.out_video_format,
+                base_settings.out_audio_format if is_audio_merge else base_settings.out_video_format,
                 overwrite=base_settings.overwrite,
                 skip_existing=base_settings.skip_existing,
+                collision_policy=base_settings.output_collision_policy,
+                strict_collisions=False,
             )
             merge_command = self.build_merge_command(merge_candidates, base_settings, merge_preview_path, info_cache)
 
@@ -83,7 +89,7 @@ class PreviewBuilder:
                 warnings = self._warnings_for(task, base_settings, desired_path, preview_path)
                 command = merge_command
                 operation = f"Merge ({len(merge_candidates)} файлів)"
-                parameters = self._parameter_summary("merge", base_settings)
+                parameters = self._parameter_summary("audio" if is_audio_merge else "merge", base_settings)
             else:
                 out_ext = self.ffmpeg.output_extension_for(task.media_type, resolved)
                 desired_path = build_output_path(
@@ -244,6 +250,9 @@ class PreviewBuilder:
         try:
             info_cache = media_info or {}
             paths = [task.path for task in tasks]
+            if output_path.suffix.lower().lstrip(".") in OUT_AUDIO_FORMATS:
+                cmd, list_path = self.ffmpeg.build_audio_merge_command(paths, output_path, settings, settings.fast_copy)
+                return self._format_command(cmd)
             allow_fast = False
             if settings.fast_copy:
                 _filter_arg, _, _, _, filters_used = self.ffmpeg.build_video_filter_spec(
@@ -293,6 +302,8 @@ class PreviewBuilder:
                 warnings.append("буде перезаписано")
             elif settings.skip_existing:
                 warnings.append("буде пропущено")
+            elif settings.output_collision_policy == "stop":
+                warnings.append("файл уже існує, batch буде зупинено")
             elif desired_path != preview_path:
                 warnings.append(f"буде перейменовано в {preview_path.name}")
         return warnings

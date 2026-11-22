@@ -165,39 +165,42 @@ class QueueManager:
             unique.append(item)
         return unique, removed
 
-    def deduplicate_by_hash(self, items: Sequence[TaskItem]) -> tuple[list[TaskItem], int, list[str]]:
-        seen: dict[tuple[int, str], TaskItem] = {}
-        unique: list[TaskItem] = []
-        removed = 0
-        log_lines: list[str] = []
-        sizes: dict[Path, int] = {}
+    def hash_candidates(self, items: Sequence[TaskItem]) -> tuple[dict[tuple[str, Path], str], list[str]]:
+        hashes = {}
+        log_lines = []
+        sizes = {}
         for item in items:
             with suppress(OSError):
                 sizes[item.path] = item.path.stat().st_size
-        counts = Counter(sizes.get(item.path) for item in items)
+        counts = Counter(sizes.values())
         for item in items:
             size = sizes.get(item.path)
-            if size is None or counts[size] < 2:
-                unique.append(item)
-                continue
-            # Hash only size-collision candidates. Re-read their contents: cached
-            # hashes can be stale after an external edit of the source file.
-            item.content_hash = ""
-            try:
-                item.content_hash = file_sha256(item.path)
-            except Exception as exc:
-                log_lines.append(f"Не вдалося порахувати hash для {item.path.name}: {exc}")
-                unique.append(item)
-                continue
-            key = (size, item.content_hash)
-            if item.content_hash and key in seen:
-                removed += 1
-                log_lines.append(f"Hash duplicate: {item.path.name} == {seen[key].path.name}")
-                continue
-            if item.content_hash:
-                seen[key] = item
+            if size is not None and counts[size] > 1:
+                try:
+                    hashes[item.task_id, item.path] = file_sha256(item.path)
+                except OSError as exc:
+                    log_lines.append(f"Не вдалося порахувати hash для {item.path.name}: {exc}")
+        return hashes, log_lines
+
+    def apply_hashes(self, items: Sequence[TaskItem], hashes: dict[tuple[str, Path], str]) -> tuple[list[TaskItem], int, list[str]]:
+        seen = {}
+        unique = []
+        log_lines = []
+        for item in items:
+            digest = hashes.get((item.task_id, item.path))
+            if digest:
+                item.content_hash = digest
+                if digest in seen:
+                    log_lines.append(f"Hash duplicate: {item.path.name} == {seen[digest].name}")
+                    continue
+                seen[digest] = item.path
             unique.append(item)
-        return unique, removed, log_lines
+        return unique, len(items) - len(unique), log_lines
+
+    def deduplicate_by_hash(self, items: Sequence[TaskItem]) -> tuple[list[TaskItem], int, list[str]]:
+        hashes, errors = self.hash_candidates(items)
+        unique, removed, log_lines = self.apply_hashes(items, hashes)
+        return unique, removed, errors + log_lines
 
     def paths_from_payload(self, paths: Iterable[Any]) -> set[Path]:
         normalized: set[Path] = set()

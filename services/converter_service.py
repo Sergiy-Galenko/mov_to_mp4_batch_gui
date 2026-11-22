@@ -21,15 +21,23 @@ from services.cache_manager import media_info_matches_source, tool_fingerprint
 from services.cloud_upload_service import CloudUploadService
 from services.ffmpeg_service import FfmpegService, parse_progress_line
 from services.hardware_pipeline import software_pipeline
+from services.media_processing_plan import select_merge_inputs
 from services.resource_monitor import ResourceMonitor
-from services.security_service import secure_delete, write_checksum_sidecar
+from services.security_service import SUPPORTED_CHECKSUMS, secure_delete, write_checksum_sidecar
 from services.smart_convert_service import apply_smart_settings, parse_ab_crfs, recommend_settings
 from services.task_journal import TaskJournal
 from services.text_conversion_service import convert_text_file
 from services.transcription_service import TranscriptionService
 from services.validation_service import operation_supports_media
 from services.workload_history import ProcessMemorySampler, WorkloadHistory
-from utils.files import build_merge_output_path, build_output_path, resolve_output_collision, sanitize_file_stem
+from utils.files import (
+    build_merge_output_path,
+    build_output_path,
+    format_output_paths,
+    parse_output_paths,
+    resolve_output_collision,
+    sanitize_file_stem,
+)
 from utils.files import publish_output as publish_completed_output
 from utils.formatting import format_bytes, format_time, parse_ffmpeg_time
 
@@ -74,17 +82,11 @@ class ConverterService:
         self.processing_plans: list[dict] = []
 
     def _result_output_paths(self, result_output: str) -> list[Path]:
-        paths: list[Path] = []
-        for raw in str(result_output or "").split(";"):
-            text = raw.strip()
-            if not text:
-                continue
-            path = Path(text).expanduser()
-            if path.exists() and path.is_file():
-                paths.append(path)
-        return paths
+        return [path for path in parse_output_paths(result_output) if path.is_file()]
 
-    def _post_process_success(self, task: TaskItem, settings: ConversionSettings, result_output: str) -> None:
+    def _post_process_success(
+        self, tasks: list[TaskItem], settings: ConversionSettings, result_output: str, *, video_reference_list: Path | None = None
+    ) -> None:
         output_paths = self._result_output_paths(result_output)
         if not output_paths:
             return
@@ -92,7 +94,7 @@ class ConverterService:
         checksum_algorithm = str(settings.checksum_algorithm or "none").lower()
         for output_path in output_paths:
             self._checkpoint()
-            if checksum_algorithm in {"md5", "sha256"}:
+            if checksum_algorithm in SUPPORTED_CHECKSUMS:
                 try:
                     sidecar = write_checksum_sidecar(output_path, checksum_algorithm, checkpoint=self._checkpoint)
                     self._log("OK", f"{checksum_algorithm.upper()} записано: {sidecar.name}")
@@ -107,7 +109,7 @@ class ConverterService:
                     safe_to_delete_original = False
                     self._log("WARN", f"Cloud upload помилка для {output_path.name}: {exc}")
             if settings.smart_integrity_check:
-                if task.media_type == "text":
+                if tasks[0].media_type == "text":
                     self._log("WARN", f"Integrity check пропущено для текстового файлу: {output_path.name}")
                 else:
                     ok, details = self.ffmpeg.check_media_integrity(output_path, run=self._run_command)
@@ -116,9 +118,11 @@ class ConverterService:
                     else:
                         safe_to_delete_original = False
                         self._log("WARN", f"Integrity check failed for {output_path.name}: {details or 'decode error'}")
-            if task.media_type == "video" and settings.smart_quality_metric in {"ssim", "vmaf"}:
+            single_video = len(tasks) == 1 and tasks[0].media_type == "video" and settings.operation != "audio_only"
+            if (single_video or video_reference_list) and settings.smart_quality_metric in {"ssim", "psnr", "vmaf"}:
                 ok, score, details = self.ffmpeg.measure_quality(
-                    task.path, output_path, settings.smart_quality_metric, run=self._run_command
+                    video_reference_list or tasks[0].path, output_path, settings.smart_quality_metric,
+                    run=self._run_command, concat_reference=video_reference_list is not None,
                 )
                 label = settings.smart_quality_metric.upper()
                 if ok and score is not None:
@@ -132,13 +136,15 @@ class ConverterService:
             self._log("WARN", "Secure delete пропущено: післяобробка результату завершилася з помилкою.")
             return
         if settings.secure_delete_original:
-            try:
-                source = task.path.expanduser()
-                if source.exists() and source.is_file() and all(source.resolve() != path.resolve() for path in output_paths):
-                    secure_delete(source)
-                    self._log("WARN", f"Secure delete виконано для оригіналу: {source.name}")
-            except Exception as exc:
-                self._log("WARN", f"Secure delete не виконано для {task.path.name}: {exc}")
+            for task in tasks:
+                self._checkpoint()
+                try:
+                    source = task.path.expanduser()
+                    if source.exists() and source.is_file() and all(source.resolve() != path.resolve() for path in output_paths):
+                        secure_delete(source)
+                        self._log("WARN", f"Secure delete виконано для оригіналу: {source.name}")
+                except Exception as exc:
+                    self._log("WARN", f"Secure delete не виконано для {task.path.name}: {exc}")
 
     def start(self, tasks: list[TaskItem], settings: ConversionSettings, out_dir: Path) -> None:
         if self.thread and self.thread.is_alive():
@@ -895,7 +901,7 @@ class ConverterService:
             chapter_outputs.append(str(outp))
             chapter_done += chapter_duration
             self._log("OK", f"Глава {chapter.index}: {outp.name}")
-        return True, "; ".join(chapter_outputs)
+        return True, format_output_paths(chapter_outputs)
 
     def _run(self, tasks: list[TaskItem], settings: ConversionSettings, out_dir: Path, *, start_index: int = 1) -> None:
         started = time.time()
@@ -1011,13 +1017,10 @@ class ConverterService:
         )
         self._run_hook(settings.before_hook, "before", env=hook_env)
 
-        merge_candidates = [
-            task
-            for task in tasks
-            if task.media_type in {"video", "audio"} and self._effective_settings(task, settings).operation in {"convert", "audio_only"}
-        ]
+        merge_candidates, is_audio_merge = select_merge_inputs(
+            (task, self._effective_settings(task, settings).operation) for task in tasks
+        )
         merge_enabled = settings.merge and len(merge_candidates) >= 2
-        is_audio_merge = merge_enabled and all(task.media_type == "audio" for task in merge_candidates)
         merge_out_format = settings.out_audio_format if is_audio_merge else settings.out_video_format
         if settings.merge and not merge_enabled:
             self._log("WARN", "Merge доступний лише для щонайменше 2 відео або аудіо файлів.")
@@ -1031,18 +1034,19 @@ class ConverterService:
                 out_dir,
                 settings.merge_name,
                 merge_out_format,
+                collision_policy=settings.output_collision_policy,
+                reserved=self._reserved_output_paths,
                 overwrite=settings.overwrite,
                 skip_existing=settings.skip_existing,
             )
 
+            result_output = ""
             merge_duration = sum(self._task_duration(task) for task in merge_candidates)
             if settings.skip_existing and outp.exists() and not settings.overwrite:
                 self._log("INFO", f"Пропускаю merge, файл вже існує: {outp.name}")
-                for task in merge_candidates:
-                    self._task_state(task.path, "skipped", "Вихідний файл вже існує", str(outp))
-                    done_files += 1
-                    done_duration += self._task_duration(task)
-                self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
+                status = TaskStatus.SKIPPED
+                message = "Вихідний файл вже існує"
+                result_output = str(outp)
             else:
                 self._emit("status", f"Обробка (merge): {outp.name}")
                 media_label = "аудіо" if is_audio_merge else "відео"
@@ -1097,44 +1101,37 @@ class ConverterService:
                             total_files,
                             total_start,
                         )
+                        if rc == 0 and outp.is_file():
+                            result_output = str(outp)
+                            self._post_process_success(
+                                merge_candidates, settings, result_output,
+                                video_reference_list=None if is_audio_merge else Path(list_path),
+                            )
+                            status, message = TaskStatus.SUCCESS, ""
+                            self._log("OK", f"Готово (merge): {outp.name}")
+                        else:
+                            status, message = TaskStatus.FAILED, f"Помилка merge (код {rc})"
+                            self._log("ERROR", message)
                     finally:
-                        with contextlib.suppress(Exception):
+                        with contextlib.suppress(OSError):
                             Path(list_path).unlink(missing_ok=True)
-                    success = rc == 0 and outp.exists()
-                    message = "" if success else f"Помилка merge (код {rc})"
-                    if success:
-                        self._log("OK", f"Готово (merge): {outp.name}")
-                    else:
-                        self._log("ERROR", message)
-                    for task in merge_candidates:
-                        self._task_state(task.path, "success" if success else "failed", message, str(outp))
-                        done_files += 1
-                        done_duration += self._task_duration(task)
-                        run_results.append(
-                            {
-                                "path": str(task.path),
-                                "status": "success" if success else "failed",
-                                "message": message,
-                                "output_path": str(outp),
-                            }
-                        )
-                except FileNotFoundError:
-                    self._log("ERROR", "FFmpeg не знайдено під час запуску.")
-                    self.stop_event.set()
+                except InterruptedError:
+                    if not (self.stop_event.is_set() or self.skip_event.is_set()):
+                        raise
                 except Exception as exc:
+                    status, message = TaskStatus.FAILED, str(exc)
                     self._log("ERROR", f"Merge помилка: {exc}")
-                    for task in merge_candidates:
-                        self._task_state(task.path, "failed", str(exc))
-                        done_files += 1
-                        done_duration += self._task_duration(task)
-                        run_results.append(
-                            {
-                                "path": str(task.path),
-                                "status": "failed",
-                                "message": str(exc),
-                                "output_path": "",
-                            }
-                        )
+                if self.stop_event.is_set():
+                    status, message = TaskStatus.CANCELLED, "Скасовано користувачем"
+                elif self.skip_event.is_set():
+                    status, message = TaskStatus.SKIPPED, "Пропущено користувачем"
+                    self.skip_event.clear()
+            for task in merge_candidates:
+                self._task_state(task.path, status, message, result_output)
+                run_results.append({"path": str(task.path), "status": status, "message": message, "output_path": result_output})
+            done_files += len(merge_candidates)
+            done_duration += merge_duration
+            self._emit("progress", None, 0.0, None, None, done_files / total_files, None)
 
         remaining_tasks = [task for task in tasks if task.path not in merged_video_paths]
         parallel_results: list[dict[str, str]] | None = None
@@ -1476,7 +1473,7 @@ class ConverterService:
 
                 if status == TaskStatus.SUCCESS or status == "success":
                     with contextlib.suppress(InterruptedError):
-                        self._post_process_success(task, settings_for_task, result_output)
+                        self._post_process_success([task], settings_for_task, result_output)
                     if self.stop_event.is_set() or self.skip_event.is_set():
                         status = TaskStatus.CANCELLED if self.stop_event.is_set() else TaskStatus.SKIPPED
                         result_message = "Післяобробку скасовано; результат збережено"

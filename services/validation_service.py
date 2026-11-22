@@ -12,6 +12,7 @@ from app.paths import find_ffprobe
 from app.settings import merge_settings_maps, settings_map_to_model
 from app.target_size import target_mode_error, target_size_bytes
 from services.ffmpeg_service import FfmpegService
+from services.media_processing_plan import select_merge_inputs
 from utils.files import build_merge_output_path, build_output_path, is_subtitle, sanitize_file_stem
 from utils.formatting import parse_float, parse_time_to_seconds
 
@@ -236,9 +237,9 @@ class ValidationService:
                 if resolved.audio_codec == "copy" and self.ffmpeg.has_audio_processing(resolved):
                     add_error("audio_codec", f"{item.path.name}: обробка аудіо потребує перекодування; зміни audio codec з copy на auto.")
 
-        merge_candidates = [
-            item for item in queue_items if item.media_type == "video" and resolved_by_path[item.path].operation == "convert"
-        ]
+        merge_candidates, is_audio_merge = select_merge_inputs(
+            (task, resolved_by_path[task.path].operation) for task in queue_items
+        )
         merge_enabled = settings.merge and len(merge_candidates) >= 2
         merge_paths = {item.path for item in merge_candidates} if merge_enabled else set()
 
@@ -247,13 +248,15 @@ class ValidationService:
             desired = build_merge_output_path(
                 output_dir,
                 settings.merge_name,
-                settings.out_video_format,
+                settings.out_audio_format if is_audio_merge else settings.out_video_format,
                 overwrite=True,
                 skip_existing=True,
             )
-            seen_outputs[desired] = f"merge ({len(merge_candidates)} відео)"
+            seen_outputs[desired] = f"merge ({len(merge_candidates)} файлів)"
             if desired.exists():
-                if settings.overwrite:
+                if settings.output_collision_policy == "stop":
+                    add_error("merge_name", f"{desired.name}: файл уже існує, batch зупинено політикою колізій.")
+                elif settings.overwrite:
                     add_warning(f"{desired.name}: буде перезаписано.")
                 elif settings.skip_existing:
                     add_warning(f"{desired.name}: буде пропущено.")

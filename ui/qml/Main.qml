@@ -309,7 +309,7 @@ ApplicationWindow {
     property var audioCodecOptions: ["auto", "aac", "ac3", "opus", "mp3", "copy"]
     property var smartContentTypes: ["auto", "live_action", "animation", "screencast"]
     property var smartQualityTargets: ["small", "balanced", "quality"]
-    property var smartQualityMetrics: ["none", "ssim", "vmaf"]
+    property var smartQualityMetrics: ["none", "ssim", "psnr", "vmaf"]
     property var hwOptions: ["auto", "cpu", "Apple (VideoToolbox)", "NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)", "Linux (VA-API)"]
     property var performanceProfiles: ["Quality", "Balanced", "Fast", "Small file"]
     property var rotateCanonicalOptions: ["0", "90° вправо", "90° вліво", "180°"]

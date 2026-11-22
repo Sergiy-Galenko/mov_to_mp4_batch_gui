@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from utils.files import parse_output_paths
+
 from .common import FfmpegAutoInstallResult, FfmpegService, Optional, Path, QtCore, QtGui, QtWidgets, find_ffprobe, os, shutil, threading
 
 
@@ -199,11 +201,11 @@ class FfmpegPathsMixin:
         task = self.queue_model.item_by_path(Path(str(path_text or "").strip()).expanduser())
         if task is None:
             return
-        output_text = (task.last_output or task.preview_output or "").split(";", 1)[0].strip()
-        if not output_text:
+        outputs = parse_output_paths(task.last_output or task.preview_output)
+        if not outputs:
             QtWidgets.QMessageBox.information(None, "Output", "Output для цього файлу ще не розраховано.")
             return
-        output = Path(output_text).expanduser()
+        output = outputs[0]
         if output.exists():
             self._open_path(output)
         elif output.parent.exists():

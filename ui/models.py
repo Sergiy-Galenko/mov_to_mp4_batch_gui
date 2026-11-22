@@ -1,3 +1,5 @@
+
+
 import re
 import time
 from pathlib import Path
@@ -6,6 +8,7 @@ from typing import Any
 from PySide6 import QtCore
 
 from app.models import MediaInfo, TaskItem, TaskStatus
+from utils.files import parse_output_paths
 from utils.formatting import format_bytes, format_time
 
 
@@ -295,11 +298,11 @@ class QueueModel(QtCore.QAbstractListModel):
 
     def set_output_stats(self, task_path: Path, output_path_text: str) -> None:
         for idx, item in self._matching_item(task_path):
-            output_text = str(output_path_text or "").split(";", 1)[0].strip()
-            if not output_text:
+            outputs = parse_output_paths(output_path_text)
+            if not outputs:
                 return
             try:
-                output_bytes = Path(output_text).expanduser().stat().st_size
+                output_bytes = outputs[0].stat().st_size
             except Exception:
                 return
             input_bytes = item.input_bytes

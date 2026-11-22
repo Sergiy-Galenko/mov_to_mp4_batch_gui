@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from services.cache_manager import media_info_matches_source
+from utils.files import parse_output_paths
 
 from .common import (
     MONTAGE_MEDIA_FILTER,
@@ -72,10 +73,10 @@ class MediaDetailsMixin:
     @QtCore.Slot(str)
     def revealOutputForPath(self, path_text: str) -> None:
         task = self.queue_model.item_by_path(Path(path_text).expanduser())
-        if task and task.last_output:
-            output = Path(task.last_output.split(";", 1)[0].strip()).expanduser()
-            if output.parent.is_dir():
-                QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(output.parent)))
+        outputs = parse_output_paths(task.last_output) if task else []
+        if outputs and outputs[0].parent.is_dir():
+            output = outputs[0]
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(output.parent)))
 
     def _probe_media_async(self, path: Path) -> None:
         info = self.media_analysis.probe(path)

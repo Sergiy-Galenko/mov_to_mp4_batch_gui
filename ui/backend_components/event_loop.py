@@ -198,12 +198,13 @@ class EventLoopMixin:
                     _, info = event
                     self._apply_source_update_result(info)
                 elif etype == "dedupe_hash_done":
-                    _, unique, removed, log_lines = event
+                    _, hashes, errors = event
+                    unique, removed, log_lines = self.queue_manager.apply_hashes(self.queue_model.items(), hashes)
                     self.queue_model.set_items(unique)
                     self._notify_queue_stats()
                     self._refresh_output_preview(dict(self._last_settings_map))
                     self._save_state()
-                    for line in log_lines:
+                    for line in errors + log_lines:
                         self._append_log("INFO", line)
                     self._append_log("INFO", f"Видалено hash-дублікатів: {removed}")
                 elif etype == "task_state":

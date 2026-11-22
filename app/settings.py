@@ -240,7 +240,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.smart_two_pass = _coerce_bool(settings_map.get("smart_two_pass"), settings.smart_two_pass)
     settings.smart_integrity_check = _coerce_bool(settings_map.get("smart_integrity_check"), settings.smart_integrity_check)
     quality_metric = str(settings_map.get("smart_quality_metric") or settings.smart_quality_metric).strip().lower()
-    settings.smart_quality_metric = quality_metric if quality_metric in {"none", "ssim", "vmaf"} else "none"
+    settings.smart_quality_metric = quality_metric if quality_metric in {"none", "ssim", "psnr", "vmaf"} else "none"
     settings.smart_ab_test = _coerce_bool(settings_map.get("smart_ab_test"), settings.smart_ab_test)
     settings.smart_ab_crfs = str(settings_map.get("smart_ab_crfs") or settings.smart_ab_crfs).strip() or "18,23,28"
     settings.smart_ab_duration = _coerce_int(settings_map.get("smart_ab_duration"), settings.smart_ab_duration, minimum=1, maximum=120)
@@ -347,7 +347,7 @@ def settings_map_to_model(settings_map: Mapping[str, Any], *, defaults: Conversi
     settings.privacy_blur_regions = str(settings_map.get("privacy_blur_regions") or settings.privacy_blur_regions).strip()
     settings.ai_blur_enabled = _coerce_bool(settings_map.get("ai_blur_enabled"), settings.ai_blur_enabled)
     checksum_algorithm = str(settings_map.get("checksum_algorithm") or settings.checksum_algorithm).strip().lower()
-    settings.checksum_algorithm = checksum_algorithm if checksum_algorithm in {"none", "md5", "sha256"} else "none"
+    settings.checksum_algorithm = checksum_algorithm if checksum_algorithm in {"none", "md5", "sha256", "sha512"} else "none"
     settings.secure_delete_original = _coerce_bool(settings_map.get("secure_delete_original"), settings.secure_delete_original)
 
     settings.editor_deinterlace = _coerce_bool(settings_map.get("editor_deinterlace"), settings.editor_deinterlace)

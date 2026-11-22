@@ -1,8 +1,20 @@
 """Conservative stream decisions: copying requires known, compatible source data."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
-from app.models import MediaInfo
+from app.models import MediaInfo, TaskItem
+
+
+def select_merge_inputs(tasks: Iterable[tuple[TaskItem, str]]) -> tuple[list[TaskItem], bool]:
+    candidates = []
+    audio_only = True
+    for task, operation in tasks:
+        if task.media_type in {"audio", "video"} and operation in {"convert", "audio_only"}:
+            candidates.append(task)
+            if task.media_type == "video" and operation == "convert":
+                audio_only = False
+    return candidates, audio_only
 
 
 @dataclass(frozen=True)

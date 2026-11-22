@@ -45,8 +45,8 @@ class QueueActionsMixin:
         threading.Thread(target=self._deduplicate_hash_async, args=(items,), daemon=True).start()
 
     def _deduplicate_hash_async(self, items: List[TaskItem]) -> None:
-        unique, removed, log_lines = self.queue_manager.deduplicate_by_hash(items)
-        self.event_queue.put(("dedupe_hash_done", unique, removed, log_lines))
+        hashes, errors = self.queue_manager.hash_candidates(items)
+        self.event_queue.put(("dedupe_hash_done", hashes, errors))
 
     def _move_selected(self, indices: List[int], direction: str) -> None:
         items = self.queue_manager.reorder(self.queue_model.items(), indices, direction)

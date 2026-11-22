@@ -83,6 +83,42 @@ class JobState:
         self.websockets: list[WebSocket] = []
 
 
+    def start(self) -> bool:
+        with jobs_lock:
+            if self.cancel_requested:
+                self.finish(error="Cancelled by user")
+                return False
+            self.status = "running"
+            return True
+
+    def update_progress(self, pct: float, f_done: int, f_total: int, b_done: int, b_total: int, curr_f: str, elapsed: float) -> None:
+        with jobs_lock:
+            self.progress = pct
+            self.files_done = f_done
+            self.files_total = f_total
+            self.bytes_done = b_done
+            self.bytes_total = b_total
+            self.current_file = curr_f
+            self.elapsed_seconds = elapsed
+            self.speed_bps = b_done / elapsed if elapsed > 0 else 0.0
+            self.eta_seconds = max(0, b_total - b_done) / self.speed_bps if self.speed_bps else 0.0
+
+    def finish(self, *, result: dict[str, Any] | None = None, error: str = "") -> None:
+        with jobs_lock:
+            if self.cancel_requested:
+                self.error = "Cancelled by user"
+                self.status = "cancelled"
+            elif result is None:
+                self.error = error
+                self.status = "failed"
+            else:
+                self.result = result
+                self.output_path = result.get("outputPath", "")
+                self.status = "completed"
+            self.eta_seconds = 0.0
+            self.finished_at = time.monotonic()
+
+
 jobs: dict[str, JobState] = {}
 jobs_lock = threading.RLock()
 
@@ -332,26 +368,8 @@ def get_presets() -> list[dict[str, Any]]:
 def _run_compression(
     job: JobState, source_paths: list[str], output_path: str, format_str: str, preset: str, password: str, split_mb: int
 ) -> None:
-    if job.cancel_requested:
-        job.status = "cancelled"
-        job.finished_at = time.monotonic()
+    if not job.start():
         return
-    job.status = "running"
-
-    def on_progress(pct: float, f_done: int, f_total: int, b_done: int, b_total: int, curr_f: str, elapsed: float) -> None:
-        job.progress = pct
-        job.files_done = f_done
-        job.files_total = f_total
-        job.bytes_done = b_done
-        job.bytes_total = b_total
-        job.current_file = curr_f
-        job.elapsed_seconds = elapsed
-        if elapsed > 0.5 and b_done > 0:
-            speed = b_done / elapsed
-            job.speed_bps = speed
-            rem_bytes = max(0, b_total - b_done)
-            job.eta_seconds = (rem_bytes / speed) if speed > 0 else 0.0
-
     try:
         res = service.create_archive(
             sources=source_paths,
@@ -361,15 +379,10 @@ def _run_compression(
             password=password,
             split_size_mb=split_mb,
             cancel_requested=lambda: job.cancel_requested,
-            progress_callback=on_progress,
+            progress_callback=job.update_progress,
         )
-        if job.cancel_requested:
-            job.status = "cancelled"
-            job.error = "Cancelled by user"
-        elif res.success:
-            job.status = "completed"
-            job.output_path = res.output_path
-            job.result = {
+        if res.success:
+            job.finish(result={
                 "outputPath": res.output_path,
                 "outputPaths": res.output_paths,
                 "originalSize": res.original_size,
@@ -378,16 +391,12 @@ def _run_compression(
                 "isLarger": res.is_larger,
                 "filesCount": res.files_count,
                 "elapsedSeconds": res.elapsed_seconds,
-            }
+            })
         else:
-            job.status = "failed"
-            job.error = res.error_message or "Unknown compression error"
+            job.finish(error=res.error_message or "Unknown compression error")
     except Exception as e:
         logger.exception("Compression job %s failed", job.job_id)
-        job.status = "failed"
-        job.error = str(e)
-    finally:
-        job.finished_at = time.monotonic()
+        job.finish(error=str(e))
 
 
 @app.post("/api/v1/compress")
@@ -440,21 +449,8 @@ async def start_compression(
 # Extraction
 # -----------------------------------------------------------------------------
 def _run_extraction(job: JobState, archive_path: str, dest_dir: str, password: str, overwrite: str) -> None:
-    if job.cancel_requested:
-        job.status = "cancelled"
-        job.finished_at = time.monotonic()
+    if not job.start():
         return
-    job.status = "running"
-
-    def on_progress(pct: float, f_done: int, f_total: int, b_done: int, b_total: int, curr_f: str, elapsed: float) -> None:
-        job.progress = pct
-        job.files_done = f_done
-        job.files_total = f_total
-        job.bytes_done = b_done
-        job.bytes_total = b_total
-        job.current_file = curr_f
-        job.elapsed_seconds = elapsed
-
     try:
         res = service.extract_archive(
             archive_path=archive_path,
@@ -462,28 +458,20 @@ def _run_extraction(job: JobState, archive_path: str, dest_dir: str, password: s
             password=password,
             overwrite_mode=overwrite,
             cancel_requested=lambda: job.cancel_requested,
-            progress_callback=on_progress,
+            progress_callback=job.update_progress,
         )
-        if job.cancel_requested:
-            job.status = "cancelled"
-            job.error = "Cancelled by user"
-        elif res.success:
-            job.status = "completed"
-            job.result = {
+        if res.success:
+            job.finish(result={
                 "destination": res.destination,
                 "filesExtracted": res.files_extracted,
                 "bytesExtracted": res.bytes_extracted,
                 "elapsedSeconds": res.elapsed_seconds,
-            }
+            })
         else:
-            job.status = "failed"
-            job.error = res.error_message or "Extraction error"
+            job.finish(error=res.error_message or "Extraction error")
     except Exception as e:
         logger.exception("Extraction job %s failed", job.job_id)
-        job.status = "failed"
-        job.error = str(e)
-    finally:
-        job.finished_at = time.monotonic()
+        job.finish(error=str(e))
 
 
 @app.post("/api/v1/extract")
@@ -539,36 +527,41 @@ async def inspect_archive(
 @app.get("/api/v1/jobs/{job_id}", response_model=JobStatusResponse)
 def get_job_status(job_id: str) -> dict[str, Any]:
     """Poll job status, progress, speed, and ETA."""
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
 
-    return {
-        "job_id": job.job_id,
-        "op_type": job.op_type,
-        "status": job.status,
-        "progress": job.progress,
-        "files_done": job.files_done,
-        "files_total": job.files_total,
-        "bytes_done": job.bytes_done,
-        "bytes_total": job.bytes_total,
-        "current_file": job.current_file,
-        "speed_bps": job.speed_bps,
-        "eta_seconds": job.eta_seconds,
-        "elapsed_seconds": job.elapsed_seconds,
-        "result": job.result,
-        "error": job.error,
-    }
+        return {
+            "job_id": job.job_id,
+            "op_type": job.op_type,
+            "status": job.status,
+            "progress": job.progress,
+            "files_done": job.files_done,
+            "files_total": job.files_total,
+            "bytes_done": job.bytes_done,
+            "bytes_total": job.bytes_total,
+            "current_file": job.current_file,
+            "speed_bps": job.speed_bps,
+            "eta_seconds": job.eta_seconds,
+            "elapsed_seconds": job.elapsed_seconds,
+            "result": job.result,
+            "error": job.error,
+        }
 
 
 @app.post("/api/v1/jobs/{job_id}/cancel")
 def cancel_job(job_id: str) -> dict[str, str]:
     """Request early cancellation of an active job."""
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    job.cancel_requested = True
-    return {"job_id": job_id, "status": "cancelling"}
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if job.status in {"completed", "failed", "cancelled"}:
+            return {"job_id": job_id, "status": job.status}
+        job.cancel_requested = True
+        return {"job_id": job_id, "status": "cancelling"}
+
 
 
 @app.get("/api/v1/jobs/{job_id}/download")
@@ -607,8 +600,8 @@ async def websocket_job_progress(websocket: WebSocket, job_id: str) -> None:
 
     try:
         while True:
-            await websocket.send_json(
-                {
+            with jobs_lock:
+                snapshot = {
                     "job_id": job.job_id,
                     "status": job.status,
                     "progress": round(job.progress, 1),
@@ -620,12 +613,11 @@ async def websocket_job_progress(websocket: WebSocket, job_id: str) -> None:
                     "speed_bps": round(job.speed_bps, 0),
                     "eta_seconds": round(job.eta_seconds, 1),
                     "elapsed_seconds": round(job.elapsed_seconds, 1),
-                    "result": job.result if job.status == "completed" else {},
-                    "error": job.error if job.status in {"failed", "cancelled"} else "",
+                    "result": job.result,
+                    "error": job.error,
                 }
-            )
-
-            if job.status in {"completed", "failed", "cancelled"}:
+            await websocket.send_json(snapshot)
+            if snapshot["status"] in {"completed", "failed", "cancelled"}:
                 break
 
             await asyncio.sleep(0.2)

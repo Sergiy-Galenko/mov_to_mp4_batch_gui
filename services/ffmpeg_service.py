@@ -1153,18 +1153,17 @@ class FfmpegService:
         details = (result.stderr or result.stdout or "").strip()
         return result.returncode == 0, details
 
-    def build_quality_metric_command(self, source_path: Path, output_path: Path, metric: str) -> list[str]:
+    def build_quality_metric_command(self, source_path: Path, output_path: Path, metric: str, *, concat_reference: bool = False) -> list[str]:
         normalized = str(metric or "").strip().lower()
-        if normalized == "vmaf":
-            lavfi = "[0:v]scale=640:-2,setpts=PTS-STARTPTS[dist];[1:v]scale=640:-2,setpts=PTS-STARTPTS[ref];[dist][ref]libvmaf"
-        else:
-            lavfi = "[0:v]scale=640:-2,setpts=PTS-STARTPTS[dist];[1:v]scale=640:-2,setpts=PTS-STARTPTS[ref];[dist][ref]ssim"
+        metric_filter = {"vmaf": "libvmaf", "psnr": "psnr", "ssim": "ssim"}[normalized]
+        lavfi = f"[0:v]scale=640:-2,setpts=PTS-STARTPTS[dist];[1:v]scale=640:-2,setpts=PTS-STARTPTS[ref];[dist][ref]{metric_filter}"
         return [
             self.ffmpeg_path,
             "-v",
             "info",
             "-i",
             str(output_path),
+            *(["-f", "concat", "-safe", "0"] if concat_reference else []),
             "-i",
             str(source_path),
             "-lavfi",
@@ -1175,16 +1174,16 @@ class FfmpegService:
         ]
 
     def measure_quality(
-        self, source_path: Path, output_path: Path, metric: str, timeout: int = 300, *, run=None
+        self, source_path: Path, output_path: Path, metric: str, timeout: int = 300, *, run=None, concat_reference: bool = False
     ) -> tuple[bool, float | None, str]:
         normalized = str(metric or "none").strip().lower()
-        if normalized not in {"ssim", "vmaf"}:
+        if normalized not in {"ssim", "psnr", "vmaf"}:
             return True, None, ""
         if not self.ffmpeg_path:
             return False, None, "FFmpeg path is not configured."
         try:
             result = (run or subprocess.run)(
-                self.build_quality_metric_command(source_path, output_path, normalized),
+                self.build_quality_metric_command(source_path, output_path, normalized, concat_reference=concat_reference),
                 capture_output=True,
                 text=True,
                 timeout=timeout,
@@ -1195,14 +1194,10 @@ class FfmpegService:
             return False, None, str(exc)
         details = "\n".join(part for part in [result.stdout, result.stderr] if part).strip()
         score: float | None = None
-        if normalized == "ssim":
-            match = re.search(r"All:\s*([0-9.]+)", details)
-            if match:
-                score = float(match.group(1))
-        else:
-            match = re.search(r"VMAF score:\s*([0-9.]+)", details)
-            if match:
-                score = float(match.group(1))
+        pattern = {"ssim": r"All:\s*([0-9.]+)", "psnr": r"average:\s*(inf|[0-9.]+)", "vmaf": r"VMAF score:\s*([0-9.]+)"}[normalized]
+        match = re.search(pattern, details)
+        if match:
+            score = float(match.group(1))
         return result.returncode == 0, score, details[-600:]
 
     def build_video_command(
@@ -1539,8 +1534,11 @@ class FfmpegService:
         list_path = self._write_concat_list(inputs)
         out_ext = outp.suffix.lower()
         cmd = [self.ffmpeg_path, overwrite, "-f", "concat", "-safe", "0", "-i", list_path]
-        if allow_fast_copy:
-            cmd += ["-c", "copy"]
+        cmd += self.build_trim_args(settings, log_cb=log_cb)
+        cmd += ["-map", f"0:a:{max(0, settings.audio_track_index)}", "-vn"]
+        audio_filter = self.build_audio_filter(settings)
+        if allow_fast_copy and not audio_filter and all(path.suffix.lower() == out_ext for path in inputs):
+            cmd += ["-c:a", "copy"]
         else:
             codec_map = {
                 ".mp3": "libmp3lame",
@@ -1554,7 +1552,6 @@ class FfmpegService:
             cmd += ["-c:a", codec]
             if settings.audio_bitrate and codec in {"libmp3lame", "aac", "libopus"}:
                 cmd += ["-b:a", settings.audio_bitrate]
-            audio_filter = self.build_audio_filter(settings)
             if audio_filter:
                 cmd += ["-filter:a", audio_filter]
         cmd += self.metadata_args(settings)

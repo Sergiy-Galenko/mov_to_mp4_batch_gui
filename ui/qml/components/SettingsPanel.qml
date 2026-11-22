@@ -881,7 +881,7 @@ ColumnLayout {
             rowSpacing: 8
             columnSpacing: 8
             FieldLabel { text: I18n.t("checksum_algorithm") }
-            AppComboBox { id: checksumCombo; model: ["none", "md5", "sha256"]; currentIndex: 0; onActivated: scheduleSettingsSync() }
+            AppComboBox { id: checksumCombo; model: ["none", "md5", "sha256", "sha512"]; currentIndex: 0; onActivated: scheduleSettingsSync() }
         }
         Flow {
             Layout.fillWidth: true
