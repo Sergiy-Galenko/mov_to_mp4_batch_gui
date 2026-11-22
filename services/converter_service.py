@@ -130,6 +130,7 @@ class ConverterService:
                 elif ok:
                     self._log("OK", f"{label} check завершено для {output_path.name}")
                 else:
+                    safe_to_delete_original = False
                     self._log("WARN", f"{label} check failed for {output_path.name}: {details or 'metric unavailable'}")
         self._checkpoint()
         if settings.secure_delete_original and not safe_to_delete_original:
@@ -137,6 +138,8 @@ class ConverterService:
             return
         if settings.secure_delete_original:
             for task in tasks:
+                if task.resolved_settings and not task.resolved_settings.secure_delete_original:
+                    continue
                 self._checkpoint()
                 try:
                     source = task.path.expanduser()

@@ -1538,7 +1538,7 @@ class FfmpegService:
         audio_filter = self.build_audio_filter(settings)
         if allow_fast_copy and not audio_filter and all(path.suffix.lower() == out_ext for path in inputs):
             list_path = self._write_concat_list(inputs)
-            cmd += ["-f", "concat", "-safe", "0", "-i", list_path, "-map", f"0:a:{track}", "-c:a", "copy"]
+            cmd += ["-f", "concat", "-safe", "0", "-i", list_path, "-map", f"0:a:{track}", "-c", "copy"]
         else:
             # Stream ordering and video codecs may differ across the source containers.
             # Select the requested audio stream independently in each input.

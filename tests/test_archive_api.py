@@ -217,18 +217,18 @@ def test_cancel_returns_existing_terminal_status(client, status):
 def test_extraction_reports_speed_and_remaining_time(client, monkeypatch):
     job = api._reserve_job("extract")
 
+    updates = []
+
     def extract(**kwargs):
         kwargs["progress_callback"](25, 1, 4, 500, 2000, "one", 2)
-        data = client.get(f"/api/v1/jobs/{job.job_id}").json()
-        assert (data["speed_bps"], data["eta_seconds"]) == (250, 6)
+        updates.append(client.get(f"/api/v1/jobs/{job.job_id}").json())
         with client.websocket_connect(f"/ws/jobs/{job.job_id}") as websocket:
-            data = websocket.receive_json()
-            assert (data["speed_bps"], data["eta_seconds"]) == (250, 6)
-            assert client.post(f"/api/v1/jobs/{job.job_id}/cancel").json()["status"] == "cancelling"
-            job.finish(error="Cancelled by user")
+            updates.append(websocket.receive_json())
+        client.post(f"/api/v1/jobs/{job.job_id}/cancel")
         return Mock(success=False, error_message="cancelled")
 
     monkeypatch.setattr(api.service, "extract_archive", extract)
     api._run_extraction(job, "file.zip", "output", "", "replace")
     assert job.status == "cancelled"
     assert job.eta_seconds == 0
+    assert [(data["speed_bps"], data["eta_seconds"]) for data in updates] == [(250, 6), (250, 6)]

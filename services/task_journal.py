@@ -98,12 +98,15 @@ class TaskJournal:
                 continue
             try:
                 same_source = json.loads(row["fingerprint"] or "null") == source_fingerprint(item.path)
+            except (OSError, ValueError, TypeError):
+                same_source = False
+            try:
                 outputs = json.loads(row["published"] or "[]")
                 valid_outputs = bool(outputs) and all(
                     source_fingerprint(Path(output["path"])) == output and output["size"] > 0 for output in outputs
                 )
             except (OSError, ValueError, TypeError, KeyError):
-                same_source, valid_outputs = False, False
+                outputs, valid_outputs = [], False
             if row["status"] == TaskStatus.SUCCESS and valid_outputs and (same_source or not item.path.exists()):
                 item.status, item.last_output, item.progress = TaskStatus.SUCCESS, row["output"] or "", 1.0
             elif row["status"] not in TERMINAL and valid_outputs and same_source:

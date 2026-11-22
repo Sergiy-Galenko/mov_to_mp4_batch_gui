@@ -82,7 +82,6 @@ class JobState:
         self.cancel_requested: bool = False
         self.websockets: list[WebSocket] = []
 
-
     def start(self) -> bool:
         with jobs_lock:
             if self.cancel_requested:
@@ -382,16 +381,18 @@ def _run_compression(
             progress_callback=job.update_progress,
         )
         if res.success:
-            job.finish(result={
-                "outputPath": res.output_path,
-                "outputPaths": res.output_paths,
-                "originalSize": res.original_size,
-                "archiveSize": res.archive_size,
-                "savedPercent": res.saved_percent,
-                "isLarger": res.is_larger,
-                "filesCount": res.files_count,
-                "elapsedSeconds": res.elapsed_seconds,
-            })
+            job.finish(
+                result={
+                    "outputPath": res.output_path,
+                    "outputPaths": res.output_paths,
+                    "originalSize": res.original_size,
+                    "archiveSize": res.archive_size,
+                    "savedPercent": res.saved_percent,
+                    "isLarger": res.is_larger,
+                    "filesCount": res.files_count,
+                    "elapsedSeconds": res.elapsed_seconds,
+                }
+            )
         else:
             job.finish(error=res.error_message or "Unknown compression error")
     except Exception as e:
@@ -461,12 +462,14 @@ def _run_extraction(job: JobState, archive_path: str, dest_dir: str, password: s
             progress_callback=job.update_progress,
         )
         if res.success:
-            job.finish(result={
-                "destination": res.destination,
-                "filesExtracted": res.files_extracted,
-                "bytesExtracted": res.bytes_extracted,
-                "elapsedSeconds": res.elapsed_seconds,
-            })
+            job.finish(
+                result={
+                    "destination": res.destination,
+                    "filesExtracted": res.files_extracted,
+                    "bytesExtracted": res.bytes_extracted,
+                    "elapsedSeconds": res.elapsed_seconds,
+                }
+            )
         else:
             job.finish(error=res.error_message or "Extraction error")
     except Exception as e:
@@ -561,7 +564,6 @@ def cancel_job(job_id: str) -> dict[str, str]:
             return {"job_id": job_id, "status": job.status}
         job.cancel_requested = True
         return {"job_id": job_id, "status": "cancelling"}
-
 
 
 @app.get("/api/v1/jobs/{job_id}/download")
