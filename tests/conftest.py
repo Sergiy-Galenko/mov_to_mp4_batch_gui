@@ -26,11 +26,3 @@ QQuickStyle.setStyle("Basic")
 def qt_app():
     # Backend constructs timers and reads style hints, even in tests without a window.
     return QApplication.instance() or QApplication([])
-
-
-def pytest_sessionfinish():
-    # Preserve thread stacks if a third-party worker prevents interpreter shutdown in CI.
-    if os.environ.get("CI"):
-        import faulthandler
-
-        faulthandler.dump_traceback_later(90, repeat=True)

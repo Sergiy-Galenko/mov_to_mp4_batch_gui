@@ -58,7 +58,12 @@ jobs:
 
       - name: Run tests
         timeout-minutes: 12
-        run: python -m pytest -v --tb=short -o faulthandler_timeout=90 --junitxml=test-results.xml
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            python -c 'import os, sys, pytest; result = pytest.main(["-q", "--tb=short", "--junitxml=test-results.xml"]); sys.stdout.flush(); sys.stderr.flush(); os._exit(int(result))'
+          else
+            python -m pytest -q --tb=short --junitxml=test-results.xml
+          fi
 
       - name: Build and verify portable application
         id: package
