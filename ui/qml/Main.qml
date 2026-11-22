@@ -968,7 +968,7 @@ ApplicationWindow {
 
             SidebarPanel {
                 id: appSidebar
-                visible: !root.simpleMode
+                visible: true
                 appRoot: root
                 Layout.fillHeight: true
                 collapsed: root.sidebarCollapsed

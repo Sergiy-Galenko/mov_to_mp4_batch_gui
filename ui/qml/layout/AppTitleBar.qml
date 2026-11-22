@@ -149,7 +149,7 @@ Item {
         }
         SystemStatusBar {
             id: systemStatusBar
-            visible: root.width > 1280
+            visible: root.width > 680
             appRoot: root.appRoot
         }
         HistoryButtons {
