@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -294,9 +295,11 @@ def test_in_memory_probe_identity_detects_source_replacement(tmp_path):
 
     source = tmp_path / "source.mp4"
     source.write_bytes(b"old")
+    original = source.stat()
     info = MediaInfo(vcodec="h264", source_identity=source_fingerprint(source))
     assert media_info_matches_source(info, source)
     source.write_bytes(b"new")
+    os.utime(source, ns=(original.st_atime_ns, original.st_mtime_ns))
     assert not media_info_matches_source(info, source)
 
 

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import time
 import uuid
 from collections.abc import Callable
@@ -22,8 +23,25 @@ DEFAULT_CACHE_ROOT = APP_DATA_DIR / "cache"
 
 def source_fingerprint(source: Path) -> dict:
     source = source.expanduser().resolve()
-    stat = source.stat()
-    return {"path": str(source), "size": stat.st_size, "mtime_ns": stat.st_mtime_ns, "ctime_ns": stat.st_ctime_ns, "inode": stat.st_ino}
+    metadata = source.stat()
+    sample = {}
+    if os.name == "nt" and stat.S_ISREG(metadata.st_mode):
+        # Windows ctime is the creation time. An in-place rewrite can also retain mtime.
+        with source.open("rb") as stream:
+            metadata = os.fstat(stream.fileno())
+            digest = hashlib.blake2b(stream.read(4096), digest_size=16)
+            if metadata.st_size > 4096:
+                stream.seek(max(4096, metadata.st_size - 4096))
+                digest.update(stream.read(4096))
+            sample["sample_hash"] = digest.hexdigest()
+    return {
+        "path": str(source),
+        "size": metadata.st_size,
+        "mtime_ns": metadata.st_mtime_ns,
+        "ctime_ns": metadata.st_ctime_ns,
+        "inode": metadata.st_ino,
+        **sample,
+    }
 
 
 def tool_fingerprint(executable: str | None) -> str:

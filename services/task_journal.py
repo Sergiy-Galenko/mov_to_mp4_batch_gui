@@ -16,6 +16,15 @@ from utils.sqlite_store import database
 TERMINAL = {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.SKIPPED, TaskStatus.CANCELLED}
 
 
+def _matches_recorded_file(path: Path, recorded: dict | None) -> bool:
+    if not recorded:
+        return False
+    current = source_fingerprint(path)
+    if "sample_hash" not in recorded:  # Journals written before Windows content sampling.
+        current.pop("sample_hash", None)
+    return current == recorded
+
+
 class TaskJournal:
     def __init__(self, path: Path = APP_DATA_DIR / "tasks.sqlite3"):
         self.path = path
@@ -97,13 +106,13 @@ class TaskJournal:
             if row is None:
                 continue
             try:
-                same_source = json.loads(row["fingerprint"] or "null") == source_fingerprint(item.path)
+                same_source = _matches_recorded_file(item.path, json.loads(row["fingerprint"] or "null"))
             except (OSError, ValueError, TypeError):
                 same_source = False
             try:
                 outputs = json.loads(row["published"] or "[]")
                 valid_outputs = bool(outputs) and all(
-                    source_fingerprint(Path(output["path"])) == output and output["size"] > 0 for output in outputs
+                    _matches_recorded_file(Path(output["path"]), output) and output["size"] > 0 for output in outputs
                 )
             except (OSError, ValueError, TypeError, KeyError):
                 outputs, valid_outputs = [], False

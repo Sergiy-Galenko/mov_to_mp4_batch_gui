@@ -1,5 +1,6 @@
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
@@ -28,6 +29,12 @@ class QmlLoadTest(unittest.TestCase):
         import tempfile
 
         QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, tempfile.gettempdir())
+
+    def wait_until(self, condition, message):
+        deadline = time.monotonic() + 5
+        while not condition() and time.monotonic() < deadline:
+            QTest.qWait(10)
+        self.assertTrue(condition(), message)
 
     def test_presets_full_form_and_target_size_estimate(self):
         from app.models import MediaInfo
@@ -264,6 +271,7 @@ QueueItemCard {
                 root.setProperty("visibility", 2)
                 root.setWidth(1100)
                 root.setHeight(800)
+                QMetaObject.invokeMethod(root.findChild(QObject, "whatsNewPopup"), "close")
                 self.assertTrue(QMetaObject.invokeMethod(root, "openAppearance"))
                 QTest.qWait(100)
                 editor = root.findChild(QObject, "themeEditorDialog")
@@ -308,10 +316,11 @@ QueueItemCard {
                 self.assertTrue(backend.loadNamedTheme("Test colors"))
                 QTest.qWait(30)
                 self.assertEqual(root.property("color").name(), "#112233")
+                self.wait_until(lambda: not picker.property("visible"), "Color picker should close before sending keys")
                 root.requestActivate()
-                QTest.qWait(30)
+                self.assertTrue(QTest.qWaitForWindowActive(root, 5000))
                 QTest.keyClick(root, Qt.Key_0, Qt.ControlModifier | Qt.AltModifier)
-                QTest.qWait(30)
+                self.wait_until(lambda: not backend.themeColorOverrides, "Theme recovery shortcut should reset overrides")
                 self.assertEqual(root.property("color").name(), backend.themePalette["windowBackground"].lower())
                 self.assertEqual(backend.themeColorOverrides, {})
             finally:
@@ -405,7 +414,9 @@ ApplicationWindow {
                             window, "openSidebarSection", Q_ARG("QVariant", 5), Q_ARG("QVariant", target), Q_ARG("QVariant", -1)
                         )
                     )
-                    QTest.qWait(70)
+                    page = window.findChild(QQuickItem, "settingsPage_" + target)
+                    self.wait_until(lambda: page.isVisible() and page.width() > 0, f"Settings page {target} should be laid out")
+                    return page
 
                 open_page("core")
                 field = window.findChild(QObject, "targetSizeField")
@@ -429,15 +440,12 @@ ApplicationWindow {
                 ]
                 for target in pages:
                     with self.subTest(page=target):
-                        open_page(target)
-                        current = window.findChild(QQuickItem, "settingsPage_" + target)
-                        self.assertTrue(current.isVisible())
-                        self.assertGreater(current.width(), 0)
+                        current = open_page(target)
                         for page in window.findChildren(QQuickItem):
                             if page.objectName().startswith("settingsPage_") and page is not current:
                                 self.assertFalse(page.isVisible(), page.objectName())
                 viewport = window.findChild(QObject, "navigationScroll").property("contentItem")
-                self.assertGreater(viewport.property("contentY"), 0, "Last section must scroll into view")
+                self.wait_until(lambda: viewport.property("contentY") > 0, "Last section must scroll into view")
                 open_page("smart_convert")
                 self.assertTrue(switch.property("checked"))
                 open_page("core")
