@@ -20,14 +20,14 @@ def settings(window):
     return value.toVariant() if hasattr(value, "toVariant") else value
 
 
-def test_quick_actions_audio_conversion_and_results(tmp_path):
+def test_quick_actions_audio_conversion_and_results(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
     backend = Backend()
     backend.settings_manager.save = Mock()
     backend._start_conversion = Mock()
     source = tmp_path / "Interview.mp4"
     source.write_bytes(b"s" * 1000)
-    output = tmp_path / "Interview.mp3"
+    output = tmp_path / "Interview; final.mp3"
     output.write_bytes(b"a" * 250)
     info = MediaInfo(duration=60, width=1920, height=1080, audio_streams=2)
     backend.queue_model.set_items([TaskItem(source, "video", status=TaskStatus.SUCCESS, last_output=str(output), probe_data=info)])
@@ -44,6 +44,13 @@ def test_quick_actions_audio_conversion_and_results(tmp_path):
         window = engine.rootObjects()[0]
         QTest.qWait(100)
         assert window.property("simpleMode")
+        destinations = [str(tmp_path / "first"), str(tmp_path / "second")]
+        picker = Mock(side_effect=destinations)
+        monkeypatch.setattr("PySide6.QtWidgets.QFileDialog.getExistingDirectory", picker)
+        folder_button = window.findChild(QObject, "simpleOutputFolderButton")
+        for destination in destinations:
+            assert QMetaObject.invokeMethod(folder_button, "clicked")
+            assert backend.outputDir == destination
         invoke(window, "selectQueuePath", str(source), 0, 0, source.name, "video", "")
         invoke(window, "quickAction", "audio")
         QTest.qWait(200)

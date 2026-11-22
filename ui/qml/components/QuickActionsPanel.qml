@@ -46,7 +46,7 @@ Rectangle {
                 onActivated: if (currentIndex < 3) appRoot.setQualityProfile(currentIndex)
                 Accessible.name: I18n.t("quality")
             }
-            AppButton { text: I18n.t("output_folder"); enabled: backend && !backend.isRunning; onClicked: backend.pickOutputDir() }
+            AppButton { objectName: "simpleOutputFolderButton"; text: I18n.t("output_folder"); enabled: backend && !backend.isRunning; onClicked: backend.pickOutputDir() }
         }
         Label {
             visible: appRoot.simpleMode

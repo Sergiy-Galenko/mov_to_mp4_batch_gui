@@ -393,3 +393,22 @@ def test_theme_detects_host_and_preserves_custom_colors(tmp_path, monkeypatch, s
     assert restored.palette("dark")["accent"] == "#9955BB"
     restored.reset_colors("dark")
     assert restored.palette("dark")["accent"] != "#9955BB"
+
+
+def test_async_hash_dedup_reconciles_the_current_queue(tmp_path, qt_app):
+    from ui.backend import Backend
+
+    backend = Backend()
+    try:
+        tasks = [TaskItem(tmp_path / f"{name}.txt", "text") for name in "abcd"]
+        for task in tasks:
+            task.path.write_text("same")
+        backend.queue_model.set_items(tasks[:3])
+        backend._deduplicate_hash_async(backend.queue_model.items())
+        # The original keeper was removed, two candidates reordered, and a new job added.
+        backend.queue_model.set_items([tasks[3], tasks[2], tasks[1]])
+        for _ in range(10):
+            backend._poll_events()
+        assert backend.queue_model.items() == [tasks[3], tasks[2]]
+    finally:
+        backend.shutdown()

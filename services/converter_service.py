@@ -1113,8 +1113,9 @@ class ConverterService:
                             status, message = TaskStatus.FAILED, f"Помилка merge (код {rc})"
                             self._log("ERROR", message)
                     finally:
-                        with contextlib.suppress(OSError):
-                            Path(list_path).unlink(missing_ok=True)
+                        if list_path:
+                            with contextlib.suppress(OSError):
+                                Path(list_path).unlink(missing_ok=True)
                 except InterruptedError:
                     if not (self.stop_event.is_set() or self.skip_event.is_set()):
                         raise

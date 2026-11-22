@@ -1531,15 +1531,24 @@ class FfmpegService:
         log_cb=None,
     ) -> tuple[list[str], str]:
         overwrite = "-y" if settings.overwrite else "-n"
-        list_path = self._write_concat_list(inputs)
+        list_path = ""
         out_ext = outp.suffix.lower()
-        cmd = [self.ffmpeg_path, overwrite, "-f", "concat", "-safe", "0", "-i", list_path]
-        cmd += self.build_trim_args(settings, log_cb=log_cb)
-        cmd += ["-map", f"0:a:{max(0, settings.audio_track_index)}", "-vn"]
+        track = max(0, settings.audio_track_index)
+        cmd = [self.ffmpeg_path, overwrite]
         audio_filter = self.build_audio_filter(settings)
         if allow_fast_copy and not audio_filter and all(path.suffix.lower() == out_ext for path in inputs):
-            cmd += ["-c:a", "copy"]
+            list_path = self._write_concat_list(inputs)
+            cmd += ["-f", "concat", "-safe", "0", "-i", list_path, "-map", f"0:a:{track}", "-c:a", "copy"]
         else:
+            # Stream ordering and video codecs may differ across the source containers.
+            # Select the requested audio stream independently in each input.
+            for path in inputs:
+                cmd += ["-i", str(path)]
+            streams = "".join(f"[{index}:a:{track}]" for index in range(len(inputs)))
+            graph = f"{streams}concat=n={len(inputs)}:v=0:a=1"
+            if audio_filter:
+                graph += f",{audio_filter}"
+            cmd += ["-filter_complex", graph + "[audio]", "-map", "[audio]"]
             codec_map = {
                 ".mp3": "libmp3lame",
                 ".m4a": "aac",
@@ -1552,8 +1561,8 @@ class FfmpegService:
             cmd += ["-c:a", codec]
             if settings.audio_bitrate and codec in {"libmp3lame", "aac", "libopus"}:
                 cmd += ["-b:a", settings.audio_bitrate]
-            if audio_filter:
-                cmd += ["-filter:a", audio_filter]
+        cmd += self.build_trim_args(settings, log_cb=log_cb)
+        cmd += ["-vn"]
         cmd += self.metadata_args(settings)
         cmd.append(str(outp))
         return cmd, list_path
