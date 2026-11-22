@@ -77,7 +77,7 @@ Rectangle {
 
         // Auto-tune status badge
         Rectangle {
-            visible: !root.scan.busy && !root.scan.error && (!!root.info.os) && (!root.appRoot || root.appRoot.width > 860)
+            visible: !root.scan.busy && !root.scan.error && (!!root.info.os) && (!root.appRoot || root.appRoot.width > 760)
             radius: 6
             Layout.preferredHeight: 18
             implicitHeight: 18
@@ -108,7 +108,7 @@ Rectangle {
         // Details button
         AppButton {
             objectName: "systemDetailsButton"
-            visible: !root.appRoot || root.appRoot.width > 920
+            visible: !root.appRoot || root.appRoot.width > 800
             text: I18n.t("system.details")
             Layout.preferredHeight: 22
             font.pixelSize: 11
