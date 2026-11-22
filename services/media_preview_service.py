@@ -154,13 +154,12 @@ class MediaPreviewService:
                 "paths": [waveform] if waveform else [],
                 "duration": duration,
             }
-        elif media_kind == "image":
-            if file_path.exists():
-                result = {
-                    "type": "image",
-                    "paths": [str(file_path)],
-                    "duration": 0.0,
-                }
+        elif media_kind == "image" and file_path.exists():
+            result = {
+                "type": "image",
+                "paths": [str(file_path)],
+                "duration": 0.0,
+            }
 
         return result
 
