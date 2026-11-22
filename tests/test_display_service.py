@@ -19,11 +19,8 @@ class DisplayServiceTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         import os
 
-        from PySide6.QtQuickControls2 import QQuickStyle
-
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
-        QQuickStyle.setStyle("Basic")
         cls._app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     def test_classify_display_categories(self) -> None:
         # Compact / small screen (laptop with scaling or small display)

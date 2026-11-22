@@ -8,7 +8,6 @@ from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QEvent, QMetaObject, QObject, QP
 from PySide6.QtGui import QColor, QMouseEvent, QPalette
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -22,7 +21,6 @@ class QmlLoadTest(unittest.TestCase):
     def setUpClass(cls):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
-        QQuickStyle.setStyle("Basic")
         cls._app = QApplication.instance() or QApplication([])
         cls._app.setOrganizationName("MediaConverterTests")
         cls._app.setApplicationName("MediaConverterTests")

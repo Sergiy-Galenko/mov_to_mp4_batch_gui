@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 from PySide6.QtCore import QSettings, QUrl
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
-from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWidgets import QApplication
 
 from services.telegram_note_service import TelegramNoteService
@@ -17,7 +16,6 @@ class TestTelegramNoteService(unittest.TestCase):
     def setUpClass(cls):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
-        QQuickStyle.setStyle("Basic")
         cls._app = QApplication.instance() or QApplication([])
         QSettings.setDefaultFormat(QSettings.IniFormat)
 

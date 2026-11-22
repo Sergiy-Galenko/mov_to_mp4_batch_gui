@@ -3,24 +3,16 @@
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QPointF, QStringListModel, Qt, QUrl
+from PySide6.QtCore import Q_ARG, QCoreApplication, QEvent, QMetaObject, QObject, QPointF, QStringListModel, Qt, QUrl
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
 QML_DIR = Path(__file__).resolve().parents[1] / "ui" / "qml"
 
 
-@pytest.fixture(scope="module")
-def app():
-    QQuickStyle.setStyle("Basic")
-    return QApplication.instance() or QApplication([])
-
-
 @pytest.fixture
-def dropdown(app):
+def dropdown(qt_app):
     engines = []
 
     def create(kind="AppComboBox", extra="", width=480, height=360):
@@ -74,7 +66,7 @@ ApplicationWindow {{
         for window in engine.rootObjects():
             window.close()
         engine.deleteLater()
-    app.processEvents()
+        QCoreApplication.sendPostedEvents(engine, QEvent.Type.DeferredDelete)
 
 
 def open_menu(window):

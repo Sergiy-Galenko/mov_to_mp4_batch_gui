@@ -33,8 +33,9 @@ def test_montage_service_extended_features():
         assert "en" in trans["translations"]
 
 
-def test_backend_montage_slots(monkeypatch):
+def test_backend_montage_slots(request):
     backend = Backend()
+    request.addfinalizer(backend.shutdown)
     with tempfile.TemporaryDirectory() as tmp_dir:
         test_file = Path(tmp_dir) / "sample.mp4"
         test_file.write_bytes(b"0" * 1024)

@@ -3,23 +3,17 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt, QUrl
+from PySide6.QtCore import Q_ARG, QCoreApplication, QEvent, QMetaObject, QObject, Qt, QUrl
 from PySide6.QtGui import QKeySequence
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
 from ui.backend import Backend
 
 
 @pytest.fixture
-def window(monkeypatch):
-    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
-    if not QApplication.instance():
-        QQuickStyle.setStyle("Basic")
-    app = QApplication.instance() or QApplication([])
+def window(qt_app):
     backend = Backend()
     backend.settings_manager.save = Mock()
     backend.settings_manager.state["auto_tune_enabled"] = False
@@ -33,15 +27,18 @@ def window(monkeypatch):
     engine.rootContext().setContextProperty("backend", backend)
     warnings = []
     engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
-    engine.load(QUrl.fromLocalFile(str(directory / "Main.qml")))
-    assert engine.rootObjects(), warnings
-    root = engine.rootObjects()[0]
-    QTest.qWait(30)
-    yield root, backend, app
-    backend.shutdown()
-    root.close()
-    engine.deleteLater()
-    app.processEvents()
+    try:
+        engine.load(QUrl.fromLocalFile(str(directory / "Main.qml")))
+        assert engine.rootObjects(), warnings
+        root = engine.rootObjects()[0]
+        QTest.qWait(30)
+        yield root, backend, qt_app
+    finally:
+        for root in engine.rootObjects():
+            root.close()
+        engine.deleteLater()
+        QCoreApplication.sendPostedEvents(engine, QEvent.Type.DeferredDelete)
+        backend.shutdown()
     assert not [warning for warning in warnings if any(name in warning for name in ("UndoHistory.qml", "HistoryButtons.qml", "SystemStatusBar.qml", "WhisperSetupDialog.qml"))], warnings
 
 

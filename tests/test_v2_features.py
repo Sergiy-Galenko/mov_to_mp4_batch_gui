@@ -9,7 +9,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
-from PySide6 import QtWidgets
 from PySide6.QtTest import QAbstractItemModelTester
 
 from app.models import ConversionSettings, MediaInfo, TaskItem, TaskStatus
@@ -92,16 +91,6 @@ class Version2UpgradesTest(unittest.TestCase):
 
 if __name__ == "__main_":
     unittest.main()
-
-
-_APP = None
-
-
-@pytest.fixture
-def qt_app():
-    global _APP
-    _APP = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    return _APP
 
 
 def test_progress_does_not_refilter_or_invalidate_thumbnails(qt_app):
