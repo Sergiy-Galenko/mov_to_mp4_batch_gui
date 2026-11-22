@@ -1076,5 +1076,6 @@
   "result_choose_folder": "Choose another folder",
   "audio_track": "Audio track",
   "quality_custom": "Custom settings",
-  "quality_custom_hint": "Custom quality settings are active."
+  "quality_custom_hint": "Custom quality settings are active.",
+  "nav_scripting": "JS Scripts & Plugins"
 }
