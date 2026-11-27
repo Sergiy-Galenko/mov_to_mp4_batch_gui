@@ -154,16 +154,24 @@ Window {
         if (doc.editing_documents[filePath]) editingTools.document = doc.editing_documents[filePath]
     }
     function requestAction(action, path) {
-        if (project.saving || project.importer.busy) { message = I18n.t("editor.wait_operation"); return }
+        if (action !== "close" && project && (project.saving || (project.importer && project.importer.busy))) {
+            message = I18n.t("editor.wait_operation")
+            return
+        }
         pendingAction = action; pendingPath = path || ""
-        if (project.dirty) unsavedDialog.open()
+        if (project && project.dirty) unsavedDialog.open()
         else performPending()
     }
     function performPending() {
         var action = pendingAction, path = pendingPath
         pendingAction = ""; pendingPath = ""
         viewer.pause()
-        if (action === "close") { allowClose = true; root.close(); allowClose = false }
+        if (action === "close") {
+            if (project && project.importer && project.importer.busy) project.importer.cancel()
+            allowClose = true
+            root.close()
+            allowClose = false
+        }
         else if (action === "new") projectDialog.openNew()
         else if (action === "open") { var chosen = path || project.chooseProject(); if (chosen) project.open(chosen) }
         else if (action === "source") loadSourceProject(path)
@@ -201,7 +209,7 @@ Window {
     onClosing: function(event) {
         if (!allowClose && project && project.dirty) { event.accepted = false; requestAction("close", ""); return }
         viewer.pause()
-        if (render && render.busy) { event.accepted = false; message = I18n.t("editor.render_running"); return }
+        if (!allowClose && render && render.busy) { event.accepted = false; message = I18n.t("editor.render_running"); return }
     }
 
     UndoHistory {
@@ -257,6 +265,7 @@ Window {
     Shortcut { sequence: "+"; enabled: root.active && !root.textEditing; onActivated: timelineZoom = Math.min(8, timelineZoom * 1.3) }
     Shortcut { sequence: "-"; enabled: root.active && !root.textEditing; onActivated: timelineZoom = Math.max(.5, timelineZoom / 1.3) }
     Shortcut { sequence: "?"; enabled: root.active && !root.textEditing; onActivated: shortcutsDialog.open() }
+    Shortcut { sequence: "Escape"; enabled: root.active && !root.textEditing; onActivated: root.cancelAndClose() }
     Shortcut { sequences: [StandardKey.Copy]; enabled: root.active && !root.textEditing; onActivated: root.copyClip() }
     Shortcut { sequences: [StandardKey.Paste]; enabled: root.active && !root.textEditing; onActivated: root.pasteClip() }
 

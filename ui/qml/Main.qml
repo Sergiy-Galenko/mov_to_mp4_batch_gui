@@ -731,8 +731,7 @@ ApplicationWindow {
         if (mode === "convert")
             return activeSection === 0 && root.activeWorkspaceMode === "all"
         if (mode === "montage")
-            return activeSection === 5 && pendingSettingsTarget === "video_editor"
-            return montageEditorDialog.visible
+            return montageEditorDialog.visible || (activeSection === 5 && pendingSettingsTarget === "video_editor")
         if (mode === "downloads")
             return activeSection === 4
         if (mode === "analytics")

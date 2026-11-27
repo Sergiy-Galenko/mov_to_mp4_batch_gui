@@ -43,6 +43,8 @@ Rectangle {
                     EditorMenuItem { iconName: "settings"; text: I18n.t("editor.project_settings"); onTriggered: editor.editProjectSettings() }
                     EditorMenuItem { iconName: "grid"; text: I18n.t("editor.components"); onTriggered: editor.openComponentGallery() }
                     EditorMenuItem { iconName: "close"; text: I18n.t("editor.close_project"); onTriggered: editor.requestAction("empty", "") }
+                    MenuSeparator {}
+                    EditorMenuItem { iconName: "close"; text: I18n.t("close"); onTriggered: editor.cancelAndClose() }
                 }
             }
 
@@ -67,6 +69,23 @@ Rectangle {
 
             EditorButton { objectName: "editorSaveButton"; iconName: "save"; text: I18n.t("editor.save"); variant: "ghost"; enabled: editor.project && !editor.project.saving; onClicked: editor.project.save() }
             EditorButton { objectName: "editorQuickExport"; iconName: "share"; text: I18n.t("editor.export"); variant: "primary"; enabled: editor.timelineClips.length > 0 && !editor.render.busy; onClicked: editor.openExport() }
+
+            Rectangle {
+                implicitWidth: 1
+                implicitHeight: 22
+                color: EditorTheme.borderSubtle
+            }
+
+            EditorButton {
+                objectName: "editorCloseButton"
+                iconOnly: true
+                iconName: "close"
+                variant: "icon"
+                text: I18n.t("close")
+                shortcut: "Esc"
+                hint: I18n.t("close") + " (Esc)"
+                onClicked: editor.cancelAndClose()
+            }
         }
 
         Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: EditorTheme.borderSubtle }
